@@ -216,14 +216,16 @@ class BodyNavigation:
         profile[np.abs(profile - med) > tolerance] = 0
         return profile
 
-    def get_diaphragm_profile_image_with_empty_areas(self, axis=0):
+    def get_diaphragm_profile_image_with_empty_areas(self, axis=0, return_gradient_image=False):
         if self.lungs is None:
             self.get_lungs()
         if self.spine is None:
             self.get_spine()
         if self.angle is None:
             self.find_symmetry()
-        axis = 0
+        if self.body is None:
+            self.get_body()
+
         data = self.lungs
         ia, ib, ic = self._get_ia_ib_ic(axis)
 
@@ -231,6 +233,9 @@ class BodyNavigation:
         gr = scipy.ndimage.filters.sobel(data.astype(np.int16), axis=ia)
         # seg = (np.abs(ss.dist_coronal()) > 20).astype(np.uint8) + (np.abs(ss.dist_sagittal()) > 20).astype(np.uint8)
         grt = gr > 12
+
+        # TODO zahodit velke gradienty na okraji tela,
+
         # seg = (np.abs(self.dist_sagittal()) > zero_stripe_width).astype(np.uint8)
         # grt = grt * seg
         # nalezneme nenulove body
@@ -246,6 +251,8 @@ class BodyNavigation:
         # odstranime z dat pruh kolem srdce. Tam byva obcas jicen, nebo je tam oblast nad srdcem
         # symmetry_point_pixels = self.symmetry_point/ self.working_vs[1:]
         flat[flat==0] = np.NaN
+        if return_gradient_image:
+            return flat, gr
         return flat
 
     def remove_pizza(self, flat, zero_stripe_width=10, alpha0=-20, alpha1=40 ):
@@ -313,7 +320,8 @@ class BodyNavigation:
         :return:
         """
 
-        if kernel_size_mm is None: kernel_size = [150, 150]
+        if kernel_size_mm is None:
+            kernel_size_mm = [150, 150]
 
         # kernel_size must be odd - lichý
         kernel_size = np.asarray(kernel_size_mm) / self.working_vs[1:]
