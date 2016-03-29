@@ -286,7 +286,8 @@ class BodyNavigation:
         :return:
         """
 
-        if kernel_size_mm is None: kernel_size = [150, 150]
+        if kernel_size_mm is None:
+            kernel_size = [150, 150]
 
         # kernel_size must be odd - lichý
         kernel_size = np.asarray(kernel_size_mm) / self.working_vs[1:]
@@ -330,11 +331,11 @@ class BodyNavigation:
         return flat
 
 
-    def get_diaphragm_profile_image(self, axis=0, preprocessing=True):
+    def get_diaphragm_profile_image(self, axis=0, preprocessing=True, return_preprocessed_image=False):
         flat = self.get_diaphragm_profile_image_with_empty_areas(axis)
 
         if preprocessing:
-            flat = remove_pizza(flat)
+            flat = self.remove_pizza(flat)
             flat = self._filter_diaphragm_profile_image_remove_outlayers(flat)
             flat = self.filter_ignoring_nan(flat)
             flat = self.filter_remove_outlayers(flat)
@@ -367,7 +368,14 @@ class BodyNavigation:
         ou = scipy.ndimage.filters.gaussian_filter(ou, sigma=3)
 
         # ou = self.__filter_diaphragm_profile_image(ou, axis)
-        return ou
+        retval=[ou]
+        if return_preprocessed_image:
+            retval.append(flat)
+
+        if len(retval) == 1:
+            return retval[0]
+        else:
+            return tuple(retval)
 
 
     def __filter_diaphragm_profile_image(self, profile, axis=0):
@@ -430,6 +438,33 @@ class BodyNavigation:
         self.center_orig = self.center * self.voxelsize_mm / self.working_vs.astype(np.double)
 
         return self.center_orig
+
+    def remove_pizza(self, flat, zero_stripe_width=10, alpha0=-20, alpha1=40 ):
+        """
+        Remove circular sector from the image with center in spine
+        :param flat: input 2D image
+        :param zero_stripe_width: offset to pivot point. Pizza line is zero_stripe_width far
+        :param alpha0: Additional start angle relative to detected orientation
+        :param alpha1: Additional end angle relative to detected orientation
+        :return:
+        """
+        spine_mean = np.mean(np.nonzero(self.spine), 1)
+        spine_mean = spine_mean[1:]
+
+        z1 = split_with_line(spine_mean, self.angle + alpha1, flat.shape)
+        z2 = split_with_line(spine_mean, self.angle + alpha0, flat.shape)
+
+        z1 = (z1 > zero_stripe_width).astype(np.int8)
+        z2 = (z2 < -zero_stripe_width).astype(np.int8)
+        # seg = (np.abs(z) > zero_stripe_width).astype(np.int)
+        seg = (z1 * z2)
+
+        flat [seg>0]= np.NaN # + seg*10
+        # print 'sp ', spine_mean
+        # print 'sporig ', symmetry_point_orig_res
+        # flat = seg
+
+        return flat
 
 
 def prepare_images(imin0, pivot):
@@ -554,33 +589,6 @@ def fill_nan_with_nearest(flat):
     # indices = scipy.ndimage.morphology.distance_transform_edt(flat==0, return_indices=True, return_distances=False)
     ou = flat[(indices[0],indices[1])]
     return ou
-
-def remove_pizza(self, flat, zero_stripe_width=10, alpha0=-20, alpha1=40 ):
-    """
-    Remove circular sector from the image with center in spine
-    :param flat: input 2D image
-    :param zero_stripe_width: offset to pivot point. Pizza line is zero_stripe_width far
-    :param alpha0: Additional start angle relative to detected orientation
-    :param alpha1: Additional end angle relative to detected orientation
-    :return:
-    """
-    spine_mean = np.mean(np.nonzero(self.spine), 1)
-    spine_mean = spine_mean[1:]
-
-    z1 = split_with_line(spine_mean, self.angle + alpha1, flat.shape)
-    z2 = split_with_line(spine_mean, self.angle + alpha0, flat.shape)
-
-    z1 = (z1 > zero_stripe_width).astype(np.int8)
-    z2 = (z2 < -zero_stripe_width).astype(np.int8)
-    # seg = (np.abs(z) > zero_stripe_width).astype(np.int)
-    seg = (z1 * z2)
-
-    flat [seg>0]= np.NaN # + seg*10
-    # print 'sp ', spine_mean
-    # print 'sporig ', symmetry_point_orig_res
-    # flat = seg
-
-    return flat
 
 
 def main():
