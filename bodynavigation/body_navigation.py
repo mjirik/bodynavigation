@@ -43,6 +43,14 @@ class BodyNavigation:
         self.diaphragm_mask = None
         self.angle = None
 
+        self.set_parameters()
+
+    def set_parameters(self, version=0):
+        if version == 0:
+            self.GRADIENT_THRESHOLD = 12
+
+        if version == 1:
+            self.GRADIENT_THRESHOLD = 10
 
     def get_spine(self):
 
@@ -232,13 +240,22 @@ class BodyNavigation:
         # gradient
         gr = scipy.ndimage.filters.sobel(data.astype(np.int16), axis=ia)
         # seg = (np.abs(ss.dist_coronal()) > 20).astype(np.uint8) + (np.abs(ss.dist_sagittal()) > 20).astype(np.uint8)
-        grt = gr > 12
+        grt = gr > self.GRADIENT_THRESHOLD
 
         # TODO zahodit velke gradienty na okraji tela,
 
+        flat = self.nonzero_projection(grt, axis)
+
         # seg = (np.abs(self.dist_sagittal()) > zero_stripe_width).astype(np.uint8)
         # grt = grt * seg
+        flat[flat==0] = np.NaN
+        if return_gradient_image:
+            return flat, gr
+        return flat
+
+    def nonzero_projection(self, grt, axis):
         # nalezneme nenulove body
+        ia, ib, ic = self._get_ia_ib_ic(axis)
         nz = np.nonzero(grt)
 
         # udelame z 3d matice placku, kde jsou nuly tam, kde je nic a jinde jsou
@@ -250,10 +267,8 @@ class BodyNavigation:
         # symmetry_point_orig_res = self.symmetry_point * self.working_vs[1:] / self.voxelsize_mm[1:].astype(np.double)
         # odstranime z dat pruh kolem srdce. Tam byva obcas jicen, nebo je tam oblast nad srdcem
         # symmetry_point_pixels = self.symmetry_point/ self.working_vs[1:]
-        flat[flat==0] = np.NaN
-        if return_gradient_image:
-            return flat, gr
         return flat
+
 
     def remove_pizza(self, flat, zero_stripe_width=10, alpha0=-20, alpha1=40 ):
         """
