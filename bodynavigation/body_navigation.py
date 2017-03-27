@@ -1,21 +1,12 @@
-#! /usr/bin/python
+#! /usr/bin/env python
 # -*- coding: utf-8 -*-
-
-
-
-# import funkcí z jiného adresáře
-import argparse
-import os.path
-
-path_to_script = os.path.dirname(os.path.abspath(__file__))
-# sys.path.append(os.path.join(path_to_script, "../extern/pyseg_base/src"))
-# sys.path.append(os.path.join(path_to_script, "../extern/sed3/"))
-#sys.path.append(os.path.join(path_to_script, "../extern/"))
-#import featurevector
 
 import logging
 logger = logging.getLogger(__name__)
 
+import argparse
+
+#import featurevector
 
 #import apdb
 #  apdb.set_trace();\
@@ -23,7 +14,9 @@ logger = logging.getLogger(__name__)
 import numpy as np
 import scipy
 import scipy.ndimage
-from imtools import misc, qmisc
+import skimage.measure
+
+from imtools import misc, qmisc # https://github.com/mjirik/imtools
 
 
 # ----------------- my scripts --------
@@ -62,11 +55,24 @@ class BodyNavigation:
         return qmisc.resize_to_shape(spine, self.orig_shape)
 
     def get_body(self):
+        # create segmented 3d data
         body = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=2) > -150
+
+        # fills first and last slice with 1s, for binary_fill_holes processing # TODO - do this better way
         body[0, :, :] = 1
         body[-1, :, :] = 1
+        body = scipy.ndimage.morphology.binary_fill_holes(body)
+        # removes 1s from first and last slice
+        body[0, :, :] = body[1, :, :]
+        body[-1, :, :] = body[-2, :, :]
 
-        self.body = scipy.ndimage.morphology.binary_fill_holes(body)
+        # leave only biggest object in data
+        body_label = skimage.measure.label(body, background=0)
+        unique, counts = np.unique(body_label, return_counts=True)
+        unique = unique[1:]; counts = counts[1:] # remove background label
+        body = body_label == unique[list(counts).index(max(counts))]
+
+        self.body = body
         return qmisc.resize_to_shape(self.body, self.orig_shape)
 
     def get_lungs(self):
@@ -513,7 +519,6 @@ def find_symmetry_parameters(imin0, trax, tray, angles):
 #         print 'x ', x
         for j, y in enumerate(tray):
             try:
-                img = imin0
                 pivot=[x,y]
                 imgP0, imgP1 = prepare_images(imin0, pivot)
 

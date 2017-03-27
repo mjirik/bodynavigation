@@ -1,16 +1,14 @@
-# ! /usr/bin/python
+#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# import funkcí z jiného adresáře
-import sys
-import os.path
+import logging
+logger = logging.getLogger(__name__)
 
-# path_to_script = os.path.dirname(os.path.abspath(__file__))
 import unittest
+import sys
 
 import numpy as np
 from nose.plugins.attrib import attr
-
 
 # from lisa import organ_segmentation
 # import pysegbase.dcmreaddata as dcmr
@@ -18,7 +16,6 @@ from nose.plugins.attrib import attr
 
 
 # nosetests tests/organ_segmentation_test.py:OrganSegmentationTest.test_create_iparams # noqa
-
 
 class BodyNavigationTest(unittest.TestCase):
     interactiveTest = False
@@ -67,17 +64,17 @@ class BodyNavigationTest(unittest.TestCase):
         app.exit()
     # @unittest.skip("demonstrating skipping")
 
-    @attr("interactive")
-    def test_whole_organ_segmentation_interactive(self):
-        """
-        Interactive test uses dicom data for segmentation
-        """
-        dcmdir = os.path.join(
-            lisa.data.sample_data_path(),
-            'matlab/examples/sample_data/DICOM/digest_article/'
-        )
-            # path_to_script,
-            # './../sample_data/matlab/examples/sample_data/DICOM/digest_article/') # noqa
+    # @attr("interactive")
+    # def test_whole_organ_segmentation_interactive(self):
+    #     """
+    #     Interactive test uses dicom data for segmentation
+    #     """
+    #     dcmdir = os.path.join(
+    #         lisa.data.sample_data_path(),
+    #         'matlab/examples/sample_data/DICOM/digest_article/'
+    #     )
+    #         # path_to_script,
+    #         # './../sample_data/matlab/examples/sample_data/DICOM/digest_article/') # noqa
 
 if __name__ == "__main__":
     unittest.main()
