@@ -23,6 +23,6 @@ install:
     - source activate travis
     - pip install -r requirements_pip.txt
 # command to run tests
-script: nosetests --with-coverage --cover-package=bodynavigation
+script: nosetests -v --with-coverage --cover-package=bodynavigation
 after_success:
     - coveralls
