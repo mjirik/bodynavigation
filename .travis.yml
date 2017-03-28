@@ -1,0 +1,28 @@
+language: python
+python:
+  #  - "2.6"
+  - "2.7"
+  # - "3.2"
+  # - "3.3"
+  # - "3.4"
+virtualenv:
+    system_site_packages: false
+before_install:
+    - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
+    - chmod +x miniconda.sh
+    - ./miniconda.sh -b -p /home/travis/miniconda
+    - export PATH=/home/travis/miniconda/bin:$PATH
+    - conda create --yes -n travis python=$TRAVIS_PYTHON_VERSION
+    #- sudo apt-get install -qq $(< requirements_apt.txt)
+    - ./scripts/get_test_data.sh
+# command to install dependencies
+install:
+    - conda update --yes conda
+    - conda install --yes -n travis pip nose coverage
+    - conda install --yes -n travis --file requirements_conda.txt
+    - source activate travis
+    - pip install -r requirements_pip.txt
+# command to run tests
+script: nosetests -v --with-coverage --cover-package=bodynavigation
+after_success:
+    - coveralls

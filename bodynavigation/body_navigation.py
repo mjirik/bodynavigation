@@ -75,7 +75,7 @@ class BodyNavigation:
         self.body = body
         return qmisc.resize_to_shape(self.body, self.orig_shape)
 
-    def get_lungs(self):
+    def get_lungs(self): # TODO - this doesnt work correctly
         lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -150
         lungs[0, :, :] = 1
 
@@ -108,6 +108,12 @@ class BodyNavigation:
         self.lungs = lungs
         #self.body = (labs == 80)
         return misc.resize_to_shape(lungs, self.orig_shape)
+
+    def get_aorta(self): # TODO
+        raise NotImplementedError
+
+    def get_vena_cava(self): # TODO
+        raise NotImplementedError
 
     def dist_to_surface(self):
         if self.body is None:
