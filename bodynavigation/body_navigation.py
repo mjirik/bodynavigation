@@ -24,6 +24,7 @@ class BodyNavigation:
 
     def __init__(self, data3d, voxelsize_mm):
         self.voxelsize_mm = np.asarray(voxelsize_mm)
+        # TODO - this drasticaly downscales data (0.5 gives a little over 512x512 resolution, but is super slow)
         self.working_vs = np.asarray([1.5, 1.5, 1.5])
         if voxelsize_mm is None:
             self.data3dr = data3d
@@ -32,6 +33,7 @@ class BodyNavigation:
         self.lungs = None
         self.spine = None
         self.body = None
+        self.aorta = None
         self.orig_shape = data3d.shape
         self.diaphragm_mask = None
         self.angle = None
@@ -44,15 +46,6 @@ class BodyNavigation:
 
         if version == 1:
             self.GRADIENT_THRESHOLD = 10
-
-    def get_spine(self):
-
-        spine = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[20, 5, 5]) > 200
-        self.spine = spine
-
-        self.spine_center = np.mean(np.nonzero(self.spine), 1)
-        # self.center2 = np.mean(np.nonzero(self.spine), 2)
-        return qmisc.resize_to_shape(spine, self.orig_shape)
 
     def get_body(self):
         # create segmented 3d data
@@ -75,8 +68,33 @@ class BodyNavigation:
         self.body = body
         return qmisc.resize_to_shape(self.body, self.orig_shape)
 
-    def get_lungs(self): # TODO - this doesnt work correctly
-        lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -150
+    def get_spine(self):
+        """ Should have been named get_bones() """
+        # prepare required data
+        self.get_body() # self.body
+
+        # filter out noise in data
+        data3dr = scipy.ndimage.filters.median_filter(self.data3dr, 3)
+
+        # tresholding
+        # > 120 - still includes kidneys and small part of heart
+        # > 140 - still a small bit of kidneys
+        # > 175 - only edges of bones
+        bones = data3dr > 160; del(data3dr)
+        bones[self.body==0] = 0 # cut out anything not inside body
+
+        # close holes in data
+        bones = scipy.ndimage.morphology.binary_closing(bones, structure=np.ones((3,3,3))) # TODO - fix removal of data on edge slices
+
+        # compute center
+        self.spine_center = np.mean(np.nonzero(bones), 1)
+        # self.center2 = np.mean(np.nonzero(bones), 2)
+
+        self.spine = bones
+        return qmisc.resize_to_shape(bones, self.orig_shape)
+
+    def get_lungs(self): # TODO - this doesnt work correctly, is segmenting a lot of unneeded stuff
+        lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -75 # -150
         lungs[0, :, :] = 1
 
         lungs = scipy.ndimage.morphology.binary_fill_holes(lungs)
@@ -109,8 +127,52 @@ class BodyNavigation:
         #self.body = (labs == 80)
         return misc.resize_to_shape(lungs, self.orig_shape)
 
-    def get_aorta(self): # TODO
-        raise NotImplementedError
+    def get_aorta(self):
+        # prepare required data
+        self.get_spine() # self.spine_center
+
+        # filter out noise in data
+        data3dr = scipy.ndimage.filters.median_filter(self.data3dr, 3)
+
+        # thresholding
+        aorta = np.zeros(data3dr.shape)
+        mask = ( data3dr > 80 ) & ( data3dr < 120 )
+        aorta[mask] = 1; del(data3dr); del(mask)
+
+        # fill holes
+        aorta = scipy.ndimage.morphology.binary_fill_holes(aorta)
+
+        # erosion dilatation
+        aorta = scipy.ndimage.binary_opening(aorta, structure=np.ones((3,3,3)))
+
+        # find biggest object in set distance from spine_center on first slice -> beggining of aorta
+        # TODO make "first slice" relative to heart position
+        # TODO - mask/remove bones -> they can possibly create problems
+        aorta_slice = aorta[1,:,:]
+        aorta_slice_label = skimage.measure.label(aorta_slice, background=0)
+        uniques, counts = np.unique(aorta_slice_label, return_counts=True)
+        uniques = list(uniques); counts = list(counts)
+
+        obj_unique = []; obj_counts = []; obj_com = [];
+        for i in range(len(uniques)):
+            if uniques[i] == 0: continue # ignore background
+            com = scipy.ndimage.measurements.center_of_mass(aorta_slice_label == uniques[i])
+            com_dist = np.linalg.norm(np.asarray(self.spine_center[1], self.spine_center[2])-np.asarray(com))
+            if com_dist > 30: # heart starts around 55, aorta is at least 20
+                continue # euclid distance limit
+            obj_unique.append(uniques[i]); obj_counts.append(counts[i]); obj_com.append(com)
+
+        if len(obj_unique) == 0:
+            raise Exception("Couldn't find any objects that could be Aorta! Sorry...")
+
+        aorta_com = obj_com[obj_counts.index(max(obj_counts))] # center of mass of aorta in first slice
+
+        # throw away everything that is not connected to aorta
+        aorta_label = skimage.measure.label(aorta, background=0)
+        aorta = aorta_label == aorta_label[1, int(aorta_com[0]), int(aorta_com[1])]
+
+        self.aorta = aorta
+        return misc.resize_to_shape(aorta, self.orig_shape)
 
     def get_vena_cava(self): # TODO
         raise NotImplementedError
