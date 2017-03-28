@@ -52,9 +52,9 @@ class SegmentationTest(unittest.TestCase):
         datap2 = io3d.read(os.path.join(TEST_DATA_DIR, "MASKS_DICOM", "rightlung"), dataplus_format=True)
         test_lungs = (datap1["data3d"]+datap2["data3d"]) > 0 # reducing value range to <0,1> from <0,255>
 
-        import sed3
-        ed = sed3.sed3(abs(test_lungs-bn_lungs))
-        ed.show()
+        # import sed3
+        # ed = sed3.sed3(abs(test_lungs-bn_lungs))
+        # ed.show()
 
         # Test requires less then 5% error rate in segmentation
         test_lungs_sum = np.sum(test_lungs)
