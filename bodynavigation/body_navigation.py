@@ -21,20 +21,26 @@ from imtools import misc, qmisc # https://github.com/mjirik/imtools
 
 # ----------------- my scripts --------
 class BodyNavigation:
+    """ Range of values in input data must be <-1024;1023> """
 
     def __init__(self, data3d, voxelsize_mm):
         self.voxelsize_mm = np.asarray(voxelsize_mm)
         # TODO - this drasticaly downscales data (0.5 gives a little over 512x512 resolution, but is super slow)
-        self.working_vs = np.asarray([1.5, 1.5, 1.5])
+        self.working_vs = np.asarray([1.5]*3)
         if voxelsize_mm is None:
             self.data3dr = data3d
         else:
             self.data3dr = qmisc.resize_to_mm(data3d, voxelsize_mm, self.working_vs)
+        self.orig_shape = data3d.shape
+
+        # temporary fix for io3d <-512;511> value range bug
+        if np.max(self.data3dr) <= 511 and np.min(self.data3dr) >= -512:
+            self.data3dr = self.data3dr * 2
+
         self.lungs = None
         self.spine = None
         self.body = None
         self.aorta = None
-        self.orig_shape = data3d.shape
         self.diaphragm_mask = None
         self.angle = None
 
@@ -49,7 +55,7 @@ class BodyNavigation:
 
     def get_body(self):
         # create segmented 3d data
-        body = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=2) > -150
+        body = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=2) > -300
 
         # fills first and last slice with 1s, for binary_fill_holes processing # TODO - do this better way
         body[0, :, :] = 1
@@ -77,10 +83,10 @@ class BodyNavigation:
         data3dr = scipy.ndimage.filters.median_filter(self.data3dr, 3)
 
         # tresholding
-        # > 120 - still includes kidneys and small part of heart
-        # > 140 - still a small bit of kidneys
-        # > 175 - only edges of bones
-        bones = data3dr > 160; del(data3dr)
+        # > 240 - still includes kidneys and small part of heart
+        # > 280 - still a small bit of kidneys
+        # > 350 - only edges of bones
+        bones = data3dr > 320; del(data3dr)
         bones[self.body==0] = 0 # cut out anything not inside body
 
         # close holes in data
@@ -94,7 +100,7 @@ class BodyNavigation:
         return qmisc.resize_to_shape(bones, self.orig_shape)
 
     def get_lungs(self): # TODO - this doesnt work correctly, is segmenting a lot of unneeded stuff
-        lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -75 # -150
+        lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -150
         lungs[0, :, :] = 1
 
         lungs = scipy.ndimage.morphology.binary_fill_holes(lungs)
@@ -136,7 +142,7 @@ class BodyNavigation:
 
         # thresholding
         aorta = np.zeros(data3dr.shape)
-        mask = ( data3dr > 80 ) & ( data3dr < 120 )
+        mask = ( data3dr > 160 ) & ( data3dr < 240 )
         aorta[mask] = 1; del(data3dr); del(mask)
 
         # fill holes
