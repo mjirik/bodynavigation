@@ -142,40 +142,43 @@ class BodyNavigation:
 
         # thresholding
         aorta = np.zeros(data3dr.shape)
-        mask = ( data3dr > 160 ) & ( data3dr < 240 )
+        mask = data3dr > 160 # mask = ( data3dr > 160 ) & ( data3dr < 240 )
         aorta[mask] = 1; del(data3dr); del(mask)
 
         # fill holes
         aorta = scipy.ndimage.morphology.binary_fill_holes(aorta)
 
-        # erosion dilatation
+        # binary_opening
         aorta = scipy.ndimage.binary_opening(aorta, structure=np.ones((3,3,3)))
 
-        # find biggest object in set distance from spine_center on first slice -> beggining of aorta
+        ## find aorta in first slice
         # TODO make "first slice" relative to heart position
-        # TODO - mask/remove bones -> they can possibly create problems
-        aorta_slice = aorta[1,:,:]
+        aorta_slice = aorta[1,:,:].copy()
+        # cut distant data: heart center starts around 83mm, aorta is at least 30mm, vena cava at around 50mm
+        cut_radius = int(70/float(self.working_vs[0]))
+        aorta_slice[:int(self.spine_center[1]-cut_radius),:] = 1
+        aorta_slice[int(self.spine_center[1]):,:] = 1
+        aorta_slice[:,:int(self.spine_center[2]-cut_radius)] = 1
+        aorta_slice[:,int(self.spine_center[2]+cut_radius):] = 1
+
+        # import sed3
+        # aorta_slice = np.expand_dims(aorta_slice, axis=0)
+        # seeds = np.zeros(aorta_slice.shape)
+        # ed = sed3.sed3(aorta_slice)
+        # ed.show()
+
+        # remove everything connected to cut data
         aorta_slice_label = skimage.measure.label(aorta_slice, background=0)
-        uniques, counts = np.unique(aorta_slice_label, return_counts=True)
-        uniques = list(uniques); counts = list(counts)
-
-        obj_unique = []; obj_counts = []; obj_com = [];
-        for i in range(len(uniques)):
-            if uniques[i] == 0: continue # ignore background
-            com = scipy.ndimage.measurements.center_of_mass(aorta_slice_label == uniques[i])
-            com_dist = np.linalg.norm(np.asarray(self.spine_center[1], self.spine_center[2])-np.asarray(com))
-            if com_dist > 30: # heart starts around 55, aorta is at least 20
-                continue # euclid distance limit
-            obj_unique.append(uniques[i]); obj_counts.append(counts[i]); obj_com.append(com)
-
-        if len(obj_unique) == 0:
-            raise Exception("Couldn't find any objects that could be Aorta! Sorry...")
-
-        aorta_com = obj_com[obj_counts.index(max(obj_counts))] # center of mass of aorta in first slice
+        aorta_slice[aorta_slice_label == aorta_slice_label[0,0]] = 0
+        # find circles in cut data: segmented aorta should have radius around 8mm
+        result = skimage.transform.hough_circle(aorta_slice, radius=(8/float(self.working_vs[0])))
+        ridx, r, c = np.unravel_index(np.argmax(result), result.shape)
 
         # throw away everything that is not connected to aorta
+        aorta = scipy.ndimage.binary_erosion(aorta, structure=np.ones((3,3,3)))
         aorta_label = skimage.measure.label(aorta, background=0)
-        aorta = aorta_label == aorta_label[1, int(aorta_com[0]), int(aorta_com[1])]
+        aorta = aorta_label == aorta_label[1, r, c]
+        aorta = scipy.ndimage.binary_dilation(aorta, structure=np.ones((3,3,3)))
 
         self.aorta = aorta
         return misc.resize_to_shape(aorta, self.orig_shape)
@@ -187,20 +190,21 @@ class BodyNavigation:
         if self.body is None:
             self.get_body()
         ld = scipy.ndimage.morphology.distance_transform_edt(self.body)
-
+        ld = ld*float(self.working_vs[0]) # convert distances to mm
         return misc.resize_to_shape(ld, self.orig_shape)
 
     def dist_to_lungs(self):
         if self.lungs is None:
             self.get_lungs()
-
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.lungs)
+        ld = ld*float(self.working_vs[0]) # convert distances to mm
         return misc.resize_to_shape(ld, self.orig_shape)
 
     def dist_to_spine(self):
         if self.spine is None:
             self.get_spine()
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine)
+        ld = ld*float(self.working_vs[0]) # convert distances to mm
         return misc.resize_to_shape(ld, self.orig_shape)
 
     def find_symmetry(self, degrad=5, return_img=False):
