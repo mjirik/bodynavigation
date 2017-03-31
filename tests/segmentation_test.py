@@ -95,7 +95,7 @@ class SegmentationTest(unittest.TestCase):
         diff_sum = np.sum(abs(test_aorta-bn_aorta))
         self.assertLess(float(diff_sum)/float(test_aorta_sum), 0.5) # TODO - get better error rate -> segment smaller vessels connected to aorta
 
-    @unittest.skip("BodyNavigation.get_vena_cava() Not Implemented")
+    @unittest.skip("BodyNavigation.get_vena_cava() Not finished")
     def venaCavaSegmentation_test(self):
         # get segmented data
         datap = io3d.read(os.path.join(TEST_DATA_DIR, "PATIENT_DICOM"), dataplus_format=True)
@@ -105,6 +105,10 @@ class SegmentationTest(unittest.TestCase):
         # get preprocessed test data
         datap = io3d.read(os.path.join(TEST_DATA_DIR, "MASKS_DICOM", "venoussystem"), dataplus_format=True)
         test_venacava = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
+
+        # import sed3
+        # ed = sed3.sed3(abs(test_venacava-bn_venacava))
+        # ed.show()
 
         # Test requires less then 5% error rate in segmentation
         test_venacava_sum = np.sum(test_venacava)

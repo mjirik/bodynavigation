@@ -43,6 +43,7 @@ class BodyNavigation:
         self.aorta = None
         self.diaphragm_mask = None
         self.angle = None
+        self.spine_center = None
 
         self.set_parameters()
 
@@ -77,7 +78,8 @@ class BodyNavigation:
     def get_spine(self):
         """ Should have been named get_bones() """
         # prepare required data
-        self.get_body() # self.body
+        if self.body is None:
+            self.get_body() # self.body
 
         # filter out noise in data
         data3dr = scipy.ndimage.filters.median_filter(self.data3dr, 3)
@@ -135,7 +137,8 @@ class BodyNavigation:
 
     def get_aorta(self):
         # prepare required data
-        self.get_spine() # self.spine_center
+        if self.spine_center is None:
+            self.get_spine() # self.spine_center
 
         # filter out noise in data
         data3dr = scipy.ndimage.filters.median_filter(self.data3dr, 3)
@@ -183,8 +186,68 @@ class BodyNavigation:
         self.aorta = aorta
         return misc.resize_to_shape(aorta, self.orig_shape)
 
-    def get_vena_cava(self): # TODO
-        raise NotImplementedError
+    def get_vena_cava(self): # TODO - not finished
+        # prepare required data
+        if self.spine_center is None:
+            self.get_spine() # self.spine_center
+        if self.aorta is None:
+            self.get_aorta() # self.aorta
+
+        # filter out noise in data
+        data3dr = scipy.ndimage.filters.median_filter(self.data3dr, 3)
+
+        # thresholding
+        vena_cava = np.zeros(data3dr.shape)
+        mask = data3dr > 150 # TODO - mozna 140
+        vena_cava[mask] = 1; del(data3dr); del(mask)
+
+        # fill holes
+        vena_cava = scipy.ndimage.morphology.binary_fill_holes(vena_cava)
+
+        # binary_opening
+        vena_cava = scipy.ndimage.binary_opening(vena_cava, structure=np.ones((3,3,3)))
+
+        # import sed3
+        # ed = sed3.sed3(vena_cava)
+        # ed.show()
+
+        ## find vena_cava in first slice
+        # TODO make "first slice" relative to heart position
+        vena_cava_slice = vena_cava[1,:,:].copy()
+        # cut distant data: heart center starts around 83mm, aorta is at least 30mm, vena cava at around 50mm
+        cut_radius = int(70/float(self.working_vs[0]))
+        vena_cava_slice[:int(self.spine_center[1]-cut_radius),:] = 1
+        vena_cava_slice[int(self.spine_center[1]):,:] = 1
+        vena_cava_slice[:,:int(self.spine_center[2]-cut_radius)] = 1
+        vena_cava_slice[:,int(self.spine_center[2]+cut_radius):] = 1
+
+        # import sed3
+        # vena_cava_slice = np.expand_dims(vena_cava_slice, axis=0)
+        # seeds = np.zeros(vena_cava_slice.shape)
+        # ed = sed3.sed3(vena_cava_slice)
+        # ed.show()
+
+        # remove everything connected to cut data
+        vena_cava_slice_label = skimage.measure.label(vena_cava_slice, background=0)
+        vena_cava_slice[vena_cava_slice_label == vena_cava_slice_label[0,0]] = 0
+
+        # remove aorta from slice
+        aorta_com = scipy.ndimage.measurements.center_of_mass(self.aorta[1, :, :])
+        vena_cava_slice_label = skimage.measure.label(vena_cava_slice, background=0)
+        vena_cava_slice[vena_cava_slice_label == vena_cava_slice_label[int(aorta_com[0]),int(aorta_com[1])]] = 0
+
+        # find circles in cut data: segmented vena_cava should have radius around 9mm # TODO - use more correct value (maybe even elipse)
+        result = skimage.transform.hough_circle(vena_cava_slice, radius=(9/float(self.working_vs[0])))
+        ridx, r, c = np.unravel_index(np.argmax(result), result.shape)
+
+        # throw away everything that is not connected to vena_cava
+        vena_cava = scipy.ndimage.binary_erosion(vena_cava, structure=np.ones((3,3,3)))
+        vena_cava_label = skimage.measure.label(vena_cava, background=0)
+        vena_cava = vena_cava_label == vena_cava_label[1, r, c]
+        vena_cava = scipy.ndimage.binary_dilation(vena_cava, structure=np.ones((3,3,3)))
+
+        self.vena_cava = vena_cava
+        return misc.resize_to_shape(vena_cava, self.orig_shape)
 
     def dist_to_surface(self):
         if self.body is None:
@@ -204,6 +267,20 @@ class BodyNavigation:
         if self.spine is None:
             self.get_spine()
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine)
+        ld = ld*float(self.working_vs[0]) # convert distances to mm
+        return misc.resize_to_shape(ld, self.orig_shape)
+
+    def dist_to_aorta(self):
+        if self.aorta is None:
+            self.get_aorta()
+        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.aorta)
+        ld = ld*float(self.working_vs[0]) # convert distances to mm
+        return misc.resize_to_shape(ld, self.orig_shape)
+
+    def dist_to_vena_cava(self):
+        if self.vena_cava is None:
+            self.get_vena_cava()
+        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.vena_cava)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
         return misc.resize_to_shape(ld, self.orig_shape)
 
