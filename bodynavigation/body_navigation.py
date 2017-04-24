@@ -15,6 +15,8 @@ import numpy as np
 import scipy
 import scipy.ndimage
 import skimage.measure
+from . import chest_localization
+
 
 from imtools import misc, qmisc # https://github.com/mjirik/imtools
 
@@ -248,6 +250,18 @@ class BodyNavigation:
 
         self.vena_cava = vena_cava
         return misc.resize_to_shape(vena_cava, self.orig_shape)
+
+    def get_chest(self):
+        # TODO implementovat
+        # chest_localization.superfunkce()
+        pass
+
+    def dist_to_chest(self):
+        if self.chest is None:
+            self.get_chest()
+        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.chest)
+        ld = ld*float(self.working_vs[0]) # convert distances to mm
+        return misc.resize_to_shape(ld, self.orig_shape)
 
     def dist_to_surface(self):
         if self.body is None:
