@@ -252,9 +252,41 @@ class BodyNavigation:
         return misc.resize_to_shape(vena_cava, self.orig_shape)
 
     def get_chest(self):
-        # TODO implementovat
-        # chest_localization.superfunkce()
-        pass
+        """ Compute, where is the chest in CT data. 
+            :return: binary array
+        """
+        
+        # TODO vylepsovat
+        chest_localization.ss = self
+        chest_localization.data3dr_tmp = data3dr_tmp = self.data3dr
+                
+        if self.body is None:
+            self.get_body()
+        if self.lungs is None:
+            self.get_lungs()
+    
+        body = chest_localization.clear_body(self.body)
+        coronal = self.dist_coronal()
+    
+        final_area_filter = chest_localization.area_filter(data3dr_tmp, body, self.lungs, coronal)
+        location_filter = chest_localization.dist_hull(final_area_filter)
+        intensity_filter = chest_localization.strict_intensity_filter(data3dr_tmp)
+        deep_filter = chest_localization.deep_struct_filter_old(data3dr_tmp)  # potrebuje upravit jeste
+    
+        ribs = intensity_filter & location_filter & final_area_filter & body & deep_filter
+    
+        #ribs_sum = intensity_filter.astype(float) + location_filter.astype(float) + final_area_filter.astype(float) + deep_filter.astype(float)
+    
+        z_border = chest_localization.process_z_axe(ribs, self.lungs, "001")
+        ribs[0:z_border, :, :] = False
+    
+        #chloc.print_it_all(ss, data3dr_tmp, final_area_filter*2, pattern+"area")
+        #chloc.print_it_all(self, data3dr_tmp, ribs*2, pattern+"thr")
+        #chloc.print_it_all(self, data3dr_tmp>220, ribs*3, pattern)
+        
+        self.ribs = ribs
+        
+        return ribs
 
     def dist_to_chest(self):
         if self.chest is None:
