@@ -46,6 +46,7 @@ class BodyNavigation:
         self.diaphragm_mask = None
         self.angle = None
         self.spine_center = None
+        self.chest = None
 
         self.set_parameters()
 
@@ -284,6 +285,7 @@ class BodyNavigation:
         #chloc.print_it_all(self, self.data3dr>220, ribs*3, pattern)
         
         self.ribs = ribs
+        self.chest = ribs
         
         return ribs
 
