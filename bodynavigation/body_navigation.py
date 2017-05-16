@@ -46,6 +46,7 @@ class BodyNavigation:
         self.diaphragm_mask = None
         self.angle = None
         self.spine_center = None
+        self.chest = None
 
         self.set_parameters()
 
