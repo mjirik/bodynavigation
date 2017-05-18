@@ -46,6 +46,7 @@ class BodyNavigation:
         self.diaphragm_mask = None
         self.angle = None
         self.spine_center = None
+        self.ribs = None
         self.chest = None
 
         self.set_parameters()
@@ -253,8 +254,8 @@ class BodyNavigation:
         return misc.resize_to_shape(vena_cava, self.orig_shape)
 
 
-    def get_chest(self):
-        """ Compute, where is the chest in CT data. 
+    def get_ribs(self):
+        """ Compute, where are the ribs in CT data. 
             :return: binary array
         """
         # TODO: upravit kody
@@ -276,25 +277,35 @@ class BodyNavigation:
         ribs = intensity_filter & location_filter & final_area_filter & body & deep_filter
     
         #ribs_sum = intensity_filter.astype(float) + location_filter.astype(float) + final_area_filter.astype(float) + deep_filter.astype(float)
-    
+        
+        # oriznuti zeber (a take hrudniku) v ose z
         z_border = chloc.process_z_axe(ribs, self.lungs, "001")
         ribs[0:z_border, :, :] = False
+        final_area_filter[0:z_border, :, :] = False
     
         #chloc.print_it_all(ss, data3dr_tmp, final_area_filter*2, pattern+"area")
         #chloc.print_it_all(self, self.data3dr, ribs*2, pattern+"thr")
         #chloc.print_it_all(self, self.data3dr>220, ribs*3, pattern)
         
+        # zebra
         self.ribs = ribs
-        # TODO nějak tohle vyřešit
-        self.chest = ribs
+        # hrudnik
+        self.chest = final_area_filter
         
         return ribs
 
 
     def dist_to_chest(self):
         if self.chest is None:
-            self.get_chest()
-        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.chest)
+            self.get_ribs()
+        ld = scipy.ndimage.morphology.distance_transform_edt(self.chest)
+        ld = ld*float(self.working_vs[0]) # convert distances to mm
+        return misc.resize_to_shape(ld, self.orig_shape)
+        
+    def dist_to_ribs(self):
+        if self.ribs is None:
+            self.get_ribs()
+        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.ribs)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
         return misc.resize_to_shape(ld, self.orig_shape)
 
