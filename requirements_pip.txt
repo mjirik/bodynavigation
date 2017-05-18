@@ -1,3 +1,5 @@
 coveralls
 imtools
 io3d
+sed3
+pandas

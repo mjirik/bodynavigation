@@ -20,11 +20,6 @@ TEST_DATA_DIR = "../test_data"
 
 def compute_mask_histograms(
     data3d, mask, histogram_title="Histogram"): # TODO - remove nan->0 from histograms
-    """
-    By default rescales values from <-512,511> mode to <-1024,1023> mode.
-    Since io3d uses 512 mode, but ImageJ uses 1024 mode.
-    """
-    print("orig_minvalue:", np.min(data3d), "orig_maxvalue:", np.max(data3d))
 
     # mask dicom data
     data3d = data3d.copy() * 2
@@ -48,7 +43,9 @@ def main():
     logger.info("load PATIENT_DICOM data")
     datap = io3d.read(os.path.join(TEST_DATA_DIR, "PATIENT_DICOM"), dataplus_format=True)
     data3d = datap["data3d"]
-    # temporary fix for io3d <-512;511> value range bug
+
+    # By default rescales values from <-512,511> mode to <-1024,1023> mode.
+    # Since io3d uses 512 mode, but ImageJ uses 1024 mode.
     if np.max(data3d) <= 511 and np.min(data3d) >= -512:
         data3d = data3d * 2
 
