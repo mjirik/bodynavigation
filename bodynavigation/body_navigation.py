@@ -284,6 +284,8 @@ class BodyNavigation:
         #chloc.print_it_all(self, self.data3dr, ribs*2, pattern+"thr")
         #chloc.print_it_all(self, self.data3dr>220, ribs*3, pattern)
         
+        self.ribs = ribs
+        # TODO nějak tohle vyřešit
         self.chest = ribs
         
         return ribs
