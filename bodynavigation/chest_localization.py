@@ -149,7 +149,7 @@ def print_it_all(ss, data3dr_tmp, seg, pattern):
     )
 
 
-def print_it_all_front(self, ss, data3dr_tmp, seg, pattern):
+def print_it_all_front(ss, data3dr_tmp, seg, pattern):
     """ Vykresli jednotlive rezy v danem smeru (axis) 
     do sed3.show_slices() vstupuji: 
         - obrazek pro danou instanci Bona (surovy obrazek), ktery

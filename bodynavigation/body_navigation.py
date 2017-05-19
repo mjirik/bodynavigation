@@ -253,7 +253,18 @@ class BodyNavigation:
         self.vena_cava = vena_cava
         return misc.resize_to_shape(vena_cava, self.orig_shape)
 
-
+    
+    def get_chest(self):
+        """ Compute, where is the chest in CT data. 
+            :return: binary array
+        """
+        
+        if self.chest is None:
+            self.get_ribs()
+        
+        return self.chest
+    
+    
     def get_ribs(self):
         """ Compute, where are the ribs in CT data. 
             :return: binary array
