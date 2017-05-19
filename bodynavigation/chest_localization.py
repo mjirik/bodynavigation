@@ -149,6 +149,25 @@ def print_it_all(ss, data3dr_tmp, seg, pattern):
     )
 
 
+def print_it_all_front(self, ss, data3dr_tmp, seg, pattern):
+    """ Vykresli jednotlive rezy v danem smeru (axis) 
+    do sed3.show_slices() vstupuji: 
+        - obrazek pro danou instanci Bona (surovy obrazek), ktery
+          zpracovavame
+        - obrazek seg - vysledek segmentace, tedy vystup metody get_ribs(lungs, ...)) 
+        - dalsi parametry jako jsou krok po rezech, osa, atd."""
+        
+    fig = plt.figure(figsize = (25,25))
+    sed3.show_slices(
+        data3dr_tmp,                                 # vychozi obrazek
+        seg.astype(np.int8),
+        slice_step=10, 
+        axis=1,
+        flipV=True,
+        flipH=False
+    )
+
+
 class ChestLocalization:
     
     def __init__(self, bona_object=None, data3dr_tmp=None):
