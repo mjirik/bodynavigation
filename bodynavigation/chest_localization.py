@@ -22,7 +22,7 @@ from imtools import misc, qmisc # https://github.com/mjirik/imtools
 import sys
 #sys.path.append("/home/mjirik/projects/pysegbase")
 # sys.path.append("/home/mjirik/projects/lisa")
-sys.path.append("C:\Users\Mirab\Documents\GitHub/bodynavigation")
+
 
 import matplotlib.pyplot as plt
 import os.path as op
@@ -52,7 +52,11 @@ try:
 
 except:
     #print "Nelze iportovat body_navigation"
-    pass
+    try:
+        import body_navigation
+        reload(body_navigation)
+    except:
+        pass
 
 
 # sys.path.append("/home/mjirik/projects/imtools")
