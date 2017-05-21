@@ -53,7 +53,7 @@ class SegmentationTest(unittest.TestCase):
         test_lungs = (datap1["data3d"]+datap2["data3d"]) > 0 # reducing value range to <0,1> from <0,255>
 
         # import sed3
-        # ed = sed3.sed3(abs(test_lungs-bn_lungs))
+        # ed = sed3.sed3(test_lungs, contour=bn_lungs)
         # ed.show()
 
         # Test requires less then 5% error rate in segmentation
@@ -87,7 +87,7 @@ class SegmentationTest(unittest.TestCase):
         test_aorta = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
 
         # import sed3
-        # ed = sed3.sed3(abs(test_aorta-bn_aorta))
+        # ed = sed3.sed3(test_aorta, contour=bn_aorta)
         # ed.show()
 
         # Test requires less then 50% error rate in segmentation -> used test data has smaller vessels connected to aorta => that's why the big error
@@ -107,7 +107,7 @@ class SegmentationTest(unittest.TestCase):
         test_venacava = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
 
         # import sed3
-        # ed = sed3.sed3(abs(test_venacava-bn_venacava))
+        # ed = sed3.sed3(test_venacava, contour=bn_venacava)
         # ed.show()
 
         # Test requires less then 5% error rate in segmentation

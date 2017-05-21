@@ -22,7 +22,6 @@ def compute_mask_histograms(
     data3d, mask, histogram_title="Histogram"): # TODO - remove nan->0 from histograms
 
     # mask dicom data
-    data3d = data3d.copy() * 2
     data_in_mask = data3d.copy()
     data_in_mask[mask != 1] = 0
     data_outside_mask = data3d.copy()

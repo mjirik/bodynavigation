@@ -201,6 +201,9 @@ class BodyNavigation:
         centroids = scipy.ndimage.measurements.center_of_mass(result, result_label, range(1, np.max(result_label)+1))
         dists = [ np.linalg.norm(np.asarray(spine_center)-np.asarray(c)) for c in centroids ] # get distance to spine center
 
+        if not len(dists)>=2:
+            raise Exception("Couldn't find at least 2 circles that could be Aorta and VenaCava in slice!")
+
         aorta_i = dists.index(min(dists))
         aorta_centroid = list(centroids[aorta_i])
         aorta_centroid[0] = slice_index
