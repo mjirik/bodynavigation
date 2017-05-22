@@ -363,8 +363,8 @@ class BodyNavigation:
         self.aorta = r == 2
         self.vena_cava = r == 3
 
-        ed = sed3.sed3(data3d, contour=self.aorta); ed.show()
-        ed = sed3.sed3(data3d, contour=self.vena_cava); ed.show()
+        # ed = sed3.sed3(data3d, contour=self.aorta); ed.show()
+        # ed = sed3.sed3(data3d, contour=self.vena_cava); ed.show()
 
         return self.aorta, self.vena_cava
 
@@ -373,7 +373,7 @@ class BodyNavigation:
             self.get_aorta_and_venacava()
         return self.aorta
 
-    def get_venacava(self):
+    def get_vena_cava(self):
         if self.vena_cava is None:
             self.get_aorta_and_venacava()
         return self.vena_cava
