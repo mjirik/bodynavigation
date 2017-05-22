@@ -142,140 +142,240 @@ class BodyNavigation:
         #self.body = (labs == 80)
         return misc.resize_to_shape(lungs, self.orig_shape)
 
-    def _find_aorta_vena_cava_coordinates(self):
-        """
-        Returns: "point that is in aorta", "point that is in vena cava"
-        Computed from data with original size (self.data3d), might need to be scaled if working with resized data (self.data3dr).
-        """
+    def get_aorta_and_venacava(self):
         # prepare required data
         if self.spine_center is None:
             self.get_spine() # self.spine_center
         voxelsize_mm = self.voxelsize_mm
         spine_center = [ int((self.spine_center[i]*self.working_vs[i])/float(voxelsize_mm[i])) for i in range(3) ]
 
-        slice_index = 1 # TODO make "first slice" relative to heart position
-        data3d = self.data3d[slice_index,:,:]
-
         # filter out noise in data
-        data3d = scipy.ndimage.filters.median_filter(data3d, 3)
+        data3d = scipy.ndimage.filters.median_filter(self.data3d, 3)
 
         # thresholding
         segmented = (data3d > 145) & (data3d < 400)
 
         # removing thresholding errors
-        segmented = scipy.ndimage.binary_opening(segmented, structure=np.ones((3,3)))
+        segmented = scipy.ndimage.binary_opening(segmented, structure=np.ones((3,3,3)))
         segmented = scipy.ndimage.morphology.binary_fill_holes(segmented)
 
         # ed = sed3.sed3(segmented); ed.show()
 
-        ## find aorta and vena cava in first slice
-        work_slice = segmented.copy()
+        aorta_points = []
+        venacava_points = []
+        for slice_index in range(data3d.shape[0]):  # find aorta and vena cava in slice
+            logger.debug("Processing slice %i" % slice_index)
+            work_slice = segmented[slice_index,:,:].copy()
 
-        # cut distant data: heart center starts around 83mm, aorta is at least 30mm, vena cava at around 50mm
-        cut_rad = [None, int(70/float(voxelsize_mm[1])), int(70/float(voxelsize_mm[2]))] # z,y,x
-        logger.debug("spline_center:%s; cut_radius:%s" % (spine_center, cut_rad))
-        work_slice[:(spine_center[1]-cut_rad[1]),:] = 1
-        work_slice[spine_center[1]:,:] = 1 # don't need the part behind the spine center
-        work_slice[:,:(spine_center[2]-cut_rad[2])] = 1
-        work_slice[:,(spine_center[2]+cut_rad[2]):] = 1
+            # cut distant data - heart center starts around 83mm, aorta is at least 30mm, vena cava at around 50mm (in firts slice)
+            cut_rad = [None, int(75/float(voxelsize_mm[1])), int(75/float(voxelsize_mm[2]))] # z,y,x
+            logger.debug("spine_center:%s; cut_radius:%s" % (spine_center, cut_rad))
+            rr, cc = skimage.draw.ellipse(spine_center[1], spine_center[2], cut_rad[1], cut_rad[2])
+            mask = np.zeros(work_slice.shape); mask[rr, cc] = 1
+            mask[spine_center[1]:,:] = 0 # don't need the part behind the spine center
+            work_slice[mask != 1] = 1
 
-        # work_slice = np.expand_dims(work_slice, axis=0)
-        # ed = sed3.sed3(work_slice); ed.show()
+            # try to connect all pieces of spine, so they can be removed
+            spine_segmented = scipy.ndimage.binary_opening(data3d[slice_index,:,:] > 280, structure=np.ones((3,3)))
+            spine_x_rad = int(18/float(voxelsize_mm[2])) # spine width radius is 18mm
+            spined = [0,]*len(spine_segmented[:,0])
+            for y in range(spine_center[1]-int(30/float(voxelsize_mm[1])), spine_center[1]):
+                for x in range(spine_center[2]-spine_x_rad, spine_center[2]+spine_x_rad):
+                    if spine_segmented[y, x] == 1: spined[x] = 1
+                    work_slice[y, x] = work_slice[y, x] or spined[x]
+            spine_min_y_rad = int(12/float(voxelsize_mm[2])) # spine min height radius is 12mm
+            rr, cc = skimage.draw.ellipse(spine_center[1], spine_center[2], spine_min_y_rad, spine_x_rad)
+            work_slice[rr, cc] = 1
 
-        # remove everything connected to cut data
-        work_slice_label = skimage.measure.label(work_slice, background=0)
-        work_slice[work_slice_label == work_slice_label[0,0]] = 0
+            # ed = sed3.sed3(np.expand_dims(work_slice, axis=0)*100, contour=np.expand_dims(spine_segmented, axis=0)); ed.show()
 
-        # work_slice = np.expand_dims(work_slice, axis=0)
-        # ed = sed3.sed3(work_slice); ed.show()
+            # remove everything connected to cut data
+            work_slice_label = skimage.measure.label(work_slice, background=0)
+            work_slice[work_slice_label == work_slice_label[0,0]] = 0
 
-        # find circles in cut data: segmented vena_cava should have radius around 9mm, aorta around 8mm
-        vc_rad = int(8.5/float((voxelsize_mm[1]+voxelsize_mm[2])/2.0)) # TODO - use more correct value (maybe even elipse)
-        result = skimage.transform.hough_circle(work_slice, radius=vc_rad) # shape == (1, 512, 512)
+            # ed = sed3.sed3(np.expand_dims(work_slice, axis=0)*100); ed.show()
 
-        # ed = sed3.sed3(result); ed.show()
+            ## find circles in cut data: segmented vena_cava should have radius around 9mm, aorta around 8mm, they gets smaller the lower you go
+            vc_rad = int(6/float((voxelsize_mm[1]+voxelsize_mm[2])/2.0)) # TODO - use more correct value (maybe even elipse)
+            result = skimage.transform.hough_circle(work_slice, radius=vc_rad) # shape == (1, 512, 512)
 
-        # find out centers of circles, and distance from spine center
-        result = result > 0.7 # treshold high chances of center of aorta/vena_cava
-        result_label = skimage.measure.label(result, background=0)
-        centroids = scipy.ndimage.measurements.center_of_mass(result, result_label, range(1, np.max(result_label)+1))
-        dists = [ np.linalg.norm(np.asarray(spine_center)-np.asarray(c)) for c in centroids ] # get distance to spine center
+            #ed = sed3.sed3(result*100); ed.show()
 
-        if not len(dists)>=2:
-            raise Exception("Couldn't find at least 2 circles that could be Aorta and VenaCava in slice!")
+            # find out centers of circles, and distance from spine center
+            result = result > 0.7 # treshold high chances of center of aorta/vena_cava
+            result = scipy.ndimage.binary_dilation(result , structure=np.ones((5,5,5))) # connect very near objects
+            result_label = skimage.measure.label(result, background=0)
+            centroids = scipy.ndimage.measurements.center_of_mass(result, result_label, range(1, np.max(result_label)+1))
 
-        aorta_i = dists.index(min(dists))
-        aorta_centroid = list(centroids[aorta_i])
-        aorta_centroid[0] = slice_index
-        aorta_centroid = [ int(c) for c in aorta_centroid ]
+            # remove centroids that share same label (objects are connected)
+            new_centroids = []
+            for i, c1 in enumerate(centroids):
+                ok = True
+                for n, c2 in enumerate(centroids):
+                    if i == n: continue
+                    if work_slice_label[int(c1[1]), int(c1[2])] == work_slice_label[int(c2[1]), int(c2[2])]:
+                        ok = False; break
+                if ok: new_centroids.append(c1)
+            centroids = new_centroids
 
-        del(dists[aorta_i]); del(centroids[aorta_i])
-        venacava_centroid = list(centroids[dists.index(min(dists))])
-        venacava_centroid[0] = slice_index
-        venacava_centroid = [ int(c) for c in venacava_centroid ]
+            # remove centroids which do not have correct volume
+            correct_volume = 3.14 * int(9/float((voxelsize_mm[1]+voxelsize_mm[2])/2.0))**2
+            new_centroids = []
+            for c in centroids:
+                volume = np.sum( work_slice_label == work_slice_label[int(c[1]), int(c[2])] )
+                if volume >= correct_volume * 0.5 and volume <= correct_volume * 2:
+                    new_centroids.append(c)
+            centroids = new_centroids
 
-        return aorta_centroid, venacava_centroid
+            # seeds = np.zeros(np.expand_dims(work_slice, axis=0).shape)
+            # seeds[0, spine_center[1]-2:spine_center[1]+2, spine_center[2]-2:spine_center[2]+2] = 1
+            # seeds[result == 1] = 2
+            # contour = segmented[slice_index,:,:].copy(); contour = np.expand_dims(contour, axis=0)
+            # ed = sed3.sed3(np.expand_dims(data3d[slice_index,:,:], axis=0), seeds=seeds, contour=contour); ed.show()
+
+            # detect which circles are slices of aorta and venacava
+            dists = [ ((spine_center[1]-c[1])**2 + (spine_center[2]-c[2])**2) for c in centroids ] # get distance to spine center
+            aorta_i = None
+            venacava_i = None
+
+            if len(centroids)>=2:
+                # get two closest circles
+                c_1st = None
+                c_2nd = None
+                for i, d in enumerate(dists):
+                    if c_1st is None:
+                        c_1st = i
+                    elif dists[c_1st]>=d:
+                        c_2nd = c_1st
+                        c_1st = i
+                    elif c_2nd is None:
+                        c_2nd = i
+                    elif dists[c_2nd]>d:
+                        c_2nd = i
+
+                # detect which is aorta and which is venacava
+                if centroids[c_1st][2]>centroids[c_2nd][2]:
+                    aorta_i = c_1st; venacava_i = c_2nd
+                else:
+                    aorta_i = c_2nd; venacava_i = c_1st
+
+            elif len(centroids)==1:
+                c = centroids[0]
+                if len(aorta_points)==0 or len(venacava_points)==0:
+                    if (spine_center[2]-int(9/float(voxelsize_mm[2])))-c[2] > 0:
+                        venacava_i = 0
+                    else:
+                        aorta_i = 0
+                else: # detection based on closest last detected points
+                    ap = aorta_points[-1]; vp = venacava_points[-1]
+                    if ((ap[1]-c[1])**2+(ap[2]-c[2])**2) > ((vp[1]-c[1])**2+(vp[2]-c[2])**2):
+                        venacava_i = 0
+                    else:
+                        aorta_i = 0
+
+            if aorta_i is None:
+                logger.debug("Couldn't find Aorta in slice %i!" % slice_index)
+            else:
+                aorta_centroid = list(centroids[aorta_i])
+                aorta_centroid[0] = slice_index
+                aorta_centroid = [ int(ac) for ac in aorta_centroid ]
+                aorta_points.append(aorta_centroid)
+
+            if venacava_i is None:
+                logger.debug("Couldn't find VenaCava in slice %i!" % slice_index)
+            else:
+                venacava_centroid = list(centroids[venacava_i])
+                venacava_centroid[0] = slice_index
+                venacava_centroid = [ int(vc) for vc in venacava_centroid ]
+                venacava_points.append(venacava_centroid)
+
+        # remove bad seeds: no big changes in position == good
+        max_dist = int(3/float(voxelsize_mm[1]))**2 + int(3/float(voxelsize_mm[2]))**2
+        if len(aorta_points) >=3:
+            new_points = []
+            for i in range(1, len(aorta_points)-1):
+                lap = aorta_points[i-1]; tap = aorta_points[i]; nap = aorta_points[i+1]
+                ldist = (lap[1]-tap[1])**2 + (lap[2]-tap[2])**2
+                ndist = (nap[1]-tap[1])**2 + (nap[2]-tap[2])**2
+                if ldist < max_dist and ndist < max_dist:
+                    if i-1 not in new_points: new_points.append(lap)
+                    if i not in new_points: new_points.append(tap)
+                    if i+1 not in new_points: new_points.append(nap)
+            aorta_points = new_points
+
+        if len(venacava_points) >=3:
+            new_points = []
+            for i in range(1, len(venacava_points)-1):
+                lvp = venacava_points[i-1]; tvp = venacava_points[i]; nvp = venacava_points[i+1]
+                ldist = (lvp[1]-tvp[1])**2 + (lvp[2]-tvp[2])**2
+                ndist = (nvp[1]-tvp[1])**2 + (nvp[2]-tvp[2])**2
+                if ldist < max_dist and ndist < max_dist:
+                    if i-1 not in new_points: new_points.append(lvp)
+                    if i not in new_points: new_points.append(tvp)
+                    if i+1 not in new_points: new_points.append(nvp)
+            venacava_points = new_points
+
+        # seeds = np.zeros(data3d.shape)
+        # seeds[:, spine_center[1]-2:spine_center[1]+2, spine_center[2]-2:spine_center[2]+2] = 1
+        # for p in aorta_points:
+        #     seeds[p[0], p[1]-2:p[1]+2, p[2]-2:p[2]+2] = 1
+        # for p in venacava_points:
+        #     seeds[p[0], p[1]-2:p[1]+2, p[2]-2:p[2]+2] = 2
+        # contour = segmented.copy()
+        # ed = sed3.sed3(data3d, seeds=seeds, contour=contour); ed.show()
+
+        seeds = np.zeros(data3d.shape)
+        for p in aorta_points:
+            seeds[p[0], p[1]-2:p[1]+2, p[2]-2:p[2]+2] = 2
+        for p in venacava_points:
+            seeds[p[0], p[1]-2:p[1]+2, p[2]-2:p[2]+2] = 3
+
+        # find center of spine in current slice, and mark it with seeds
+        for slice_index in range(data3d.shape[0]):
+            # create spine seeds
+            spine_segmented = scipy.ndimage.binary_opening(data3d[slice_index,:,:] > 240, structure=np.ones((3,3)))
+            spine_segmented = scipy.ndimage.binary_dilation(spine_segmented , structure=np.ones((20,20)))
+            cut_rad = [None, int(60/float(voxelsize_mm[1])), int(60/float(voxelsize_mm[2]))] # z,y,x
+
+            rr, cc = skimage.draw.ellipse(spine_center[1], spine_center[2], cut_rad[1], cut_rad[2])
+            mask = np.zeros(spine_segmented.shape); mask[rr, cc] = 1
+            spine_segmented[mask != 1] = 0
+
+            spine_center_slice = np.mean(np.nonzero(np.expand_dims(spine_segmented, axis=0)), 1)
+            spine_center_slice = [None, spine_center_slice[1], spine_center_slice[2]]
+
+            spine_rad = [None, int(15/float(voxelsize_mm[1])), int(15/float(voxelsize_mm[2]))] # z,y,x
+            rr, cc = skimage.draw.ellipse(spine_center_slice[1], spine_center_slice[2], spine_rad[1], spine_rad[2])
+            seeds[slice_index, rr, cc] = 1
+
+            # everything outside of 75mm is definitely not what we want
+            cut_rad = [None, int(75/float(voxelsize_mm[1])), int(75/float(voxelsize_mm[2]))] # z,y,x
+            rr, cc = skimage.draw.ellipse(spine_center[1], spine_center[2], cut_rad[1], cut_rad[2])
+            mask = np.zeros(spine_segmented.shape); mask[rr, cc] = 1
+            seeds[slice_index, mask != 1] = 1
+
+        # region growing with watershed
+        r = skimage.morphology.watershed(segmented, seeds, connectivity=None, offset=None, mask=segmented)
+
+        # ed = sed3.sed3(data3d, seeds=seeds, contour=r); ed.show()
+
+        # saving in original size, because qmisc.resize_to_mm has problems with binary data
+        self.aorta = r == 2
+        self.vena_cava = r == 3
+
+        ed = sed3.sed3(data3d, contour=self.aorta); ed.show()
+        ed = sed3.sed3(data3d, contour=self.vena_cava); ed.show()
+
+        return self.aorta, self.vena_cava
 
     def get_aorta(self):
-        # prepare required data
-        if self.spine_center is None:
-            self.get_spine() # self.spine_center
-
-        # filter out noise in data
-        data3d = scipy.ndimage.filters.median_filter(self.data3d, 3)
-
-        # thresholding
-        segmented = data3d > 160 # mask = ( data3d > 160 ) & ( data3d < 240 )
-
-        # removing thresholding errors
-        segmented = scipy.ndimage.binary_opening(segmented, structure=np.ones((3,3,3)))
-        segmented = scipy.ndimage.morphology.binary_fill_holes(segmented)
-
-        # ed = sed3.sed3(segmented); ed.show()
-
-        # get coordinates of points that are in aorta or vena cava
-        aorta_centroid, venacava_centroid = self._find_aorta_vena_cava_coordinates()
-
-        # Remove from 3D data all objects that are not connected to aorta
-        segmented = scipy.ndimage.binary_erosion(segmented, structure=np.ones((3,3,3)))
-        segmented_label = skimage.measure.label(segmented, background=0)
-        segmented = segmented_label == segmented_label[aorta_centroid[0], aorta_centroid[1], aorta_centroid[2]]
-        segmented = scipy.ndimage.binary_dilation(segmented, structure=np.ones((3,3,3)))
-
-        # ed = sed3.sed3(segmented); ed.show()
-
-        self.aorta = segmented # saving in original size, because qmisc.resize_to_mm has problems with binary data
+        if self.aorta is None:
+            self.get_aorta_and_venacava()
         return self.aorta
 
-    def get_vena_cava(self): # TODO - not finished
-        # prepare required data
-        if self.spine_center is None:
-            self.get_spine() # self.spine_center
-
-        # filter out noise in data
-        data3d = scipy.ndimage.filters.median_filter(self.data3d, 3)
-
-        # thresholding
-        segmented = (data3d > 145) & (data3d < 400)
-
-        # removing thresholding errors
-        segmented = scipy.ndimage.binary_opening(segmented, structure=np.ones((3,3,3)))
-        segmented = scipy.ndimage.morphology.binary_fill_holes(segmented)
-
-        # ed = sed3.sed3(segmented); ed.show()
-
-        # get coordinates of points that are in aorta or vena cava
-        aorta_centroid, venacava_centroid = self._find_aorta_vena_cava_coordinates()
-
-        # Remove from 3D data all objects that are not connected to vena cava
-        segmented = scipy.ndimage.binary_erosion(segmented, structure=np.ones((3,3,3)))
-        segmented_label = skimage.measure.label(segmented, background=0)
-        segmented = segmented_label == segmented_label[venacava_centroid[0], venacava_centroid[1], venacava_centroid[2]]
-        segmented = scipy.ndimage.binary_dilation(segmented, structure=np.ones((3,3,3)))
-
-        # ed = sed3.sed3(segmented); ed.show()
-
-        self.vena_cava = segmented # saving in original size, because qmisc.resize_to_mm has problems with binary data
+    def get_venacava(self):
+        if self.vena_cava is None:
+            self.get_aorta_and_venacava()
         return self.vena_cava
 
     def get_chest(self):
@@ -287,7 +387,6 @@ class BodyNavigation:
             self.get_ribs()
 
         return self.chest
-
 
     def get_ribs(self):
         """ Compute, where are the ribs in CT data.

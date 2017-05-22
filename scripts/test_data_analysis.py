@@ -16,6 +16,13 @@ import collections
 import io3d
 import sed3
 
+import re
+def atoi(text):
+    return int(text) if text.isdigit() else text
+def natural_keys(text):
+    """ alist.sort(key=natural_keys) sorts in human order """
+    return [ atoi(c) for c in re.split('(\d+)', text) ]
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--debug', action='store_true',
@@ -52,7 +59,7 @@ def main():
         for f in fl:
             if f not in ["MASKS_DICOM", "PATIENT_DICOM"]:
                 datasets.append(f)
-        datasets.sort()
+        datasets.sort(key=natural_keys)
     elif args.datasets is not None:
         datasets = args.datasets
     else:
@@ -88,7 +95,17 @@ def main():
 
         # use median filter
         data3d = scipy.ndimage.filters.median_filter(data3d, args.medianfilter)
+
+        # analyse whole 3d data
         data[None]["median_filter_size"] = args.medianfilter
+        data[None]["shape"] = data3d.shape
+        data[None]["volume"] = data3d.shape[0]*data3d.shape[1]*data3d.shape[2]
+        data[None]["min"] = np.min(data3d)
+        data[None]["max"] = np.max(data3d)
+        data[None]["median"] = np.median(data3d)
+        data[None]["mean"] = np.mean(data3d)
+        data[None]["variance"] = np.var(data3d)
+        data[None]["standard_deviation"] = np.std(data3d)
 
         # find out which masks to process
         if args.masks is not None:
@@ -108,14 +125,14 @@ def main():
             data_in_mask = np.ma.array(data3d, mask=mask_inv)
 
             data[mask] = collections.OrderedDict()
-            data[mask]["volume"] = np.sum(mask_inv == 0)
-            data[mask]["volume_precent"] = data[mask]["volume"]/float(mask_inv.shape[0]*mask_inv.shape[1]*mask_inv.shape[2])
+            data[mask]["volume"] = np.ma.sum(mask_inv == 0)
+            data[mask]["volume_precent"] = data[mask]["volume"]/float(data[None]["volume"])
             data[mask]["min"] = np.ma.min(data_in_mask)
             data[mask]["max"] = np.ma.max(data_in_mask)
             data[mask]["median"] = np.ma.median(data_in_mask)
-            data[mask]["mean"] = np.mean(data_in_mask)
-            data[mask]["variance"] = np.var(data_in_mask)
-            data[mask]["standard_deviation"] = np.std(data_in_mask)
+            data[mask]["mean"] = np.ma.mean(data_in_mask)
+            data[mask]["variance"] = np.ma.var(data_in_mask)
+            data[mask]["standard_deviation"] = np.ma.std(data_in_mask)
 
         # save and print data
         results.append([i, data])

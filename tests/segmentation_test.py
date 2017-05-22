@@ -20,6 +20,7 @@ TEST_DATA_DIR = "test_data"
 class SegmentationTest(unittest.TestCase):
     # to run single test:
     # nosetests -v tests.segmentation_test:SegmentationTest.aortaSegmentation_test
+    # nosetests -v --logging-level=DEBUG tests.segmentation_test:SegmentationTest.aortaSegmentation_test
 
     def bodySegmentation_test(self):
         # get segmented data
