@@ -44,6 +44,8 @@ class BodyNavigation:
         self.lungs = None
         self.spine = None
         self.body = None
+        self.body_width = None
+        self.body_height = None
         self.aorta = None
         self.vena_cava = None
         self.diaphragm_mask = None
@@ -80,6 +82,38 @@ class BodyNavigation:
         body = body_label == unique[list(counts).index(max(counts))]
 
         self.body = body
+
+        # get body width and height
+        widths = []; heights = []
+        for z in range(body.shape[0]):
+            x_sum = np.sum(body[z, :, :], axis=0) # suma kazdeho sloupcu
+            x_start = next((i for i, x in enumerate(list(x_sum)) if x!=0), None)
+            x_end = next((i for i, x in enumerate(reversed(list(x_sum))) if x!=0), None)
+            if x_start is None or x_end is None:
+                width = 0
+            else:
+                width = (body.shape[2]-x_end) - x_start
+            widths.append(width)
+
+            y_sum = np.sum(body[z, :, :], axis=1) # suma kazdeho radku
+            y_start = next((i for i, y in enumerate(list(y_sum)) if y!=0), None)
+            y_end = next((i for i, y in enumerate(reversed(list(y_sum))) if y!=0), None)
+            if y_start is None or y_end is None:
+                height = 0
+            else:
+                height = (body.shape[1]-y_end) - y_start
+            heights.append(height)
+
+        # get value which is bigger then 90% of calculated values (to ignore bad data)
+        body_width = np.percentile(np.asarray(widths), 90.0)
+        body_height = np.percentile(np.asarray(heights), 90.0)
+        # convert to original resolution
+        body_width = body_width * (self.orig_shape[2]/float(self.body.shape[2]))
+        body_height = body_height * (self.orig_shape[1]/float(self.body.shape[1]))
+        # conver to mm
+        self.body_width = body_width * float(self.voxelsize_mm[2])
+        self.body_height = body_height * float(self.voxelsize_mm[1])
+
         return qmisc.resize_to_shape(self.body, self.orig_shape)
 
     def get_spine(self):
@@ -146,11 +180,14 @@ class BodyNavigation:
         # prepare required data
         if self.spine_center is None:
             self.get_spine() # self.spine_center
+        if self.body_height is None:
+            self.get_body() # self.body_height
         voxelsize_mm = self.voxelsize_mm
         spine_center = [ int((self.spine_center[i]*self.working_vs[i])/float(voxelsize_mm[i])) for i in range(3) ]
         VESSEL_THRESHOLD = vessel_threshold if vessel_threshold is not None else 145 # 145 -> tested on 3Dircadb1.1
         SPINE_THRESHOLD = 320
-        HEART_DISTANCE = 100 # distance (in mm) from spine to middle of heart # TODO - different for every person / dataset
+        HEART_DISTANCE = 0.45*self.body_height # distance (in mm) from spine to middle of heart # 100
+        logger.debug("VESSEL_THRESHOLD:%i, SPINE_THRESHOLD:%i, HEART_DISTANCE(mm):%i" % (VESSEL_THRESHOLD,SPINE_THRESHOLD,HEART_DISTANCE))
 
         # filter out noise in data
         data3d = scipy.ndimage.filters.median_filter(self.data3d, 3)
@@ -198,7 +235,7 @@ class BodyNavigation:
             spine_x_rad = int(15/float(voxelsize_mm[2])) # spine width radius is 15mm
 
             spined = [0,]*len(spine_segmented[0,:])
-            for y in range(sc[1]-int(30/float(voxelsize_mm[1])), sc[1]):
+            for y in range(sc[1]-int(50/float(voxelsize_mm[1])), sc[1]):
                 for x in range(sc[2]-spine_x_rad*2, sc[2]+spine_x_rad*2):
                     if spine_segmented[y, x] == 1 and not spined[x]:
                         spined[x] = 1
@@ -229,7 +266,7 @@ class BodyNavigation:
 
             #ed = sed3.sed3(result*100); ed.show()
 
-            # find out centers of circles, and distance from spine center
+            # find out centers of circles
             result = scipy.ndimage.binary_dilation(result , structure=np.ones((5,5,5))) # connect very near objects
             result_label = skimage.measure.label(result, background=0)
             centroids = scipy.ndimage.measurements.center_of_mass(result, result_label, range(1, np.max(result_label)+1))
