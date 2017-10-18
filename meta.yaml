@@ -43,6 +43,7 @@ requirements:
     - numpy
     - scipy
     - astropy
+    - scikit-image
 
 test:
   # Python imports
