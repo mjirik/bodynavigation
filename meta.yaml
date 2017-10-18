@@ -42,6 +42,7 @@ requirements:
     - python
     - numpy
     - scipy
+    - astropy
 
 test:
   # Python imports
