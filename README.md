@@ -29,3 +29,14 @@ compared with state of the art methods using SLIVER07 dataset.
     
 [Simple example](https://github.com/mjirik/bodynavigation/blob/master/examples/Simple%20example.ipynb)
 can be found in [examples directory](https://github.com/mjirik/bodynavigation/tree/master/examples).
+
+# Usefull API functions
+
+    ss = bodynavigation.body_navigation.BodyNavigation(data3d, metadata["voxelsize_mm"])
+    
+    dsag = ss.dist_sagittal()
+    dcor = ss.dist_coronal()
+    daxi = ss.dist_axial()
+    ddia = ss.dist_diaphragm()
+    dsur = ss.dist_to_surface()
+    dspi = ss.dist_to_spine()
