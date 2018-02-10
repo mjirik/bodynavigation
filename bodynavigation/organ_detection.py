@@ -10,6 +10,7 @@ from builtins import range              # replaces range with xrange
 import logging
 logger = logging.getLogger(__name__)
 
+import sys, os
 import io
 
 import numpy as np
@@ -19,6 +20,9 @@ import skimage.measure
 import skimage.transform
 import skimage.morphology
 import skimage.segmentation
+import skimage.feature
+
+import sed3 # for testing
 
 #
 # Utility Functions
@@ -148,15 +152,15 @@ class OrganDetection(object):
     NORMED_FATLESS_BODY_SIZE = [200,300] # normalized size of fatless body on [Y,X] in mm
     # [189.8, 251.7] - 3Dircadb1.1
     # [192.4, 268.2] - 3Dircadb1.2
-    # [205.1, 307.6] - 1.3.6.1.4.1.14519.5.2.1.4334.1501.332134560740628899985464129848
-    # [220.3, 325.2] - 1.3.6.1.4.1.14519.5.2.1.4334.1501.117528645891554472837507616577
+    # [205.1, 307.6] - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.332134560740628899985464129848
+    # [220.3, 325.2] - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.117528645891554472837507616577
 
     def __init__(self, data3d=None, voxelsize=[1,1,1], size_normalization=True, rescale=True):
         """
         * Values of input data should be in HU units (or relatively close). [air -1000, water 0]
             https://en.wikipedia.org/wiki/Hounsfield_scale
-        * Data all coordinates and sizes are in [Z,Y,X] format
-        * Expecting data to be corectly oriented
+        * All coordinates and sizes are in [Z,Y,X] format
+        * Expecting data3d to be corectly oriented
         * Voxel size is in mm
         """
 
@@ -228,6 +232,30 @@ class OrganDetection(object):
 
         # filter out noise - median filter with radius 1 (kernel 3x3x3)
         data3d = scipy.ndimage.filters.median_filter(data3d, 3)
+
+        # remove high brightness errors near edges of valid data (takes about 70s)
+        valid_mask = data3d > -1024
+        valid_mask = skimage.measure.label(valid_mask, background=0)
+        unique, counts = np.unique(valid_mask, return_counts=True)
+        unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
+        valid_mask = valid_mask == unique[list(counts).index(max(counts))]
+        for z in range(valid_mask.shape[0]):
+            tmp = valid_mask[z,:,:]
+            if np.sum(tmp) == 0: continue
+            tmp = skimage.morphology.convex_hull_image(tmp)
+            # get contours
+            tmp = (skimage.feature.canny(tmp) != 0)
+            # thicken contour (expecting 512x512 resolution)
+            tmp = scipy.ndimage.binary_dilation(tmp, structure=skimage.morphology.disk(11, dtype=np.bool))
+            # lower all values near border bigger then -300 closer to -300
+            dst = scipy.ndimage.morphology.distance_transform_edt(tmp).astype(np.float)
+            dst = dst/np.max(dst)
+            dst[ dst != 0 ] = 0.01**dst[ dst != 0 ]; dst[ dst == 0 ] = 1.0
+
+            mask = data3d[z,:,:] > -300
+            data3d[z,:,:][mask] = ( \
+                ((data3d[z,:,:][mask].astype(np.float)+300)*dst[mask])-300 \
+                ).astype(np.int16)
 
         # cut off empty parts of data
         body = self._getBody(data3d, voxelsize)
@@ -334,14 +362,14 @@ class OrganDetection(object):
         # fill holes
         body = binaryFillHoles(body, z_axis=True, y_axis=True, x_axis=True)
 
+        # binary opening
+        body = scipy.ndimage.morphology.binary_opening(body, structure=getSphericalMask([5,]*3, spacing=spacing))
+
         # leave only biggest object in data
         body_label = skimage.measure.label(body, background=0)
         unique, counts = np.unique(body_label, return_counts=True)
         unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
         body = body_label == unique[list(counts).index(max(counts))]
-
-        # binary opening
-        body = scipy.ndimage.morphology.binary_opening(body, structure=getSphericalMask([5,]*3, spacing=spacing))
 
         # filling nose/mouth openings + connected cavities
         # - fills holes separately on every slice along z axis (only part of mouth and nose should have cavity left)
@@ -357,7 +385,9 @@ class OrganDetection(object):
         """
         logger.info("_getFatlessBody")
         # remove fat
-        fatless = scipy.ndimage.morphology.binary_opening((data3d > 0), structure=getSphericalMask([5,5,5], spacing=spacing))
+        fatless = (data3d > 0)
+        fatless[ (body == 1) & (data3d < -500) ] = 1 # body cavities
+        fatless = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask([5,5,5], spacing=spacing))
         # save convex hull along z-axis
         for z in range(fatless.shape[0]):
             bsl = skimage.measure.label(body[z,:,:], background=0)
@@ -461,7 +491,7 @@ class OrganDetection(object):
 
     def analyzeBones(self, raw=False):
         """ Returns: points_spine, points_hip_joint """
-        body = self.getBody(raw=True)
+        fatlessbody = self.getFatlessBody(raw=True)
         bones = self.getBones(raw=True)
         lungs = self.getLungs(raw=True)
 
@@ -478,14 +508,15 @@ class OrganDetection(object):
         points_spine = []
         points_hip_joint_l = []; points_hip_joint_r = []
         for z in range(lungs_end, bones.shape[0]):
+            bs = fatlessbody[z,:,:]
             # separate body/bones into 3 sections (on x-axis)
-            pad = getDataPadding(body[z,:,:])
-            width = body[z,:,:].shape[1]-(pad[1][0]+pad[1][1])
+            pad = getDataPadding(bs)
+            width = bs.shape[1]-(pad[1][0]+pad[1][1])
             left_sep = pad[1][0]+int(width*0.35)
-            right_sep = body[z,:,:].shape[1]-(pad[1][1]+int(width*0.35))
+            right_sep = bs.shape[1]-(pad[1][1]+int(width*0.35))
             left = bones[z,:,pad[1][0]:left_sep]
             center = bones[z,:,left_sep:right_sep]
-            right = bones[z,:,right_sep:(body[z,:,:].shape[1]-pad[1][1])]
+            right = bones[z,:,right_sep:(bs.shape[1]-pad[1][1])]
             # calc centers and volumes
             left_v = np.sum(left); center_v = np.sum(center); right_v = np.sum(right)
             total_v = left_v+center_v+right_v
@@ -498,13 +529,13 @@ class OrganDetection(object):
             right_c[1] = right_c[1]+right_sep
 
             # try to detect spine center
-            if (left_v/total_v < 0.1) or (right_v/total_v < 0.1):
+            if (left_v/total_v < 0.2) or (right_v/total_v < 0.2):
                 points_spine.append( (z, int(center_c[0]), int(center_c[1])) )
 
             # try to detect hip joints
             if (left_v/total_v > 0.4) and (right_v/total_v > 0.4):
                 # gets also leg bones
-                # print(z, abs(left_c[1]-right_c[1]))
+                #print(z, abs(left_c[1]-right_c[1]))
                 if abs(left_c[1]-right_c[1]) < 180:
                     # anything futher out should be only leg bones
                     points_hip_joint_l.append( (z, int(left_c[0]), int(left_c[1])) )
@@ -514,10 +545,18 @@ class OrganDetection(object):
         points_hip_joint = []
         if len(points_hip_joint_l) != 0:
             z, y, x = zip(*points_hip_joint_l); l = len(z)
-            cl = (sum(z)/l, sum(y)/l, sum(x)/l)
+            cl = (int(sum(z)/l), int(sum(y)/l), int(sum(x)/l))
             z, y, x = zip(*points_hip_joint_r); l = len(z)
-            cr = (sum(z)/l, sum(y)/l, sum(x)/l)
+            cr = (int(sum(z)/l), int(sum(y)/l), int(sum(x)/l))
             points_hip_joint = [cl, cr]
+
+        # remove any spine points under detected hips
+        if len(points_hip_joint) != 0:
+            newp = []
+            for p in points_spine:
+                if p[0] < points_hip_joint[0][0]:
+                    newp.append(p)
+            points_spine = newp
 
         # seeds = np.zeros(bones.shape)
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
@@ -535,9 +574,8 @@ class OrganDetection(object):
 
 
 if __name__ == "__main__":
-    import sys, os, argparse
-    import io3d
-    import sed3
+    import argparse
+    import io3d, sed3
 
     logger = logging.getLogger()
 
@@ -651,12 +689,15 @@ if __name__ == "__main__":
     #########
     print("-----------------------------------------------------------")
 
-    # body = obj.getBody()
+    body = obj.getBody()
+    fatlessbody = obj.getFatlessBody()
     bones = obj.getBones()
     # lungs = obj.getLungs()
 
-    # ed = sed3.sed3(data3d, contour=lungs); ed.show()
+    # ed = sed3.sed3(data3d, contour=body); ed.show()
+    # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
+    # ed = sed3.sed3(data3d, contour=lungs); ed.show()
 
     points_spine, points_hip_joint = obj.analyzeBones()
 
