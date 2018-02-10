@@ -1,5 +1,6 @@
 test_data*
 ready_dir*
+scripts/batch_output
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -459,7 +459,7 @@ class OrganDetection(object):
 
     ################
 
-    def analyzeBones(self):
+    def analyzeBones(self, raw=False):
         """ Returns: points_spine, points_hip_joint """
         body = self.getBody(raw=True)
         bones = self.getBones(raw=True)
@@ -486,7 +486,7 @@ class OrganDetection(object):
             left = bones[z,:,pad[1][0]:left_sep]
             center = bones[z,:,left_sep:right_sep]
             right = bones[z,:,right_sep:(body[z,:,:].shape[1]-pad[1][1])]
-            # calc centers and relative volumes
+            # calc centers and volumes
             left_v = np.sum(left); center_v = np.sum(center); right_v = np.sum(right)
             total_v = left_v+center_v+right_v
 
@@ -526,6 +526,10 @@ class OrganDetection(object):
         # for p in points_hip_joint: seeds[p[0], p[1], p[2]] = 3
         # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
         # ed = sed3.sed3(self.data3d, contour=bones, seeds=seeds); ed.show()
+
+        if not raw:
+            points_spine = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_spine ]
+            points_hip_joint = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_hip_joint ]
 
         return points_spine, points_hip_joint
 
