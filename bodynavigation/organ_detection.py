@@ -485,16 +485,34 @@ class OrganDetection(object):
         lungs = skimage.measure.label(lungs, background=0)
         unique, counts = np.unique(lungs, return_counts=True)
         unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
+        if len(unique) == 0: return np.zeros(data3d.shape, dtype=np.bool)
+
         # get 2 biggest blobs
         idx_1st = list(counts).index(max(counts))
-        count_1st = counts[idx_1st]; counts[idx_1st] = 0
-        idx_2nd = list(counts).index(max(counts))
-        count_2nd = counts[idx_2nd]; counts[idx_1st] = count_1st
+        count_1st = counts[idx_1st]
+        if len(unique) >= 2:
+            counts[idx_1st] = 0
+            idx_2nd = list(counts).index(max(counts))
+            count_2nd = counts[idx_2nd]
+            counts[idx_1st] = count_1st
+
         # leave only lungs in data
         lungs[ lungs == unique[idx_1st] ] = -1
-        if abs(count_1st-count_2nd)/(count_1st+count_2nd) < 0.3: # if volume diff is lower then 30%
-            lungs[ lungs == unique[idx_2nd] ] = -1
+        if len(unique) >= 2:
+            if abs(count_1st-count_2nd)/(count_1st+count_2nd) < 0.3: # if volume diff is lower then 30%
+                lungs[ lungs == unique[idx_2nd] ] = -1
         lungs = lungs == -1
+
+        # remove trachea (only the part sticking out)
+        pads = getDataPadding(lungs)
+        s = ( slice(pads[0][0],lungs.shape[0]-pads[0][1]), \
+            slice(pads[1][0],lungs.shape[1]-pads[1][1]), \
+            slice(pads[2][0],lungs.shape[2]-pads[2][1]) )
+        lungs[s] = binaryClosing(lungs[s], structure=getSphericalMask([10,]*3, spacing=spacing))
+        tmp = lungs.copy()
+        tmp[s] = scipy.ndimage.morphology.binary_opening(tmp[s], \
+            structure=getSphericalMask([20,]*3, spacing=spacing))
+        lungs[:getDataPadding(tmp)[0][0],:,:] = 0
 
         return lungs
 
@@ -738,12 +756,12 @@ if __name__ == "__main__":
     body = obj.getBody()
     fatlessbody = obj.getFatlessBody()
     bones = obj.getBones()
-    # lungs = obj.getLungs()
+    lungs = obj.getLungs()
 
     # ed = sed3.sed3(data3d, contour=body); ed.show()
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
-    # ed = sed3.sed3(data3d, contour=lungs); ed.show()
+    ed = sed3.sed3(data3d, contour=lungs); ed.show()
 
     points_spine, points_hip_joint = obj.analyzeBones()
 
