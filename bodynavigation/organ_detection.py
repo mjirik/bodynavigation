@@ -227,11 +227,16 @@ class OrganDetection(object):
         data3d[ data3d < -1024 ] = -1024
         data3d[ data3d > 1024 ] = 1024
 
+        # set padding value to -1024
+        data3d[ data3d == data3d[0,0,0] ] = -1024
+
         # <-1024;1024> can fit into int16
         data3d = data3d.astype(np.int16)
 
         # filter out noise - median filter with radius 1 (kernel 3x3x3)
         data3d = scipy.ndimage.filters.median_filter(data3d, 3)
+
+        # ed = sed3.sed3(data3d); ed.show()
 
         # remove high brightness errors near edges of valid data (takes about 70s)
         valid_mask = data3d > -1024
@@ -491,23 +496,32 @@ class OrganDetection(object):
 
     def analyzeBones(self, raw=False):
         """ Returns: points_spine, points_hip_joint """
+        logger.info("analyzeBones")
+
         fatlessbody = self.getFatlessBody(raw=True)
         bones = self.getBones(raw=True)
         lungs = self.getLungs(raw=True)
 
         # remove every bone higher then lungs
-        lungs_end = lungs.shape[0]-getDataPadding(lungs)[0][1] # end of lungs on z-axis
-        bones[:lungs_end,:,:] = 0
+        lungs_pad = getDataPadding(lungs)
+        lungs_start = lungs_pad[0][0] # start of lungs on z-axis
+        lungs_end = lungs.shape[0]-lungs_pad[0][1] # end of lungs on z-axis
+        bones[:lungs_start,:,:] = 0 # definitely not spine or hips
+        for z in range(0, lungs_end): # remove front parts of ribs (to get correct spine center)
+            bs = fatlessbody[z,:,:]; pad = getDataPadding(bs)
+            height = int(bones.shape[1]-(pad[1][0]+pad[1][1]))
+            top_sep = pad[1][0]+int(height*0.3)
+            bones[z,:top_sep,:] = 0
 
         # merge near "bones" into big blobs
-        bones[lungs_end:,:,:] = binaryClosing(bones[lungs_end:,:,:], \
+        bones[lungs_start:,:,:] = binaryClosing(bones[lungs_start:,:,:], \
             structure=getSphericalMask([20,]*3, spacing=self.spacing)) # takes around 1m
 
         #ed = sed3.sed3(self.data3d, contour=bones); ed.show()
 
         points_spine = []
         points_hip_joint_l = []; points_hip_joint_r = []
-        for z in range(lungs_end, bones.shape[0]):
+        for z in range(lungs_start, bones.shape[0]): # TODO - separate into more sections (spine should be only in middle-lower)
             bs = fatlessbody[z,:,:]
             # separate body/bones into 3 sections (on x-axis)
             pad = getDataPadding(bs)
@@ -520,6 +534,7 @@ class OrganDetection(object):
             # calc centers and volumes
             left_v = np.sum(left); center_v = np.sum(center); right_v = np.sum(right)
             total_v = left_v+center_v+right_v
+            if total_v == 0: continue
 
             left_c = list(scipy.ndimage.measurements.center_of_mass(left))
             left_c[1] = left_c[1]+pad[1][0]
@@ -533,7 +548,7 @@ class OrganDetection(object):
                 points_spine.append( (z, int(center_c[0]), int(center_c[1])) )
 
             # try to detect hip joints
-            if (left_v/total_v > 0.4) and (right_v/total_v > 0.4):
+            if (z >= lungs_end) and (left_v/total_v > 0.4) and (right_v/total_v > 0.4):
                 # gets also leg bones
                 #print(z, abs(left_c[1]-right_c[1]))
                 if abs(left_c[1]-right_c[1]) < 180:
@@ -557,6 +572,20 @@ class OrganDetection(object):
                 if p[0] < points_hip_joint[0][0]:
                     newp.append(p)
             points_spine = newp
+
+        # fit curve to spine points and recalculate new points from curve
+        z, y, x = zip(*points_spine)
+        z_new = list(range(z[0], z[-1]+1))
+
+        zz1 = np.polyfit(z, y, 3)
+        f1 = np.poly1d(zz1)
+        y_new = f1(z_new)
+
+        zz2 = np.polyfit(z, x, 3)
+        f2 = np.poly1d(zz2)
+        x_new = f2(z_new)
+
+        points_spine = [ tuple([int(z_new[i]), int(y_new[i]), int(x_new[i])]) for i in range(len(z_new)) ]
 
         # seeds = np.zeros(bones.shape)
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
