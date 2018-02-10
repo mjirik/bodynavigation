@@ -511,7 +511,7 @@ class OrganDetection(object):
         lungs[s] = binaryClosing(lungs[s], structure=getSphericalMask([10,]*3, spacing=spacing))
         tmp = lungs.copy()
         tmp[s] = scipy.ndimage.morphology.binary_opening(tmp[s], \
-            structure=getSphericalMask([20,]*3, spacing=spacing))
+            structure=getSphericalMask([30,]*3, spacing=spacing))
         lungs[:getDataPadding(tmp)[0][0],:,:] = 0
 
         return lungs
@@ -626,6 +626,8 @@ class OrganDetection(object):
 
             points_spine = [ tuple([int(z_new[i]), int(y_new[i]), int(x_new[i])]) for i in range(len(z_new)) ]
 
+        # TODO - test if polyfit doesnt create nonsensical curves (some batch results look wierd)
+
         # seeds = np.zeros(bones.shape)
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
         # for p in points_hip_joint_l: seeds[p[0], p[1], p[2]] = 2
@@ -730,7 +732,7 @@ if __name__ == "__main__":
         spacing = list(obj.spacing)
         io3d.datawriter.write(data3d, data3d_p, 'dcm', {'voxelsize_mm': spacing})
 
-        # note: Masks look wierd when opened in ImageJ
+        # note: Masks look wierd when opened in ImageJ, but are saved correctly
 
         body = obj.getBody(raw=True).astype(np.int8)
         io3d.datawriter.write(body, body_p, 'dcm', {'voxelsize_mm': spacing})

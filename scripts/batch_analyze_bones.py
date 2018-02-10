@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 import sys, os, argparse
 import traceback
 
+from multiprocessing import Pool
+
 import numpy as np
 from PIL import Image, ImageDraw
 import skimage.transform
@@ -68,6 +70,7 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
     draw = ImageDraw.Draw(img)
     for pset in point_sets:
         points, colour, outline = tuple(pset)
+        if len(points) == 0: continue
         points = [ list(np.asarray(p)*voxelsize) for p in points ]
         z, y, x = zip(*points)
         points_2d = zip(x, y)
@@ -79,6 +82,7 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
     draw = ImageDraw.Draw(img)
     for pset in point_sets:
         points, colour, outline = tuple(pset)
+        if len(points) == 0: continue
         points = [ list(np.asarray(p)*voxelsize) for p in points ]
         z, y, x = zip(*points)
         points_2d = zip(x, z)
@@ -90,6 +94,7 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
     draw = ImageDraw.Draw(img)
     for pset in point_sets:
         points, colour, outline = tuple(pset)
+        if len(points) == 0: continue
         points = [ list(np.asarray(p)*voxelsize) for p in points ]
         z, y, x = zip(*points)
         points_2d = zip(y, z)
@@ -107,6 +112,33 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
 
     return img
 
+def processData(datapath, name, outputdir):
+    try:
+        print("Processing: ", datapath)
+
+        data3d, metadata = io3d.datareader.read(datapath)
+        voxelsize = metadata["voxelsize_mm"]
+        obj = OrganDetection(data3d, voxelsize)
+
+        points_spine, points_hip_joint = obj.analyzeBones() # in voxels
+
+        del(obj)
+
+        img = drawPointsTo3DData(data3d, voxelsize, point_sets = [ \
+            [points_spine, (255,0,0), None],
+            [points_hip_joint, (0,255,0), (0,0,0)]
+            ])
+
+        img.save(os.path.join(outputdir, "%s.png" % name))
+        #img.show()
+
+    except:
+        print("EXCEPTION! SAVING TRACEBACK!")
+        with open(os.path.join(outputdir, "%s.txt" % name), 'w') as f:
+            f.write(traceback.format_exc())
+
+def processThread(args):
+    processData(*args)
 
 def main():
     logger = logging.getLogger()
@@ -116,11 +148,13 @@ def main():
     logger.addHandler(ch)
 
     # input parser
-    parser = argparse.ArgumentParser(description="Batch Processing")
+    parser = argparse.ArgumentParser(description="Batch Processing. Needs to be SIGKILLed to terminate")
     parser.add_argument('-i','--datadirs', default=None,
             help='path to dir with data dirs')
     parser.add_argument('-o','--outputdir', default="./batch_output",
             help='path to output dir')
+    parser.add_argument('-t','--threads', type=int, default=1,
+            help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 2.5GB.')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -139,31 +173,13 @@ def main():
     if not os.path.exists(outputdir):
         os.makedirs(outputdir)
 
+    inputs = []
     for dirname in sorted(next(os.walk(args.datadirs))[1]):
         datapath = os.path.abspath(os.path.join(args.datadirs, dirname))
-        print("Processing: ", datapath)
+        inputs.append([datapath, dirname, outputdir])
 
-        try:
-            data3d, metadata = io3d.datareader.read(datapath)
-            voxelsize = metadata["voxelsize_mm"]
-            obj = OrganDetection(data3d, voxelsize)
-
-            points_spine, points_hip_joint = obj.analyzeBones() # in voxels
-
-            del(obj)
-
-            img = drawPointsTo3DData(data3d, voxelsize, point_sets = [ \
-                [points_spine, (255,0,0), None],
-                [points_hip_joint, (0,255,0), (0,0,0)]
-                ])
-
-            img.save(os.path.join(outputdir, "%s.png" % dirname))
-            #img.show()
-
-        except:
-            print("EXCEPTION! SAVING TRACEBACK!")
-            with open(os.path.join(outputdir, "%s.txt" % dirname), 'w') as f:
-                f.write(traceback.format_exc())
+    pool = Pool(processes=args.threads)
+    pool.map(processThread, inputs)
 
 if __name__ == "__main__":
     main()
