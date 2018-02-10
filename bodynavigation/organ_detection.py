@@ -187,6 +187,12 @@ class OrganDetection(object):
             "lungs":None,
             }
 
+        # statistics and models
+        self.stats = {
+            "bones":None
+            }
+
+
     @classmethod
     def fromReadyData(cls, data3d, spacing, body=None, fatlessbody=None, bones=None, lungs=None ):
         """ For super fast testing """
@@ -495,12 +501,26 @@ class OrganDetection(object):
     ################
 
     def analyzeBones(self, raw=False):
+        if self.stats["bones"] is not None:
+            points_spine, points_hip_joint = tuple(self.stats["bones"])
+
+        else:
+            points_spine, points_hip_joint = self._analyzeBones( \
+                data3d=self.data3d, spacing=self.spacing, fatlessbody=self.getFatlessBody(raw=True), \
+                bones=self.getBones(raw=True), lungs=self.getLungs(raw=True)
+                )
+            self.stats["bones"] = (points_spine, points_hip_joint)
+
+        if not raw:
+            points_spine = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_spine ]
+            points_hip_joint = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_hip_joint ]
+
+        return points_spine, points_hip_joint
+
+    @classmethod
+    def _analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs):
         """ Returns: points_spine, points_hip_joint """
         logger.info("analyzeBones")
-
-        fatlessbody = self.getFatlessBody(raw=True)
-        bones = self.getBones(raw=True)
-        lungs = self.getLungs(raw=True)
 
         # remove every bone higher then lungs
         lungs_pad = getDataPadding(lungs)
@@ -515,9 +535,9 @@ class OrganDetection(object):
 
         # merge near "bones" into big blobs
         bones[lungs_start:,:,:] = binaryClosing(bones[lungs_start:,:,:], \
-            structure=getSphericalMask([20,]*3, spacing=self.spacing)) # takes around 1m
+            structure=getSphericalMask([20,]*3, spacing=spacing)) # takes around 1m
 
-        #ed = sed3.sed3(self.data3d, contour=bones); ed.show()
+        #ed = sed3.sed3(data3d, contour=bones); ed.show()
 
         points_spine = []
         points_hip_joint_l = []; points_hip_joint_r = []
@@ -574,18 +594,19 @@ class OrganDetection(object):
             points_spine = newp
 
         # fit curve to spine points and recalculate new points from curve
-        z, y, x = zip(*points_spine)
-        z_new = list(range(z[0], z[-1]+1))
+        if len(points_spine) >= 2:
+            z, y, x = zip(*points_spine)
+            z_new = list(range(z[0], z[-1]+1))
 
-        zz1 = np.polyfit(z, y, 3)
-        f1 = np.poly1d(zz1)
-        y_new = f1(z_new)
+            zz1 = np.polyfit(z, y, 3)
+            f1 = np.poly1d(zz1)
+            y_new = f1(z_new)
 
-        zz2 = np.polyfit(z, x, 3)
-        f2 = np.poly1d(zz2)
-        x_new = f2(z_new)
+            zz2 = np.polyfit(z, x, 3)
+            f2 = np.poly1d(zz2)
+            x_new = f2(z_new)
 
-        points_spine = [ tuple([int(z_new[i]), int(y_new[i]), int(x_new[i])]) for i in range(len(z_new)) ]
+            points_spine = [ tuple([int(z_new[i]), int(y_new[i]), int(x_new[i])]) for i in range(len(z_new)) ]
 
         # seeds = np.zeros(bones.shape)
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
@@ -593,11 +614,7 @@ class OrganDetection(object):
         # for p in points_hip_joint_r: seeds[p[0], p[1], p[2]] = 2
         # for p in points_hip_joint: seeds[p[0], p[1], p[2]] = 3
         # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
-        # ed = sed3.sed3(self.data3d, contour=bones, seeds=seeds); ed.show()
-
-        if not raw:
-            points_spine = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_spine ]
-            points_hip_joint = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_hip_joint ]
+        # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
         return points_spine, points_hip_joint
 
