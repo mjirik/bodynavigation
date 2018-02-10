@@ -24,6 +24,90 @@ from bodynavigation.organ_detection import OrganDetection
 
 import io3d
 
+def drawPoints(draw, points, colour=(255,0,0), outline=None, size=5):
+    for p in points: # p = [x,y]
+        xy = [p[0], p[1], p[0]+size, p[1]+size]
+        draw.rectangle(xy, fill=colour, outline=outline)
+
+def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
+    """
+    point_sets = [[points, colour=(255,0,0), outline=None],...]
+    Returns RGB Image object
+    """
+
+    data3d[ data3d < -1024 ] = -1024
+    data3d[ data3d > 1024 ] = 1024
+    data3d = data3d + abs(np.min(data3d))
+
+    view_z = np.sum(data3d, axis=0, dtype=np.int32).astype(np.float)
+    view_z = (view_z*(255.0/view_z.max())).astype(np.int32)
+
+    view_y = np.sum(data3d, axis=1, dtype=np.int32).astype(np.float)
+    view_y = (view_y*(255.0/view_y.max())).astype(np.int32)
+
+    view_x = np.sum(data3d, axis=2, dtype=np.int32).astype(np.float)
+    view_x = (view_x*(255.0/view_x.max())).astype(np.int32)
+
+    new_shape = (int(data3d.shape[1] * voxelsize[1]), int(data3d.shape[2] * voxelsize[2]))
+    view_z = skimage.transform.resize(
+            view_z, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
+            ).astype(np.int32)
+
+    new_shape = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[1] * voxelsize[1]))
+    view_y = skimage.transform.resize(
+            view_y, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
+            ).astype(np.int32)
+
+    new_shape = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[2] * voxelsize[2]))
+    view_x = skimage.transform.resize(
+            view_x, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
+            ).astype(np.int32)
+
+    # draw view_z
+    img = Image.fromarray(view_z, 'I').convert("RGB")
+    draw = ImageDraw.Draw(img)
+    for pset in point_sets:
+        points, colour, outline = tuple(pset)
+        points = [ list(np.asarray(p)*voxelsize) for p in points ]
+        z, y, x = zip(*points)
+        points_2d = zip(x, y)
+        drawPoints(draw, points_2d, colour=colour, outline=outline)
+    img_z = img; del(draw)
+
+    # draw view_y
+    img = Image.fromarray(view_y, 'I').convert("RGB")
+    draw = ImageDraw.Draw(img)
+    for pset in point_sets:
+        points, colour, outline = tuple(pset)
+        points = [ list(np.asarray(p)*voxelsize) for p in points ]
+        z, y, x = zip(*points)
+        points_2d = zip(x, z)
+        drawPoints(draw, points_2d, colour=colour, outline=outline)
+    img_y = img; del(draw)
+
+    # draw view_x
+    img = Image.fromarray(view_x, 'I').convert("RGB")
+    draw = ImageDraw.Draw(img)
+    for pset in point_sets:
+        points, colour, outline = tuple(pset)
+        points = [ list(np.asarray(p)*voxelsize) for p in points ]
+        z, y, x = zip(*points)
+        points_2d = zip(y, z)
+        drawPoints(draw, points_2d, colour=colour, outline=outline)
+    img_x = img; del(draw)
+
+    # connect and retorn images
+    img = Image.new('RGB', (max(img_y.size[0]+img_x.size[0], img_z.size[0]), \
+        max(img_y.size[1]+img_z.size[1], img_x.size[1]+img_z.size[1])))
+
+    img.paste(img_y, (0,0))
+    img.paste(img_x, (img_y.size[0],0))
+    img.paste(img_z, (0,max(img_y.size[1], img_x.size[1])))
+    #img.show(); sys.exit(0)
+
+    return img
+
+
 def main():
     logger = logging.getLogger()
 
@@ -63,32 +147,15 @@ def main():
             data3d, metadata = io3d.datareader.read(datapath)
             voxelsize = metadata["voxelsize_mm"]
             obj = OrganDetection(data3d, voxelsize)
+
             points_spine, points_hip_joint = obj.analyzeBones() # in voxels
+
             del(obj)
 
-            data3d[ data3d < -1024 ] = -1024
-            data3d[ data3d > 1024 ] = 1024
-            data3d = data3d + abs(np.min(data3d))
-            out = np.sum(data3d, axis=1, dtype=np.int32).astype(np.float)
-            out *= (255.0/out.max())
-            out = out.astype(np.int32)
-
-            new_shape = (int(out.shape[0] * voxelsize[0]), int(out.shape[1] * voxelsize[2]))
-            out = skimage.transform.resize(
-                    out, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
-                    ).astype(np.int32)
-
-            img = Image.fromarray(out, 'I').convert("RGB")
-            draw = ImageDraw.Draw(img)
-            for p in points_spine:
-                p = np.asarray(p)*voxelsize
-                xy = [p[2], p[0], min(out.shape[1],p[2]+5), min(out.shape[0],p[0]+5)]
-                draw.rectangle(xy, fill=(255,0,0))
-            for p in points_hip_joint:
-                p = np.asarray(p)*voxelsize
-                xy = [p[2], p[0], min(out.shape[1],p[2]+5), min(out.shape[0],p[0]+5)]
-                draw.rectangle(xy, fill=(0,255,0), outline=(0,0,0))
-            del(draw)
+            img = drawPointsTo3DData(data3d, voxelsize, point_sets = [ \
+                [points_spine, (255,0,0), None],
+                [points_hip_joint, (0,255,0), (0,0,0)]
+                ])
 
             img.save(os.path.join(outputdir, "%s.png" % dirname))
             #img.show()
