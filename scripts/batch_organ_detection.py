@@ -25,15 +25,51 @@ print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.org
 from bodynavigation.organ_detection import OrganDetection
 
 import io3d
+import sed3
 
-def drawPoints(draw, points, colour=(255,0,0), outline=None, size=5):
-    for p in points: # p = [x,y]
+def drawPoints(img, points, axis, colour=(255,0,0,255), outline=None, size=5):
+    if len(points) == 0: return img
+    if len(colour)==3:
+        colour = (colour[0],colour[1],colour[2],255)
+
+    z, y, x = zip(*points)
+    if axis == 0:
+        points_2d = zip(x, y)
+    elif axis == 1:
+        points_2d = zip(x, z)
+    elif axis == 2:
+        points_2d = zip(y, z)
+    else:
+        raise Exception("Invalid axis value: %s" % str(axis))
+
+    img_d = Image.new('RGBA', img.size)
+
+    draw = ImageDraw.Draw(img_d)
+    for p in points_2d: # p = [x,y]
         xy = [p[0], p[1], p[0]+size, p[1]+size]
         draw.rectangle(xy, fill=colour, outline=outline)
+    del(draw)
 
-def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
+    img = Image.composite(img_d, img, img_d)
+    return img
+
+def drawVolume(img, mask, colour=(255,0,0,100)):
+    if len(colour)==3:
+        colour = (colour[0],colour[1],colour[2],255)
+    img_mask = np.zeros((mask.shape[0],mask.shape[1], 4), dtype=np.uint8)
+    img_mask[:,:,0] = colour[0]
+    img_mask[:,:,1] = colour[1]
+    img_mask[:,:,2] = colour[2]
+    img_mask[:,:,3] = mask.astype(np.uint8)*colour[3]
+    img_mask = Image.fromarray(img_mask, 'RGBA')
+    #img_mask.show()
+    img = Image.composite(img_mask, img, img_mask)
+    return img
+
+def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
     """
     point_sets = [[points, colour=(255,0,0), outline=None],...]
+    volume_sets = [[mask, colour=(255,0,0)],...]
     Returns RGB Image object
     """
 
@@ -41,6 +77,7 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
     data3d[ data3d > 1024 ] = 1024
     data3d = data3d + abs(np.min(data3d))
 
+    # axis views
     view_z = np.sum(data3d, axis=0, dtype=np.int32).astype(np.float)
     view_z = (view_z*(255.0/view_z.max())).astype(np.int32)
 
@@ -50,59 +87,91 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
     view_x = np.sum(data3d, axis=2, dtype=np.int32).astype(np.float)
     view_x = (view_x*(255.0/view_x.max())).astype(np.int32)
 
-    new_shape = (int(data3d.shape[1] * voxelsize[1]), int(data3d.shape[2] * voxelsize[2]))
+    tmp = []
+    for vset in volume_sets:
+        mask, colour = tuple(vset)
+        mask_z = np.sum(mask.astype(np.uint32), axis=0, dtype=np.uint32) != 0
+        mask_y = np.sum(mask.astype(np.uint32), axis=1, dtype=np.uint32) != 0
+        mask_x = np.sum(mask.astype(np.uint32), axis=2, dtype=np.uint32) != 0
+        tmp.append(([mask_z, mask_y, mask_x], colour))
+    volume_sets = tmp
+
+    # resize to 1x1x1 voxelsize
+    new_shape_z = (int(data3d.shape[1] * voxelsize[1]), int(data3d.shape[2] * voxelsize[2]))
+    new_shape_y = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[1] * voxelsize[1]))
+    new_shape_x = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[2] * voxelsize[2]))
+
     view_z = skimage.transform.resize(
-            view_z, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_z, new_shape_z, order=3, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
-
-    new_shape = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[1] * voxelsize[1]))
     view_y = skimage.transform.resize(
-            view_y, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_y, new_shape_y, order=3, mode="reflect", clip=True, preserve_range=True,
+            ).astype(np.int32)
+    view_x = skimage.transform.resize(
+            view_x, new_shape_x, order=3, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
 
-    new_shape = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[2] * voxelsize[2]))
-    view_x = skimage.transform.resize(
-            view_x, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
-            ).astype(np.int32)
+    tmp = []
+    for pset in point_sets:
+        points, colour, outline = tuple(pset)
+        points = [ list(np.asarray(p)*voxelsize) for p in points ]
+        tmp.append((points, colour, outline))
+    point_sets = tmp
+
+    tmp = []
+    for vset in volume_sets:
+        masks, colour = tuple(vset)
+        mask_z, mask_y, mask_x = tuple(masks)
+        mask_z = skimage.transform.resize(
+            mask_z, new_shape_z, order=0, mode="reflect", clip=True, preserve_range=True,
+            ).astype(np.bool)
+        #ed = sed3.sed3(np.expand_dims(mask_z.astype(np.int8), axis=0)); ed.show()
+        mask_y = skimage.transform.resize(
+            mask_y, new_shape_y, order=0, mode="reflect", clip=True, preserve_range=True,
+            ).astype(np.bool)
+        #ed = sed3.sed3(np.expand_dims(mask_y.astype(np.int8), axis=0)); ed.show()
+        mask_x = skimage.transform.resize(
+            mask_x, new_shape_x, order=0, mode="reflect", clip=True, preserve_range=True,
+            ).astype(np.bool)
+        #ed = sed3.sed3(np.expand_dims(mask_x.astype(np.int8), axis=0)); ed.show()
+        tmp.append(([mask_z, mask_y, mask_x], colour))
+    volume_sets = tmp
 
     # draw view_z
-    img = Image.fromarray(view_z, 'I').convert("RGB")
-    draw = ImageDraw.Draw(img)
+    img = Image.fromarray(view_z, 'I').convert("RGBA")
+    for vset in volume_sets:
+        masks, colour = tuple(vset)
+        mask_z, mask_y, mask_x = tuple(masks)
+        img = drawVolume(img, mask_z, colour)
     for pset in point_sets:
         points, colour, outline = tuple(pset)
-        if len(points) == 0: continue
-        points = [ list(np.asarray(p)*voxelsize) for p in points ]
-        z, y, x = zip(*points)
-        points_2d = zip(x, y)
-        drawPoints(draw, points_2d, colour=colour, outline=outline)
-    img_z = img; del(draw)
+        img = drawPoints(img, points, axis=0, colour=colour, outline=outline)
+    img_z = img
 
     # draw view_y
-    img = Image.fromarray(view_y, 'I').convert("RGB")
-    draw = ImageDraw.Draw(img)
+    img = Image.fromarray(view_y, 'I').convert("RGBA")
+    for vset in volume_sets:
+        masks, colour = tuple(vset)
+        mask_z, mask_y, mask_x = tuple(masks)
+        img = drawVolume(img, mask_y, colour)
     for pset in point_sets:
         points, colour, outline = tuple(pset)
-        if len(points) == 0: continue
-        points = [ list(np.asarray(p)*voxelsize) for p in points ]
-        z, y, x = zip(*points)
-        points_2d = zip(x, z)
-        drawPoints(draw, points_2d, colour=colour, outline=outline)
-    img_y = img; del(draw)
+        img = drawPoints(img, points, axis=1, colour=colour, outline=outline)
+    img_y = img
 
     # draw view_x
-    img = Image.fromarray(view_x, 'I').convert("RGB")
-    draw = ImageDraw.Draw(img)
+    img = Image.fromarray(view_x, 'I').convert("RGBA")
+    for vset in volume_sets:
+        masks, colour = tuple(vset)
+        mask_z, mask_y, mask_x = tuple(masks)
+        img = drawVolume(img, mask_x, colour)
     for pset in point_sets:
         points, colour, outline = tuple(pset)
-        if len(points) == 0: continue
-        points = [ list(np.asarray(p)*voxelsize) for p in points ]
-        z, y, x = zip(*points)
-        points_2d = zip(y, z)
-        drawPoints(draw, points_2d, colour=colour, outline=outline)
-    img_x = img; del(draw)
+        img = drawPoints(img, points, axis=2, colour=colour, outline=outline)
+    img_x = img
 
     # connect and retorn images
-    img = Image.new('RGB', (max(img_y.size[0]+img_x.size[0], img_z.size[0]), \
+    img = Image.new('RGBA', (max(img_y.size[0]+img_x.size[0], img_z.size[0]), \
         max(img_y.size[1]+img_z.size[1], img_x.size[1]+img_z.size[1])))
 
     img.paste(img_y, (0,0))
@@ -110,7 +179,7 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = []):
     img.paste(img_z, (0,max(img_y.size[1], img_x.size[1])))
     #img.show(); sys.exit(0)
 
-    return img
+    return img.convert("RGB")
 
 def processData(datapath, name, outputdir):
     try:
@@ -121,12 +190,15 @@ def processData(datapath, name, outputdir):
         obj = OrganDetection(data3d, voxelsize)
 
         points_spine, points_hip_joint = obj.analyzeBones() # in voxels
+        heart = obj.getHeart()
 
         del(obj)
 
         img = drawPointsTo3DData(data3d, voxelsize, point_sets = [ \
-            [points_spine, (255,0,0), None],
-            [points_hip_joint, (0,255,0), (0,0,0)]
+                [points_spine, (255,0,0), None],
+                [points_hip_joint, (0,255,0), (0,0,0)]
+            ], volume_sets = [ \
+                [heart, (0,0,255,100)]
             ])
 
         img.save(os.path.join(outputdir, "%s.png" % name))
