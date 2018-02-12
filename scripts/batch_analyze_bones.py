@@ -141,11 +141,9 @@ def processThread(args):
     processData(*args)
 
 def main():
+    logging.basicConfig(stream=sys.stdout)
     logger = logging.getLogger()
-
     logger.setLevel(logging.WARNING)
-    ch = logging.StreamHandler()
-    logger.addHandler(ch)
 
     # input parser
     parser = argparse.ArgumentParser(description="Batch Processing. Needs to be SIGKILLed to terminate")
@@ -154,7 +152,7 @@ def main():
     parser.add_argument('-o','--outputdir', default="./batch_output",
             help='path to output dir')
     parser.add_argument('-t','--threads', type=int, default=1,
-            help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 2.5GB.')
+            help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 2.5GB, big ones can go over 8GB.')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()

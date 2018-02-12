@@ -183,8 +183,9 @@ class OrganDetection(object):
         self.masks_comp = {
             "body":None,
             "fatlessbody":None,
-            "bones":None,
             "lungs":None,
+            "bones":None,
+            "heart":None,
             }
 
         # statistics and models
@@ -194,7 +195,8 @@ class OrganDetection(object):
 
 
     @classmethod
-    def fromReadyData(cls, data3d, spacing, body=None, fatlessbody=None, bones=None, lungs=None ):
+    def fromReadyData(cls, data3d, spacing, body=None, fatlessbody=None, lungs=None, \
+        bones=None, heart=None ):
         """ For super fast testing """
         obj = cls()
 
@@ -209,8 +211,9 @@ class OrganDetection(object):
 
         if body is not None: obj.masks_comp["body"] = compressArray(body)
         if fatlessbody is not None: obj.masks_comp["fatlessbody"] = compressArray(fatlessbody)
-        if bones is not None: obj.masks_comp["bones"] = compressArray(bones)
         if lungs is not None: obj.masks_comp["lungs"] = compressArray(lungs)
+        if bones is not None: obj.masks_comp["bones"] = compressArray(bones)
+        if heart is not None: obj.masks_comp["heart"] = compressArray(heart)
 
         return obj
 
@@ -245,6 +248,7 @@ class OrganDetection(object):
         # ed = sed3.sed3(data3d); ed.show()
 
         # remove high brightness errors near edges of valid data (takes about 70s)
+        logger.debug("Removing high brightness errors near edges of valid data")
         valid_mask = data3d > -1024
         valid_mask = skimage.measure.label(valid_mask, background=0)
         unique, counts = np.unique(valid_mask, return_counts=True)
@@ -269,6 +273,7 @@ class OrganDetection(object):
                 ).astype(np.int16)
 
         # cut off empty parts of data
+        logger.debug("Removing array padding")
         body = self._getBody(data3d, voxelsize)
         data3d[ body == 0 ] = -1024
         padding = getDataPadding(body)
@@ -284,11 +289,13 @@ class OrganDetection(object):
             size_mm = [ size_v[0]*voxelsize[1], size_v[1]*voxelsize[2] ] # fatlessbody size in mm on X and Y axis
             size_scale = [ None, self.NORMED_FATLESS_BODY_SIZE[0]/size_mm[0], self.NORMED_FATLESS_BODY_SIZE[1]/size_mm[1] ]
             size_scale[0] = (size_scale[1]+size_scale[2])/2 # scaling on z-axis is average of scaling on x,y-axis
-            voxelsize = [
+            new_voxelsize = [
                 voxelsize[0]*size_scale[0],
                 voxelsize[1]*size_scale[1],
                 voxelsize[2]*size_scale[2],
                 ]
+            logger.debug("Voxelsize normalization: %s -> %s" % (str(voxelsize), str(new_voxelsize)))
+            voxelsize = new_voxelsize
         del(body) # not needed anymore
 
         # resize data on x,y axis (upscaling creates ghosting effect on z-axis)
@@ -298,6 +305,7 @@ class OrganDetection(object):
             new_shape = np.asarray([ data3d.shape[0], data3d.shape[1] * voxelsize[1], \
                 data3d.shape[2] * voxelsize[2] ]).astype(np.int)
             spacing = np.asarray([ voxelsize[0], 1, 1 ])
+            logger.debug("Data3D shape resize: %s -> %s; New voxelsize: %s" % (str(data3d.shape), str(tuple(new_shape)), str((voxelsize[0],1,1))))
             data3d = skimage.transform.resize(
                 data3d, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
                 ).astype(np.int16)
@@ -334,10 +342,13 @@ class OrganDetection(object):
                 data = self._getBody(self.data3d, self.spacing)
             elif part == "fatlessbody":
                 data = self._getFatlessBody(self.data3d, self.spacing, self.getBody(raw=True))
-            elif part == "bones":
-                data = self._getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True))
             elif part == "lungs":
                 data = self._getLungs(self.data3d, self.spacing, self.getBody(raw=True))
+            elif part == "bones":
+                data = self._getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
+                    self.getLungs(raw=True) )
+            elif part == "heart":
+                data = self._getHeart(self.data3d, self.spacing, self.getLungs(raw=True))
 
             self.masks_comp[part] = compressArray(data)
 
@@ -350,11 +361,14 @@ class OrganDetection(object):
     def getFatlessBody(self, raw=False):
         return self.getPart("fatlessbody", raw=raw)
 
+    def getLungs(self, raw=False):
+        return self.getPart("lungs", raw=raw)
+
     def getBones(self, raw=False):
         return self.getPart("bones", raw=raw)
 
-    def getLungs(self, raw=False):
-        return self.getPart("lungs", raw=raw)
+    def getHeart(self, raw=False):
+        return self.getPart("heart", raw=raw)
 
     #
     # Segmentation algorithms
@@ -410,70 +424,6 @@ class OrganDetection(object):
         return fatless
 
     @classmethod
-    def _getBones(cls, data3d, spacing, fatless, graphcut=False):
-        """
-        Good enough sgementation of all bones
-        * data3d - everything, but body must be removed
-        * graphcut - very good on some data, but can eat RAM by 10s of GB.
-        """
-        logger.info("_getBones")
-        spacing_vol = spacing[0]*spacing[1]*spacing[2]
-        fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatless, sampling=spacing)
-
-        # get voxels that are mostly bones
-        bones = (data3d > 300).astype(np.bool)
-        bones = binaryFillHoles(bones, z_axis=True)
-        bones = skimage.morphology.remove_small_objects(bones.astype(np.bool), min_size=int((10**3)/spacing_vol))
-        # readd segmented points that are in expected ribs volume
-        bones[ (fatless_dst < 15) & (fatless == 1) & (data3d > 300) ] = 1
-
-        #ed = sed3.sed3(data3d, contour=bones); ed.show()
-
-        # segmentation > 200, save only objects that are connected from > 300
-        b200 = skimage.measure.label((data3d > 200), background=0)
-        seeds_l = b200.copy(); seeds_l[ bones == 0 ] = 0
-        for l in np.unique(seeds_l)[1:]:
-            bones[ b200 == l ] = 1
-        del(b200); del(seeds_l)
-        bones = binaryClosing(bones, structure=getSphericalMask([5,]*3, spacing=spacing))
-        bones = binaryFillHoles(bones, z_axis=True)
-
-        #ed = sed3.sed3(data3d, contour=(b200 == 1), seeds=bones); ed.show()
-
-        # TODO - zkusit graphcut po prekrivajicich se castech (mensi spotreba RAM) - jako vysledek vybrat MODE segmentace kazdeho pixelu
-        if graphcut:
-            import pysegbase.pycut as pspc # 3D graphcut with seeds
-
-            # create labeled seeds for graphcut
-            label = np.zeros(data3d.shape, dtype=np.int8)
-            label[ scipy.ndimage.morphology.distance_transform_edt(bones == 0, sampling=spacing) > 15 ] = 2
-
-            # no seeds where could be ribs
-            # fatless = skimage.morphology.dilation(fatless, getSphericalMask([3,3,3])) # some padding for safety
-            # label[ (fatless_dst < 15) & (fatless == 1) ] = 0
-            label[ fatless == 0 ] = 2
-
-            label[ bones == 1 ] = 1
-
-            #ed = sed3.sed3(data3d, seeds=label); ed.show()
-
-            # graphcut - works great
-            igc = pspc.ImageGraphCut(data3d, voxelsize=spacing)
-            igc.set_seeds(label)
-            igc.run()
-            #igc.interactivity() # works only if sed3 was not used
-            bones = igc.segmentation == 0
-
-            # ed = sed3.sed3(data3d, contour=bones); ed.show()
-
-            bones = binaryClosing(bones, structure=getSphericalMask([5,]*3, spacing=spacing)) # TODO - prekontrolovat vysledek - predtim nefugovalo spravne
-
-            # ed = sed3.sed3(data3d, seeds=(label==1), contour=bones); ed.show()
-            # ed = sed3.sed3(data3d, seeds=bones); ed.show()
-
-        return bones
-
-    @classmethod
     def _getLungs(cls, data3d, spacing, body):
         """ Expects lungs to actually be in data """
         logger.info("_getLungs")
@@ -485,7 +435,9 @@ class OrganDetection(object):
         lungs = skimage.measure.label(lungs, background=0)
         unique, counts = np.unique(lungs, return_counts=True)
         unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
-        if len(unique) == 0: return np.zeros(data3d.shape, dtype=np.bool)
+        if len(unique) == 0:
+            logger.warning("Couldn't find lungs!")
+            return np.zeros(data3d.shape, dtype=np.bool)
 
         # get 2 biggest blobs
         idx_1st = list(counts).index(max(counts))
@@ -495,11 +447,13 @@ class OrganDetection(object):
             idx_2nd = list(counts).index(max(counts))
             count_2nd = counts[idx_2nd]
             counts[idx_1st] = count_1st
+        else:
+            count_2nd = 0
 
         # leave only lungs in data
         lungs[ lungs == unique[idx_1st] ] = -1
         if len(unique) >= 2:
-            if abs(count_1st-count_2nd)/(count_1st+count_2nd) < 0.3: # if volume diff is lower then 30%
+            if count_2nd/count_1st > 0.7: # if second biggest is at least 70% as big
                 lungs[ lungs == unique[idx_2nd] ] = -1
         lungs = lungs == -1
 
@@ -514,7 +468,100 @@ class OrganDetection(object):
             structure=getSphericalMask([30,]*3, spacing=spacing))
         lungs[:getDataPadding(tmp)[0][0],:,:] = 0
 
+        # set minimal valid volume of lungs
+        lungs_vol = (spacing[0]*spacing[1]*spacing[2])*np.sum(lungs)
+        if lungs_vol < 50**3: # mm^3
+            logger.warning("Couldn't find lungs!")
+            return np.zeros(data3d.shape, dtype=np.bool)
+
         return lungs
+
+    @classmethod
+    def _getBones(cls, data3d, spacing, fatless, lungs):
+        """
+        Good enough sgementation of all bones
+        * data3d - everything, but body must be removed
+        """
+        logger.info("_getBones")
+        spacing_vol = spacing[0]*spacing[1]*spacing[2]
+        fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatless, sampling=spacing)
+
+        # get voxels that are mostly bones
+        bones = (data3d > 300).astype(np.bool)
+        bones = binaryFillHoles(bones, z_axis=True)
+        bones = skimage.morphology.remove_small_objects(bones.astype(np.bool), min_size=int((10**3)/spacing_vol))
+        # readd segmented points that are in expected ribs volume
+        bones[ (fatless_dst < 15) & (fatless == 1) & (data3d > 300) ] = 1
+
+        # remove possible segmented heart parts (remove upper half of convex hull of lungs)
+        #ed = sed3.sed3(data3d, contour=lungs); ed.show()
+        if np.sum(lungs) != 0:
+            pads = getDataPadding(lungs)
+            s = ( slice(pads[0][0],data3d.shape[0]-pads[0][1]), \
+                slice(pads[1][0],data3d.shape[1]-pads[1][1]), \
+                slice(pads[2][0],data3d.shape[2]-pads[2][1]) )
+            lungs_hull = lungs[s]
+            for z in range(lungs_hull.shape[0]):
+                lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs_hull[z,:,:])
+            bones[s][:,:int(lungs_hull.shape[1]/2),:][ lungs_hull[:,:int(lungs_hull.shape[1]/2),:] == 1 ] = 0
+
+        #ed = sed3.sed3(data3d, contour=bones); ed.show()
+
+        # segmentation > 200, save only objects that are connected from > 300
+        b200 = skimage.measure.label((data3d > 200), background=0)
+        seeds_l = b200.copy(); seeds_l[ bones == 0 ] = 0
+        for l in np.unique(seeds_l)[1:]:
+            b200[ b200 == l ] = -1
+        b200 = (b200 == -1); del(seeds_l)
+
+        # remove stuff connected to heart
+        if np.sum(lungs) != 0:
+            wseeds = ( bones == 1 ).astype(np.int8) # = 1
+            wseeds[ (fatless_dst < 15) & (fatless == 1) & (b200 == 1) ] = 1 # ribs readded
+            wseeds[s][:,:int(lungs_hull.shape[1]/2),:][ lungs_hull[:,:int(lungs_hull.shape[1]/2),:] == 1 ] = 2
+            b200 = skimage.morphology.watershed(b200, wseeds, mask=b200) == 1
+
+            #ed = sed3.sed3(data3d, seeds=wseeds, contour=r); ed.show()
+
+            # again remove all not connected to > 300
+            b200 = skimage.measure.label(b200, background=0)
+            seeds_l = b200.copy(); seeds_l[ bones == 0 ] = 0
+            for l in np.unique(seeds_l)[1:]:
+                b200[ b200 == l ] = -1
+            b200 = (b200 == -1); del(seeds_l)
+
+        bones = b200; del(b200)
+        bones = binaryClosing(bones, structure=getSphericalMask([5,]*3, spacing=spacing))
+        bones = binaryFillHoles(bones, z_axis=True)
+
+        #ed = sed3.sed3(data3d, contour=bones); ed.show()
+
+        return bones
+
+    def _getHeart(cls, data3d, spacing, lungs): # TODO
+        logger.info("_getHeart")
+        heart = np.zeros(data3d.shape)
+        if np.sum(lungs) == 0: return heart
+
+        # # work only on small part of data
+        # pads = getDataPadding(lungs)
+        # s = ( slice(pads[0][0],data3d.shape[0]-pads[0][1]), \
+        #     slice(pads[1][0],data3d.shape[1]-pads[1][1]), \
+        #     slice(pads[2][0],data3d.shape[2]-pads[2][1]) )
+        # lungs_hull = lungs[s]
+        # for z in range(lungs_hull.shape[0]):
+        #     lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs_hull[z,:,:])
+
+        # # segmentation
+        # heart[s] = (data3d[s] > 100) & (data3d[s] < 300)
+        # heart[s][ lungs_hull == 0 ] = 0
+        # heart[s] = binaryClosing(heart[s], structure=getSphericalMask([10,]*3, spacing=spacing))
+        # heart[s] = scipy.ndimage.morphology.binary_opening(heart[s], \
+        #     structure=getSphericalMask([20,]*3, spacing=spacing))
+
+        # # TODO - vytvor funkci ktera rozseka data na urcity pocet obdelniku [a spocita objem a centroidy] (jako u analyze bones)
+
+        return heart
 
     ################
 
@@ -589,7 +636,7 @@ class OrganDetection(object):
             if (z >= lungs_end) and (left_v/total_v > 0.4) and (right_v/total_v > 0.4):
                 # gets also leg bones
                 #print(z, abs(left_c[1]-right_c[1]))
-                if abs(left_c[1]-right_c[1]) < 180:
+                if abs(left_c[1]-right_c[1]) < (180.0/spacing[2]): # max hip dist. 180mm
                     # anything futher out should be only leg bones
                     points_hip_joint_l.append( (z, int(left_c[0]), int(left_c[1])) )
                     points_hip_joint_r.append( (z, int(right_c[0]), int(right_c[1])) )
@@ -626,9 +673,8 @@ class OrganDetection(object):
 
             points_spine = [ tuple([int(z_new[i]), int(y_new[i]), int(x_new[i])]) for i in range(len(z_new)) ]
 
-        # TODO - test if polyfit doesnt create nonsensical curves (some batch results look wierd)
-
         # seeds = np.zeros(bones.shape)
+        # for p in points_spine_c: seeds[p[0], p[1], p[2]] = 2
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
         # for p in points_hip_joint_l: seeds[p[0], p[1], p[2]] = 2
         # for p in points_hip_joint_r: seeds[p[0], p[1], p[2]] = 2
@@ -643,11 +689,9 @@ if __name__ == "__main__":
     import argparse
     import io3d, sed3
 
+    logging.basicConfig(stream=sys.stdout)
     logger = logging.getLogger()
-
     logger.setLevel(logging.WARNING)
-    ch = logging.StreamHandler()
-    logger.addHandler(ch)
 
     # input parser
     parser = argparse.ArgumentParser(description="Organ Detection")
@@ -685,16 +729,16 @@ if __name__ == "__main__":
         data3d_p = os.path.join(args.readydir, "data3d.dcm")
         body_p = os.path.join(args.readydir, "body.dcm")
         fatlessbody_p = os.path.join(args.readydir, "fatlessbody.dcm")
-        bones_p = os.path.join(args.readydir, "bones.dcm")
         lungs_p = os.path.join(args.readydir, "lungs.dcm")
+        bones_p = os.path.join(args.readydir, "bones.dcm")
 
         data3d, metadata = io3d.datareader.read(data3d_p)
         spacing = metadata["voxelsize_mm"]
 
         body = None
         fatlessbody = None
-        bones = None
         lungs = None
+        bones = None
 
         if os.path.exists(body_p):
             body, _ = io3d.datareader.read(body_p)
@@ -702,20 +746,20 @@ if __name__ == "__main__":
         if os.path.exists(fatlessbody_p):
             fatlessbody, _ = io3d.datareader.read(fatlessbody_p)
             fatlessbody = fatlessbody.astype(np.bool)
-        if os.path.exists(bones_p):
-            bones, _ = io3d.datareader.read(bones_p)
-            bones = bones.astype(np.bool)
         if os.path.exists(lungs_p):
             lungs, _ = io3d.datareader.read(lungs_p)
             lungs = lungs.astype(np.bool)
+        if os.path.exists(bones_p):
+            bones, _ = io3d.datareader.read(bones_p)
+            bones = bones.astype(np.bool)
 
         obj = OrganDetection.fromReadyData(data3d, spacing, \
-            body=body, fatlessbody=fatlessbody, bones=bones, lungs=lungs )
+            body=body, fatlessbody=fatlessbody, lungs=lungs, bones=bones )
 
         del(body)
         del(fatlessbody)
-        del(bones)
         del(lungs)
+        del(bones)
 
     if args.dump:
         print("Dumping all data to ready_dir")
@@ -725,8 +769,8 @@ if __name__ == "__main__":
         data3d_p = os.path.join(readydir, "data3d.dcm")
         body_p = os.path.join(readydir, "body.dcm")
         fatlessbody_p = os.path.join(readydir, "fatlessbody.dcm")
-        bones_p = os.path.join(readydir, "bones.dcm")
         lungs_p = os.path.join(readydir, "lungs.dcm")
+        bones_p = os.path.join(readydir, "bones.dcm")
 
         data3d = obj.data3d
         spacing = list(obj.spacing)
@@ -742,13 +786,13 @@ if __name__ == "__main__":
         io3d.datawriter.write(fatlessbody, fatlessbody_p, 'dcm', {'voxelsize_mm': spacing})
         del(fatlessbody)
 
-        bones = obj.getBones(raw=True).astype(np.int8)
-        io3d.datawriter.write(bones, bones_p, 'dcm', {'voxelsize_mm': spacing})
-        del(bones)
-
         lungs = obj.getLungs(raw=True).astype(np.int8)
         io3d.datawriter.write(lungs, lungs_p, 'dcm', {'voxelsize_mm': spacing})
         del(lungs)
+
+        bones = obj.getBones(raw=True).astype(np.int8)
+        io3d.datawriter.write(bones, bones_p, 'dcm', {'voxelsize_mm': spacing})
+        del(bones)
 
         sys.exit(0)
 
@@ -759,11 +803,13 @@ if __name__ == "__main__":
     fatlessbody = obj.getFatlessBody()
     bones = obj.getBones()
     lungs = obj.getLungs()
+    heart = obj.getHeart()
 
     # ed = sed3.sed3(data3d, contour=body); ed.show()
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
-    ed = sed3.sed3(data3d, contour=lungs); ed.show()
+    # ed = sed3.sed3(data3d, contour=lungs); ed.show()
+    ed = sed3.sed3(data3d, contour=heart); ed.show()
 
     points_spine, points_hip_joint = obj.analyzeBones()
 
