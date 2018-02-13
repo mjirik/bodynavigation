@@ -27,7 +27,7 @@ from bodynavigation.organ_detection import OrganDetection
 import io3d
 import sed3
 
-def drawPoints(img, points, axis, colour=(255,0,0,255), outline=None, size=5):
+def drawPoints(img, points, axis, colour=(255,0,0,255), outline=None, size=1):
     if len(points) == 0: return img
     if len(colour)==3:
         colour = (colour[0],colour[1],colour[2],255)
@@ -46,7 +46,8 @@ def drawPoints(img, points, axis, colour=(255,0,0,255), outline=None, size=5):
 
     draw = ImageDraw.Draw(img_d)
     for p in points_2d: # p = [x,y]
-        xy = [p[0], p[1], p[0]+size, p[1]+size]
+
+        xy = [p[0]-(size/2), p[1]-(size/2), p[0]+(size/2), p[1]+(size/2)]
         draw.rectangle(xy, fill=colour, outline=outline)
     del(draw)
 
@@ -68,7 +69,7 @@ def drawVolume(img, mask, colour=(255,0,0,100)):
 
 def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
     """
-    point_sets = [[points, colour=(255,0,0), outline=None],...]
+    point_sets = [[points, colour=(255,0,0), outline=None, size=3],...]
     volume_sets = [[mask, colour=(255,0,0)],...]
     Returns RGB Image object
     """
@@ -113,9 +114,9 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
 
     tmp = []
     for pset in point_sets:
-        points, colour, outline = tuple(pset)
+        points, colour, outline, size = tuple(pset)
         points = [ list(np.asarray(p)*voxelsize) for p in points ]
-        tmp.append((points, colour, outline))
+        tmp.append((points, colour, outline, size))
     point_sets = tmp
 
     tmp = []
@@ -144,8 +145,8 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
         mask_z, mask_y, mask_x = tuple(masks)
         img = drawVolume(img, mask_z, colour)
     for pset in point_sets:
-        points, colour, outline = tuple(pset)
-        img = drawPoints(img, points, axis=0, colour=colour, outline=outline)
+        points, colour, outline, size = tuple(pset)
+        img = drawPoints(img, points, axis=0, colour=colour, outline=outline, size=size)
     img_z = img
 
     # draw view_y
@@ -155,8 +156,8 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
         mask_z, mask_y, mask_x = tuple(masks)
         img = drawVolume(img, mask_y, colour)
     for pset in point_sets:
-        points, colour, outline = tuple(pset)
-        img = drawPoints(img, points, axis=1, colour=colour, outline=outline)
+        points, colour, outline, size = tuple(pset)
+        img = drawPoints(img, points, axis=1, colour=colour, outline=outline, size=size)
     img_y = img
 
     # draw view_x
@@ -166,8 +167,8 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
         mask_z, mask_y, mask_x = tuple(masks)
         img = drawVolume(img, mask_x, colour)
     for pset in point_sets:
-        points, colour, outline = tuple(pset)
-        img = drawPoints(img, points, axis=2, colour=colour, outline=outline)
+        points, colour, outline, size = tuple(pset)
+        img = drawPoints(img, points, axis=2, colour=colour, outline=outline, size=size)
     img_x = img
 
     # connect and retorn images
@@ -181,6 +182,23 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
 
     return img.convert("RGB")
 
+def interpolatePointsZ(points, step=0.1):
+    if len(points) <= 1: return points
+
+    z, y, x = zip(*points)
+    z_new = list(np.arange(z[0], z[-1]+1, step))
+
+    zz1 = np.polyfit(z, y, 3)
+    f1 = np.poly1d(zz1)
+    y_new = f1(z_new)
+
+    zz2 = np.polyfit(z, x, 3)
+    f2 = np.poly1d(zz2)
+    x_new = f2(z_new)
+
+    points = [ tuple([z_new[i], y_new[i], x_new[i]]) for i in range(len(z_new)) ]
+    return points
+
 def processData(datapath, name, outputdir):
     try:
         print("Processing: ", datapath)
@@ -189,16 +207,19 @@ def processData(datapath, name, outputdir):
         voxelsize = metadata["voxelsize_mm"]
         obj = OrganDetection(data3d, voxelsize)
 
-        points_spine, points_hip_joint = obj.analyzeBones() # in voxels
-        heart = obj.getHeart()
+        bones_stats = obj.analyzeBones() # in voxels
+        vessels = obj.getVessels()
+        vessels_stats = obj.analyzeVessels() # in voxels
 
         del(obj)
 
         img = drawPointsTo3DData(data3d, voxelsize, point_sets = [ \
-                [points_spine, (255,0,0), None],
-                [points_hip_joint, (0,255,0), (0,0,0)]
+                [interpolatePointsZ(bones_stats["spine"], step=0.1), (255,0,0), None, 1],
+                [bones_stats["hip_joints"], (0,255,0), (0,0,0), 7],
+                [interpolatePointsZ(vessels_stats["aorta"], step=0.1), (0,255,255), None, 1],
+                [interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), (255,0,255), None, 1]
             ], volume_sets = [ \
-                [heart, (0,0,255,100)]
+                [vessels, (0,0,255,100)]
             ])
 
         img.save(os.path.join(outputdir, "%s.png" % name))

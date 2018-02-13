@@ -185,18 +185,18 @@ class OrganDetection(object):
             "fatlessbody":None,
             "lungs":None,
             "bones":None,
-            "heart":None,
+            "vessels":None,
             }
 
         # statistics and models
         self.stats = {
-            "bones":None
+            "bones":None,
+            "vessels":None
             }
-
 
     @classmethod
     def fromReadyData(cls, data3d, spacing, body=None, fatlessbody=None, lungs=None, \
-        bones=None, heart=None ):
+        bones=None, vessels=None, bones_stats=None, vessels_stats=None ):
         """ For super fast testing """
         obj = cls()
 
@@ -213,7 +213,10 @@ class OrganDetection(object):
         if fatlessbody is not None: obj.masks_comp["fatlessbody"] = compressArray(fatlessbody)
         if lungs is not None: obj.masks_comp["lungs"] = compressArray(lungs)
         if bones is not None: obj.masks_comp["bones"] = compressArray(bones)
-        if heart is not None: obj.masks_comp["heart"] = compressArray(heart)
+        if vessels is not None: obj.masks_comp["vessels"] = compressArray(vessels)
+
+        if bones_stats is not None: obj.stats["bones"] = bones_stats
+        if vessels_stats is not None: obj.stats["vessels"] = vessels_stats
 
         return obj
 
@@ -347,8 +350,9 @@ class OrganDetection(object):
             elif part == "bones":
                 data = self._getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getLungs(raw=True) )
-            elif part == "heart":
-                data = self._getHeart(self.data3d, self.spacing, self.getLungs(raw=True))
+            elif part == "vessels":
+                data = self._getVessels(self.data3d, self.spacing, self.getLungs(raw=True), \
+                    self.getBones(raw=True), self.analyzeBones(raw=True) )
 
             self.masks_comp[part] = compressArray(data)
 
@@ -367,8 +371,8 @@ class OrganDetection(object):
     def getBones(self, raw=False):
         return self.getPart("bones", raw=raw)
 
-    def getHeart(self, raw=False):
-        return self.getPart("heart", raw=raw)
+    def getVessels(self, raw=False):
+        return self.getPart("vessels", raw=raw)
 
     #
     # Segmentation algorithms
@@ -538,53 +542,136 @@ class OrganDetection(object):
 
         return bones
 
-    def _getHeart(cls, data3d, spacing, lungs): # TODO
-        logger.info("_getHeart")
-        heart = np.zeros(data3d.shape)
-        if np.sum(lungs) == 0: return heart
+    def _getVessels(cls, data3d, spacing, lungs, bones, bones_stats, contrast_agent=True):
+        """
+        Tabular value of blood radiodensity is 13-50 HU.
+        When contrast agent is used, it rises to roughly 140+ HU.
+        ??? Vessels are segmentable only if contrast agent was used. ???
+        """
+        logger.info("_getVessels")
+        points_spine = bones_stats["spine"]
+        if len(points_spine) == 0:
+            logger.warning("Couldn't find vessels!")
+            return np.zeros(data3d.shape, dtype=np.bool)
+        # get spine z-range
+        spine_zmin = points_spine[0][0]; spine_zmax = points_spine[-1][0]
 
-        # # work only on small part of data
-        # pads = getDataPadding(lungs)
-        # s = ( slice(pads[0][0],data3d.shape[0]-pads[0][1]), \
-        #     slice(pads[1][0],data3d.shape[1]-pads[1][1]), \
-        #     slice(pads[2][0],data3d.shape[2]-pads[2][1]) )
-        # lungs_hull = lungs[s]
-        # for z in range(lungs_hull.shape[0]):
-        #     lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs_hull[z,:,:])
 
-        # # segmentation
-        # heart[s] = (data3d[s] > 100) & (data3d[s] < 300)
-        # heart[s][ lungs_hull == 0 ] = 0
-        # heart[s] = binaryClosing(heart[s], structure=getSphericalMask([10,]*3, spacing=spacing))
-        # heart[s] = scipy.ndimage.morphology.binary_opening(heart[s], \
-        #     structure=getSphericalMask([20,]*3, spacing=spacing))
+        if contrast_agent:
+            vessels = data3d > 145
 
-        # # TODO - vytvor funkci ktera rozseka data na urcity pocet obdelniku [a spocita objem a centroidy] (jako u analyze bones)
+            wseeds = bones.astype(np.uint8) # = 1
+            wseeds[ scipy.ndimage.morphology.distance_transform_edt(bones == 0, sampling=spacing) > 15 ] = 2
+            wseeds[ vessels == 0 ] = 0 # seeds only where there are vessels
 
-        return heart
+            vessels = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
+            #ed = sed3.sed3(data3d, seeds=wseeds, contour=vessels); ed.show()
+            vessels = vessels == 2 # even smallest vessels and kidneys
+
+            vessels = scipy.ndimage.morphology.binary_fill_holes(vessels)
+            vessels = scipy.ndimage.binary_opening(vessels, structure=np.ones((3,3,3)))
+            #ed = sed3.sed3(data3d, contour=vessels); ed.show()
+
+            # find circles near spine
+            rad = np.asarray([ 7,8,9,10,11,12,13,14 ], dtype=np.float32)
+            rad = list( rad / float((spacing[1]+spacing[2])/2.0) )
+            wseeds = np.zeros(vessels.shape, dtype=np.int8)
+            for z in range(spine_zmin,spine_zmax+1):
+                sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
+                vs = vessels[z,:,:]
+                #vsl = skimage.measure.label(vs, background=0)
+
+                # get circle centers
+                edge = skimage.feature.canny(vs, sigma=0.0)
+                #ed = sed3.sed3(np.expand_dims(edge.astype(np.float), axis=0)); ed.show()
+                r = skimage.transform.hough_circle(edge, radius=rad) > 0.4
+                r = np.sum(r, axis=0) != 0
+                r[ vs == 0 ] = 0 # remove centers outside segmented vessels
+                r = scipy.ndimage.binary_closing(r, structure=np.ones((10,10))) # connect near centers
+                #ed = sed3.sed3(np.expand_dims(r.astype(np.float), axis=0), contour=np.expand_dims(vs, axis=0)); ed.show()
+
+                # get circle centers
+                if np.sum(r) == 0: continue
+                rl = skimage.measure.label(r, background=0)
+                centers = scipy.ndimage.measurements.center_of_mass(r, rl, range(1, np.max(rl)+1))
+
+                # use only circle centers that are near spine
+                for i, c in enumerate(centers):
+                    dst_y = abs(sc[0]*spacing[1]-c[0]*spacing[1])
+                    dst_x = abs(sc[1]*spacing[2]-c[1]*spacing[2])
+                    dst2 = dst_y**2 + dst_x**2
+                    ok = True
+                    if dst2 > 50**2: ok = False
+                    if sc[0]-(20/spacing[1]) <= c[0]: ok = False
+
+                    if ok: wseeds[z,int(c[0]),int(c[1])] = 1
+
+            # convolution with vertical kernel to remove seeds in vessels not going up-down
+            kernel = np.ones((9,1,1))
+            r = scipy.ndimage.convolve(vessels.astype(np.uint32), kernel)
+            wseeds[ r == 0 ] = 0
+
+            # remove vessels outside of detected spine z-range
+            vessels[:spine_zmin,:,:] = 0
+            vessels[spine_zmax:,:,:] = 0
+
+            # remove everything thats not connected to at least one seed
+            vessels = skimage.measure.label(vessels, background=0)
+            tmp = vessels.copy(); tmp[ wseeds == 0 ] = 0
+            for l in np.unique(tmp)[1:]:
+                vessels[ vessels == l ] = -1
+            vessels = (vessels == -1); del(tmp)
+
+            # watershed
+            wseeds = scipy.ndimage.binary_dilation(wseeds.astype(np.bool), structure=np.ones((1,3,3))).astype(np.int8)
+            cut_rad = (90, 70); cut_rad = (cut_rad[0]/spacing[1], cut_rad[1]/spacing[2])
+            for z in range(spine_zmin,spine_zmax+1):
+                sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
+                rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], shape=wseeds[z,:,:].shape)
+                mask = np.zeros(wseeds[z,:,:].shape); mask[rr, cc] = 1
+                mask[int(sc[0]):,:] = 0
+                wseeds[z, mask != 1] = 2
+            #ed = sed3.sed3(data3d, seeds=wseeds, contour=vessels); ed.show()
+
+            r = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
+            # ed = sed3.sed3(data3d, seeds=wseeds, contour=r); ed.show()
+            vessels = r == 1
+
+            return vessels
+
+        else: # without contrast agent, blood is 13-50 HU
+            logger.warning("Couldn't find vessels!")
+            return np.zeros(data3d.shape, dtype=np.bool)
+
+            # TODO - try it anyway
+            # - FIND EDGES, THRESHOLD EDGES - canny
+            # - hough_circle
+            # - convolution with kernel with very big z-axis
+            # - combine last two steps
+            # - points_spine - select close circles to spine
 
     ################
 
     def analyzeBones(self, raw=False):
         if self.stats["bones"] is not None:
-            points_spine, points_hip_joint = tuple(self.stats["bones"])
+            bones_stats = self.stats["bones"]
 
         else:
-            points_spine, points_hip_joint = self._analyzeBones( \
+            bones_stats = self._analyzeBones( \
                 data3d=self.data3d, spacing=self.spacing, fatlessbody=self.getFatlessBody(raw=True), \
                 bones=self.getBones(raw=True), lungs=self.getLungs(raw=True)
                 )
-            self.stats["bones"] = (points_spine, points_hip_joint)
+            self.stats["bones"] = bones_stats
 
         if not raw:
-            points_spine = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_spine ]
-            points_hip_joint = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in points_hip_joint ]
+            bones_stats["spine"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in bones_stats["spine"] ]
+            bones_stats["hip_joints"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in bones_stats["hip_joints"] ]
 
-        return points_spine, points_hip_joint
+        return bones_stats
 
     @classmethod
     def _analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs):
-        """ Returns: points_spine, points_hip_joint """
+        """ Returns: {"spine":points_spine, "hip_joints":points_hip_joints} """
         logger.info("analyzeBones")
 
         # remove every bone higher then lungs
@@ -605,7 +692,7 @@ class OrganDetection(object):
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
 
         points_spine = []
-        points_hip_joint_l = []; points_hip_joint_r = []
+        points_hip_joints_l = []; points_hip_joints_r = []
         for z in range(lungs_start, bones.shape[0]): # TODO - separate into more sections (spine should be only in middle-lower)
             bs = fatlessbody[z,:,:]
             # separate body/bones into 3 sections (on x-axis)
@@ -638,23 +725,23 @@ class OrganDetection(object):
                 #print(z, abs(left_c[1]-right_c[1]))
                 if abs(left_c[1]-right_c[1]) < (180.0/spacing[2]): # max hip dist. 180mm
                     # anything futher out should be only leg bones
-                    points_hip_joint_l.append( (z, int(left_c[0]), int(left_c[1])) )
-                    points_hip_joint_r.append( (z, int(right_c[0]), int(right_c[1])) )
+                    points_hip_joints_l.append( (z, int(left_c[0]), int(left_c[1])) )
+                    points_hip_joints_r.append( (z, int(right_c[0]), int(right_c[1])) )
 
         # calculate centroid of hip points
-        points_hip_joint = []
-        if len(points_hip_joint_l) != 0:
-            z, y, x = zip(*points_hip_joint_l); l = len(z)
+        points_hip_joints = []
+        if len(points_hip_joints_l) != 0:
+            z, y, x = zip(*points_hip_joints_l); l = len(z)
             cl = (int(sum(z)/l), int(sum(y)/l), int(sum(x)/l))
-            z, y, x = zip(*points_hip_joint_r); l = len(z)
+            z, y, x = zip(*points_hip_joints_r); l = len(z)
             cr = (int(sum(z)/l), int(sum(y)/l), int(sum(x)/l))
-            points_hip_joint = [cl, cr]
+            points_hip_joints = [cl, cr]
 
         # remove any spine points under detected hips
-        if len(points_hip_joint) != 0:
+        if len(points_hip_joints) != 0:
             newp = []
             for p in points_spine:
-                if p[0] < points_hip_joint[0][0]:
+                if p[0] < points_hip_joints[0][0]:
                     newp.append(p)
             points_spine = newp
 
@@ -676,18 +763,43 @@ class OrganDetection(object):
         # seeds = np.zeros(bones.shape)
         # for p in points_spine_c: seeds[p[0], p[1], p[2]] = 2
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
-        # for p in points_hip_joint_l: seeds[p[0], p[1], p[2]] = 2
-        # for p in points_hip_joint_r: seeds[p[0], p[1], p[2]] = 2
-        # for p in points_hip_joint: seeds[p[0], p[1], p[2]] = 3
+        # for p in points_hip_joints_l: seeds[p[0], p[1], p[2]] = 2
+        # for p in points_hip_joints_r: seeds[p[0], p[1], p[2]] = 2
+        # for p in points_hip_joints: seeds[p[0], p[1], p[2]] = 3
         # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
         # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
-        return points_spine, points_hip_joint
+        return {"spine":points_spine, "hip_joints":points_hip_joints}
 
+    def analyzeVessels(self, raw=False):
+        if self.stats["vessels"] is not None:
+            vessels_stats = self.stats["vessels"]
+
+        else:
+            vessels_stats = self._analyzeVessels( \
+                data3d=self.data3d, spacing=self.spacing, vessels=self.getVessels(raw=True), \
+                )
+            self.stats["vessels"] = vessels_stats
+
+        if not raw:
+            vessels_stats["aorta"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in vessels_stats["aorta"] ]
+            vessels_stats["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in vessels_stats["vena_cava"] ]
+
+        return vessels_stats
+
+    @classmethod
+    def _analyzeVessels(cls, data3d, spacing, vessels): # TODO
+        """ Returns: {"aorta":[], "vena_cava":[]} """
+        if np.sum(vessels) == 0:
+            logger.warning("Couldn't find vessel points!")
+            return {"aorta":[], "vena_cava":[]}
+
+        return {"aorta":[], "vena_cava":[]}
 
 if __name__ == "__main__":
     import argparse
     import io3d, sed3
+    import json
 
     logging.basicConfig(stream=sys.stdout)
     logger = logging.getLogger()
@@ -731,6 +843,10 @@ if __name__ == "__main__":
         fatlessbody_p = os.path.join(args.readydir, "fatlessbody.dcm")
         lungs_p = os.path.join(args.readydir, "lungs.dcm")
         bones_p = os.path.join(args.readydir, "bones.dcm")
+        vessels_p = os.path.join(args.readydir, "vessels.dcm")
+
+        bones_stats_p = os.path.join(args.readydir, "bones_stats.json")
+        vessels_stats_p = os.path.join(args.readydir, "vessels_stats.json")
 
         data3d, metadata = io3d.datareader.read(data3d_p)
         spacing = metadata["voxelsize_mm"]
@@ -739,6 +855,10 @@ if __name__ == "__main__":
         fatlessbody = None
         lungs = None
         bones = None
+        vessels = None
+
+        bones_stats = None
+        vessels_stats = None
 
         if os.path.exists(body_p):
             body, _ = io3d.datareader.read(body_p)
@@ -752,14 +872,26 @@ if __name__ == "__main__":
         if os.path.exists(bones_p):
             bones, _ = io3d.datareader.read(bones_p)
             bones = bones.astype(np.bool)
+        if os.path.exists(vessels_p):
+            vessels, _ = io3d.datareader.read(vessels_p)
+            vessels = vessels.astype(np.bool)
+
+        if os.path.exists(bones_stats_p):
+            with open(bones_stats_p, 'r') as fp:
+                bones_stats = json.load(fp)
+        if os.path.exists(vessels_stats_p):
+            with open(vessels_stats_p, 'r') as fp:
+                vessels_stats = json.load(fp)
 
         obj = OrganDetection.fromReadyData(data3d, spacing, \
-            body=body, fatlessbody=fatlessbody, lungs=lungs, bones=bones )
+            body=body, fatlessbody=fatlessbody, lungs=lungs, bones=bones, vessels=vessels, \
+            bones_stats=bones_stats, vessels_stats=vessels_stats )
 
         del(body)
         del(fatlessbody)
         del(lungs)
         del(bones)
+        del(vessels)
 
     if args.dump:
         print("Dumping all data to ready_dir")
@@ -771,6 +903,10 @@ if __name__ == "__main__":
         fatlessbody_p = os.path.join(readydir, "fatlessbody.dcm")
         lungs_p = os.path.join(readydir, "lungs.dcm")
         bones_p = os.path.join(readydir, "bones.dcm")
+        vessels_p = os.path.join(readydir, "vessels.dcm")
+
+        bones_stats_p = os.path.join(readydir, "bones_stats.json")
+        vessels_stats_p = os.path.join(readydir, "vessels_stats.json")
 
         data3d = obj.data3d
         spacing = list(obj.spacing)
@@ -794,6 +930,16 @@ if __name__ == "__main__":
         io3d.datawriter.write(bones, bones_p, 'dcm', {'voxelsize_mm': spacing})
         del(bones)
 
+        vessels = obj.getVessels(raw=True).astype(np.int8)
+        io3d.datawriter.write(vessels, vessels_p, 'dcm', {'voxelsize_mm': spacing})
+        del(vessels)
+
+        with open(bones_stats_p, 'w') as fp:
+            json.dump(obj.analyzeBones(raw=True), fp, sort_keys=True)
+
+        with open(vessels_stats_p, 'w') as fp:
+            json.dump(obj.analyzeVessels(raw=True), fp, sort_keys=True)
+
         sys.exit(0)
 
     #########
@@ -803,7 +949,7 @@ if __name__ == "__main__":
     fatlessbody = obj.getFatlessBody()
     bones = obj.getBones()
     lungs = obj.getLungs()
-    heart = obj.getHeart()
+    heart = obj.getVessels()
 
     # ed = sed3.sed3(data3d, contour=body); ed.show()
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
@@ -811,13 +957,14 @@ if __name__ == "__main__":
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
     ed = sed3.sed3(data3d, contour=heart); ed.show()
 
-    points_spine, points_hip_joint = obj.analyzeBones()
+    # bones_stats = obj.analyzeBones()
+    # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]
 
-    seeds = np.zeros(bones.shape)
-    for p in points_spine: seeds[p[0], p[1], p[2]] = 1
-    for p in points_hip_joint: seeds[p[0], p[1], p[2]] = 2
-    seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
-    ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
+    # seeds = np.zeros(bones.shape)
+    # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
+    # for p in points_hip_joints: seeds[p[0], p[1], p[2]] = 2
+    # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
+    # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
 
 
