@@ -208,8 +208,18 @@ def processData(datapath, name, outputdir):
         obj = OrganDetection(data3d, voxelsize)
 
         bones_stats = obj.analyzeBones() # in voxels
+        # body = obj.getBody()
+        # fatlessbody = obj.getFatlessBody()
+        # bones = obj.getBones()
+        # lungs = obj.getLungs()
         vessels = obj.getVessels()
         vessels_stats = obj.analyzeVessels() # in voxels
+
+        # ed = sed3.sed3(body); ed.show()
+        # ed = sed3.sed3(fatlessbody); ed.show()
+        # ed = sed3.sed3(bones); ed.show()
+        # ed = sed3.sed3(lungs); ed.show()
+        # ed = sed3.sed3(vessels); ed.show()
 
         del(obj)
 
