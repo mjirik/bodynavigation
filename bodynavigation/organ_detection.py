@@ -134,15 +134,15 @@ def padArray(data, pads, padding_value=0):
     out[tuple(s)] = data
     return out
 
-def polyfit3D(points, dtype=np.int):
+def polyfit3D(points, dtype=np.int, deg=3):
     z, y, x = zip(*points)
     z_new = list(range(z[0], z[-1]+1))
 
-    zz1 = np.polyfit(z, y, 3)
+    zz1 = np.polyfit(z, y, deg)
     f1 = np.poly1d(zz1)
     y_new = f1(z_new)
 
-    zz2 = np.polyfit(z, x, 3)
+    zz2 = np.polyfit(z, x, deg)
     f2 = np.poly1d(zz2)
     x_new = f2(z_new)
 
@@ -563,8 +563,8 @@ class OrganDetection(object):
     def _getVessels(cls, data3d, spacing, bones, bones_stats, contrast_agent=True):
         """
         Tabular value of blood radiodensity is 13-50 HU.
-        When contrast agent is used, it rises to roughly 140+ HU.
-        ??? Vessels are segmentable only if contrast agent was used. ???
+        When contrast agent is used, it rises to roughly 100-140 HU.
+        Vessels are segmentable only if contrast agent was used.
         """
         logger.info("_getVessels")
         points_spine = bones_stats["spine"]
@@ -576,8 +576,12 @@ class OrganDetection(object):
 
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
 
+        VESSEL_THRESHOLD = 110 # 145
+        SPINE_WIDTH = int(25/spacing[2]) # from center
+        SPINE_HEIGHT = int(30/spacing[1]) # from center
+
         if contrast_agent:
-            vessels = data3d > 145
+            vessels = data3d > VESSEL_THRESHOLD
 
             wseeds = bones.astype(np.uint8) # = 1
             wseeds[ scipy.ndimage.morphology.distance_transform_edt(bones == 0, sampling=spacing) > 15 ] = 2
@@ -589,22 +593,48 @@ class OrganDetection(object):
 
             vessels = scipy.ndimage.morphology.binary_fill_holes(vessels)
             vessels = scipy.ndimage.binary_opening(vessels, structure=np.ones((3,3,3)))
+
+            # remove vessels outside of detected spine z-range
+            vessels[:spine_zmin,:,:] = 0
+            vessels[spine_zmax+1:,:,:] = 0
+            #ed = sed3.sed3(data3d, contour=vessels); ed.show()
+
+            # remove liver and similar half-segmented organs
+            cut_rad = (150, 70); cut_rad = (cut_rad[0]/spacing[1], cut_rad[1]/spacing[2])
+            wseeds = np.zeros(vessels.shape, dtype=np.int8)
+            for z in range(spine_zmin,spine_zmax+1):
+                vs = vessels[z,:,:]; sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
+
+                rr, cc = skimage.draw.ellipse(sc[0]-cut_rad[0]-SPINE_HEIGHT, sc[1], \
+                    cut_rad[0], cut_rad[1], shape=wseeds[z,:,:].shape)
+                mask = np.zeros(wseeds[z,:,:].shape); mask[rr, cc] = 1
+                wseeds[z, mask == 1] = 1
+
+                rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], \
+                    shape=wseeds[z,:,:].shape)
+                mask = np.zeros(wseeds[z,:,:].shape); mask[rr, cc] = 1
+                mask[int(sc[0]):,:] = 0
+                wseeds[z, mask != 1] = 2
+            # ed = sed3.sed3(data3d, seeds=wseeds, contour=vessels); ed.show()
+
+            r = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
+            vessels = r == 1
             #ed = sed3.sed3(data3d, contour=vessels); ed.show()
 
             # find circles near spine
-            rad = np.asarray([ 7,8,9,10,11,12,13,14 ], dtype=np.float32)
+            rad = np.asarray(list(range(9,12)), dtype=np.float32)
             rad = list( rad / float((spacing[1]+spacing[2])/2.0) )
             wseeds = np.zeros(vessels.shape, dtype=np.int8)
             for z in range(spine_zmin,spine_zmax+1):
-                sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
-                vs = vessels[z,:,:]
-                #vsl = skimage.measure.label(vs, background=0)
+                vs = vessels[z,:,:]; sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
+                spine_height = sc[0]-SPINE_HEIGHT
 
                 # get circle centers
                 edge = skimage.feature.canny(vs, sigma=0.0)
                 #ed = sed3.sed3(np.expand_dims(edge.astype(np.float), axis=0)); ed.show()
-                r = skimage.transform.hough_circle(edge, radius=rad) > 0.4
-                r = np.sum(r, axis=0) != 0
+                r = skimage.transform.hough_circle(edge, radius=rad)
+                #ed = sed3.sed3(r, contour=np.expand_dims(vs, axis=0)); ed.show()
+                r = np.sum(r > 0.35, axis=0) != 0
                 r[ vs == 0 ] = 0 # remove centers outside segmented vessels
                 r = scipy.ndimage.binary_closing(r, structure=np.ones((10,10))) # connect near centers
                 #ed = sed3.sed3(np.expand_dims(r.astype(np.float), axis=0), contour=np.expand_dims(vs, axis=0)); ed.show()
@@ -614,25 +644,21 @@ class OrganDetection(object):
                 rl = skimage.measure.label(r, background=0)
                 centers = scipy.ndimage.measurements.center_of_mass(r, rl, range(1, np.max(rl)+1))
 
-                # use only circle centers that are near spine
+                # use only circle centers that are near spine, and are in vessels
                 for i, c in enumerate(centers):
                     dst_y = abs(sc[0]*spacing[1]-c[0]*spacing[1])
                     dst_x = abs(sc[1]*spacing[2]-c[1]*spacing[2])
                     dst2 = dst_y**2 + dst_x**2
-                    ok = True
-                    if dst2 > 50**2: ok = False
-                    if sc[0]-(20/spacing[1]) <= c[0]: ok = False
-
-                    if ok: wseeds[z,int(c[0]),int(c[1])] = 1
+                    if vs[int(c[0]),int(c[1])] == 0: continue # must be inside segmented vessels
+                    elif dst2 > 70**2: continue # max dist from spine
+                    elif c[0] > spine_height: continue # no lower then spine height
+                    else: wseeds[z,int(c[0]),int(c[1])] = 1
 
             # convolution with vertical kernel to remove seeds in vessels not going up-down
-            kernel = np.ones((9,1,1))
+            kernel = np.ones((15,1,1))
             r = scipy.ndimage.convolve(vessels.astype(np.uint32), kernel)
-            wseeds[ r == 0 ] = 0
-
-            # remove vessels outside of detected spine z-range
-            vessels[:spine_zmin,:,:] = 0
-            vessels[spine_zmax:,:,:] = 0
+            #ed = sed3.sed3(r, contour=vessels); ed.show()
+            wseeds[ r < np.sum(kernel) ] = 0
 
             # remove everything thats not connected to at least one seed
             vessels = skimage.measure.label(vessels, background=0)
@@ -642,6 +668,7 @@ class OrganDetection(object):
             vessels = (vessels == -1); del(tmp)
 
             # watershed
+            wseeds_base = wseeds.copy() # only circle centers
             wseeds = scipy.ndimage.binary_dilation(wseeds.astype(np.bool), structure=np.ones((1,3,3))).astype(np.int8)
             cut_rad = (90, 70); cut_rad = (cut_rad[0]/spacing[1], cut_rad[1]/spacing[2])
             for z in range(spine_zmin,spine_zmax+1):
@@ -655,6 +682,13 @@ class OrganDetection(object):
             r = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
             #ed = sed3.sed3(data3d, seeds=wseeds, contour=r); ed.show()
             vessels = r == 1
+
+            # remove everything thats not connected to at least one seed, again (just to be safe)
+            vessels = skimage.measure.label(vessels, background=0)
+            tmp = vessels.copy(); tmp[ wseeds_base == 0 ] = 0
+            for l in np.unique(tmp)[1:]:
+                vessels[ vessels == l ] = -1
+            vessels = (vessels == -1); del(tmp)
 
             return vessels
 
@@ -900,8 +934,8 @@ if __name__ == "__main__":
             help='path to data dir')
     parser.add_argument('-r','--readydir', default=None,
             help='path to ready data dir (for testing)')
-    parser.add_argument("--dump", action="store_true",
-            help='dump all data to ready_data dir and exit')
+    parser.add_argument("--dump", default=None,
+            help='dump all processed data to path and exit')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -982,20 +1016,20 @@ if __name__ == "__main__":
         del(bones)
         del(vessels)
 
-    if args.dump:
+    if args.dump is not None:
         print("Dumping all data to ready_dir")
-        readydir = "./ready_dir"
-        if not os.path.exists(readydir): os.makedirs(readydir)
+        dumpdir = os.path.abspath(args.dump)
+        if not os.path.exists(dumpdir): os.makedirs(dumpdir)
 
-        data3d_p = os.path.join(readydir, "data3d.dcm")
-        body_p = os.path.join(readydir, "body.dcm")
-        fatlessbody_p = os.path.join(readydir, "fatlessbody.dcm")
-        lungs_p = os.path.join(readydir, "lungs.dcm")
-        bones_p = os.path.join(readydir, "bones.dcm")
-        vessels_p = os.path.join(readydir, "vessels.dcm")
+        data3d_p = os.path.join(dumpdir, "data3d.dcm")
+        body_p = os.path.join(dumpdir, "body.dcm")
+        fatlessbody_p = os.path.join(dumpdir, "fatlessbody.dcm")
+        lungs_p = os.path.join(dumpdir, "lungs.dcm")
+        bones_p = os.path.join(dumpdir, "bones.dcm")
+        vessels_p = os.path.join(dumpdir, "vessels.dcm")
 
-        bones_stats_p = os.path.join(readydir, "bones_stats.json")
-        vessels_stats_p = os.path.join(readydir, "vessels_stats.json")
+        bones_stats_p = os.path.join(dumpdir, "bones_stats.json")
+        vessels_stats_p = os.path.join(dumpdir, "vessels_stats.json")
 
         data3d = obj.data3d
         spacing = list(obj.spacing)
@@ -1044,7 +1078,7 @@ if __name__ == "__main__":
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
-    # ed = sed3.sed3(data3d, contour=vessels); ed.show()
+    ed = sed3.sed3(data3d, contour=vessels); ed.show()
 
     # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]
@@ -1055,14 +1089,14 @@ if __name__ == "__main__":
     # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
     # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
-    vessels_stats = obj.analyzeVessels()
-    points_aorta = vessels_stats["aorta"];  points_vena_cava = vessels_stats["vena_cava"]
+    # vessels_stats = obj.analyzeVessels()
+    # points_aorta = vessels_stats["aorta"];  points_vena_cava = vessels_stats["vena_cava"]
 
-    seeds = np.zeros(vessels.shape)
-    for p in points_aorta: seeds[p[0], p[1], p[2]] = 1
-    for p in points_vena_cava: seeds[p[0], p[1], p[2]] = 2
-    seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
-    ed = sed3.sed3(data3d, contour=vessels, seeds=seeds); ed.show()
+    # seeds = np.zeros(vessels.shape)
+    # for p in points_aorta: seeds[p[0], p[1], p[2]] = 1
+    # for p in points_vena_cava: seeds[p[0], p[1], p[2]] = 2
+    # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
+    # ed = sed3.sed3(data3d, contour=vessels, seeds=seeds); ed.show()
 
 
 
