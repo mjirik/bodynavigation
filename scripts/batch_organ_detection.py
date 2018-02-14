@@ -214,6 +214,8 @@ def processData(datapath, name, outputdir):
         # lungs = obj.getLungs()
         vessels = obj.getVessels()
         vessels_stats = obj.analyzeVessels() # in voxels
+        aorta = obj.getAorta()
+        venacava = obj.getVenaCava()
 
         # ed = sed3.sed3(body); ed.show()
         # ed = sed3.sed3(fatlessbody); ed.show()
@@ -229,7 +231,9 @@ def processData(datapath, name, outputdir):
                 [interpolatePointsZ(vessels_stats["aorta"], step=0.1), (0,255,255), None, 1],
                 [interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), (255,0,255), None, 1]
             ], volume_sets = [ \
-                [vessels, (0,0,255,100)]
+                [vessels, (0,0,255,50)],
+                [aorta, (0,255,255,100)],
+                [venacava, (255,0,255,100)]
             ])
 
         img.save(os.path.join(outputdir, "%s.png" % name))

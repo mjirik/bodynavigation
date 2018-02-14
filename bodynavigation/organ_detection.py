@@ -127,7 +127,7 @@ def padArray(data, pads, padding_value=0):
     Pads for 3D data: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
     """
     full_shape = np.asarray(data.shape) + np.asarray([ np.sum(pads[dim]) for dim in range(len(pads))])
-    out = np.zeros(full_shape) + padding_value
+    out = np.zeros(full_shape, dtype=data.dtype) + padding_value
     s = []
     for dim in range(len(data.shape)):
         s.append( slice( pads[dim][0], out.shape[dim]-pads[dim][1] ) )
@@ -148,6 +148,21 @@ def polyfit3D(points, dtype=np.int, deg=3):
 
     points = [ tuple(np.asarray([z_new[i], y_new[i], x_new[i]]).astype(dtype)) for i in range(len(z_new)) ]
     return points
+
+def growRegion(region, mask, iterations=1):
+    region[ mask == 0 ] = 0
+
+    kernel1 = np.zeros((3,3,3), dtype=np.bool)
+    kernel1[:,1,1] = 1; kernel1[1,1,:] = 1; kernel1[1,:,1] = 1
+    kernel2 = np.zeros((3,3,3), dtype=np.bool)
+    kernel2[:,1,1] = 1; kernel2[1,:,:] = 1
+    for i in range(iterations):
+        if np.sum(region) == 0: break
+        kernel = kernel1 if i%2 == 0 else kernel2
+        region = scipy.ndimage.binary_dilation(region, structure=kernel)
+        region[ mask == 0 ] = 0
+
+    return region
 
 #
 # Main class
@@ -204,6 +219,8 @@ class OrganDetection(object):
             "lungs":None,
             "bones":None,
             "vessels":None,
+            "aorta":None,
+            "venacava":None,
             }
 
         # statistics and models
@@ -328,7 +345,7 @@ class OrganDetection(object):
             spacing = np.asarray([ voxelsize[0], 1, 1 ])
             logger.debug("Data3D shape resize: %s -> %s; New voxelsize: %s" % (str(data3d.shape), str(tuple(new_shape)), str((voxelsize[0],1,1))))
             data3d = skimage.transform.resize(
-                data3d, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
+                data3d, new_shape, order=3, clip=True, preserve_range=True,
                 ).astype(np.int16)
 
         return data3d, spacing, cut_shape, padding
@@ -343,8 +360,10 @@ class OrganDetection(object):
         Returns data to the same shape as orginal data used in creation of class object
         """
         out = skimage.transform.resize(
-            data, self.cut_shape, order=3, mode="reflect", clip=True, preserve_range=True
+            data, self.cut_shape, order=3, clip=True, preserve_range=True
             )
+        if data.dtype in [np.bool,np.int,np.uint]:
+            out = np.round(out).astype(data.dtype)
         out = padArray(out, self.padding, padding_value=padding_value)
         return out
 
@@ -371,6 +390,12 @@ class OrganDetection(object):
             elif part == "vessels":
                 data = self._getVessels(self.data3d, self.spacing, \
                     self.getBones(raw=True), self.analyzeBones(raw=True) )
+            elif part == "aorta":
+                data = self._getAorta(self.data3d, self.spacing, self.getVessels(raw=True), \
+                    self.analyzeVessels(raw=True) )
+            elif part == "venacava":
+                data = self._getVenaCava(self.data3d, self.spacing, self.getVessels(raw=True), \
+                    self.analyzeVessels(raw=True) )
 
             self.masks_comp[part] = compressArray(data)
 
@@ -391,6 +416,12 @@ class OrganDetection(object):
 
     def getVessels(self, raw=False):
         return self.getPart("vessels", raw=raw)
+
+    def getAorta(self, raw=False):
+        return self.getPart("aorta", raw=raw)
+
+    def getVenaCava(self, raw=False):
+        return self.getPart("venacava", raw=raw)
 
     #
     # Segmentation algorithms
@@ -702,6 +733,40 @@ class OrganDetection(object):
             # - convolution with kernel with very big z-axis
             # - combine last two steps
             # - points_spine - select close circles to spine
+
+    @classmethod
+    def _getAorta(cls, data3d, spacing, vessels, vessels_stats):
+        logger.info("_getAorta")
+        points = vessels_stats["aorta"]
+        if len(points) == 0 or np.sum(vessels) == 0:
+            logger.warning("Couldn't find aorta volume!")
+            return np.zeros(vessels.shape, dtype=np.bool)
+
+        VESSEL_RADIUS = 12
+
+        aorta = np.zeros(vessels.shape, dtype=np.bool)
+        for p in points:
+            aorta[p[0],p[1],p[2]] = 1
+        aorta = growRegion(aorta, vessels, iterations=VESSEL_RADIUS)
+
+        return aorta
+
+    @classmethod
+    def _getVenaCava(cls, data3d, spacing, vessels, vessels_stats):
+        logger.info("_getVenaCava")
+        points = vessels_stats["vena_cava"]
+        if len(points) == 0 or np.sum(vessels) == 0:
+            logger.warning("Couldn't find venacava volume!")
+            return np.zeros(vessels.shape, dtype=np.bool)
+
+        VESSEL_RADIUS = 12
+
+        venacava = np.zeros(vessels.shape, dtype=np.bool)
+        for p in points:
+            venacava[p[0],p[1],p[2]] = 1
+        venacava = growRegion(venacava, vessels, iterations=VESSEL_RADIUS)
+
+        return venacava
 
     ################
 
@@ -1027,6 +1092,8 @@ if __name__ == "__main__":
         lungs_p = os.path.join(dumpdir, "lungs.dcm")
         bones_p = os.path.join(dumpdir, "bones.dcm")
         vessels_p = os.path.join(dumpdir, "vessels.dcm")
+        aorta_p = os.path.join(dumpdir, "aorta.dcm")
+        venacava_p = os.path.join(dumpdir, "venacava.dcm")
 
         bones_stats_p = os.path.join(dumpdir, "bones_stats.json")
         vessels_stats_p = os.path.join(dumpdir, "vessels_stats.json")
@@ -1057,6 +1124,14 @@ if __name__ == "__main__":
         io3d.datawriter.write(vessels, vessels_p, 'dcm', {'voxelsize_mm': spacing})
         del(vessels)
 
+        aorta = obj.getAorta(raw=True).astype(np.int8)
+        io3d.datawriter.write(aorta, aorta_p, 'dcm', {'voxelsize_mm': spacing})
+        del(aorta)
+
+        venacava = obj.getVenaCava(raw=True).astype(np.int8)
+        io3d.datawriter.write(venacava, venacava_p, 'dcm', {'voxelsize_mm': spacing})
+        del(venacava)
+
         with open(bones_stats_p, 'w') as fp:
             json.dump(obj.analyzeBones(raw=True), fp, sort_keys=True)
 
@@ -1073,12 +1148,16 @@ if __name__ == "__main__":
     # bones = obj.getBones()
     # lungs = obj.getLungs()
     vessels = obj.getVessels()
+    aorta = obj.getAorta()
+    venacava = obj.getVenaCava()
 
     # ed = sed3.sed3(data3d, contour=body); ed.show()
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
-    ed = sed3.sed3(data3d, contour=vessels); ed.show()
+    vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
+    vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
+    ed = sed3.sed3(data3d, contour=vc); ed.show()
 
     # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]
