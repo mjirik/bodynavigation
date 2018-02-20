@@ -310,6 +310,7 @@ class OrganDetection(object):
             data3d[z,:,:][mask] = ( \
                 ((data3d[z,:,:][mask].astype(np.float)+300)*dst[mask])-300 \
                 ).astype(np.int16)
+        # ed = sed3.sed3(data3d); ed.show()
 
         # cut off empty parts of data
         logger.debug("Removing array padding")
@@ -319,6 +320,7 @@ class OrganDetection(object):
         data3d = cropArray(data3d, padding)
         body = cropArray(body, padding)
         cut_shape = data3d.shape # without padding
+        # ed = sed3.sed3(data3d); ed.show()
 
         # size norming based on body size on xy axis
         # this just recalculates voxelsize (doesnt touch actual data)
@@ -346,9 +348,10 @@ class OrganDetection(object):
             spacing = np.asarray([ voxelsize[0], 1, 1 ])
             logger.debug("Data3D shape resize: %s -> %s; New voxelsize: %s" % (str(data3d.shape), str(tuple(new_shape)), str((voxelsize[0],1,1))))
             data3d = skimage.transform.resize(
-                data3d, new_shape, order=3, clip=True, preserve_range=True,
+                data3d, new_shape, order=3, mode="reflect", clip=True, preserve_range=True,
                 ).astype(np.int16)
 
+        # ed = sed3.sed3(data3d); ed.show()
         return data3d, spacing, cut_shape, padding
 
     def toOutputCoordinates(self, vector, mm=False):
@@ -361,7 +364,7 @@ class OrganDetection(object):
         Returns data to the same shape as orginal data used in creation of class object
         """
         out = skimage.transform.resize(
-            data, self.cut_shape, order=3, clip=True, preserve_range=True
+            data, self.cut_shape, order=3, mode="reflect", clip=True, preserve_range=True
             )
         if data.dtype in [np.bool,np.int,np.uint]:
             out = np.round(out).astype(data.dtype)
@@ -902,7 +905,7 @@ class OrganDetection(object):
             right_c[1] = right_c[1]+right_sep
 
             # try to detect spine center
-            if (left_v/total_v < 0.2) or (right_v/total_v < 0.2):
+            if ((left_v/total_v < 0.2) or (right_v/total_v < 0.2)) and (center_v != 0):
                 points_spine.append( (z, int(center_c[0]), int(center_c[1])) )
 
             # try to detect hip joints
