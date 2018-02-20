@@ -217,6 +217,7 @@ class OrganDetection(object):
             "body":None,
             "fatlessbody":None,
             "lungs":None,
+            "abdomen":None,
             "bones":None,
             "vessels":None,
             "aorta":None,
@@ -383,7 +384,10 @@ class OrganDetection(object):
             elif part == "fatlessbody":
                 data = self._getFatlessBody(self.data3d, self.spacing, self.getBody(raw=True))
             elif part == "lungs":
-                data = self._getLungs(self.data3d, self.spacing, self.getBody(raw=True))
+                data = self._getLungs(self.data3d, self.spacing, self.getFatlessBody(raw=True))
+            elif part == "abdomen":
+                data = self._getAbdomen(self.data3d, self.spacing, self.getLungs(raw=True), \
+                    self.getFatlessBody(raw=True))
             elif part == "bones":
                 data = self._getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getLungs(raw=True) )
@@ -410,6 +414,9 @@ class OrganDetection(object):
 
     def getLungs(self, raw=False):
         return self.getPart("lungs", raw=raw)
+
+    def getAbdomen(self, raw=False):
+        return self.getPart("abdomen", raw=raw)
 
     def getBones(self, raw=False):
         return self.getPart("bones", raw=raw)
@@ -457,14 +464,14 @@ class OrganDetection(object):
         return body
 
     @classmethod
-    def _getFatlessBody(cls, data3d, spacing, body):
+    def _getFatlessBody(cls, data3d, spacing, body): # TODO - ignore nipples when creating convex hull
         """
         Returns convex hull of body without fat and skin
         """
         logger.info("_getFatlessBody")
         # remove fat
         fatless = (data3d > 0)
-        fatless[ (body == 1) & (data3d < -500) ] = 1 # body cavities
+        fatless[ (body == 1) & (data3d < -300) ] = 1 # body cavities
         fatless = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask([5,5,5], spacing=spacing))
         # save convex hull along z-axis
         for z in range(fatless.shape[0]):
@@ -477,57 +484,118 @@ class OrganDetection(object):
         return fatless
 
     @classmethod
-    def _getLungs(cls, data3d, spacing, body):
+    def _getLungs(cls, data3d, spacing, fatlessbody):
         """ Expects lungs to actually be in data """
         logger.info("_getLungs")
-        lungs = data3d < -500
-        lungs[ body == 0 ] = 0
+        lungs = data3d < -300
+        lungs[ fatlessbody == 0 ] = 0
         lungs = binaryFillHoles(lungs, z_axis=True)
 
-        # leave only biggest object in data (2 if they are about the same size)
+        # remove all blobs that don't go through lower 1/4 of body
         lungs = skimage.measure.label(lungs, background=0)
+        valid_labels = []
+        for z in range(data3d.shape[0]):
+            if np.sum(lungs[z,:,:]) == 0: continue
+            pads = getDataPadding(fatlessbody[z,:,:])
+            height = lungs[z,:,:].shape[0]-pads[0][1]-pads[0][0]
+            if height == 0: continue
+            unique = np.unique(lungs[z,int(pads[0][0]+height*(3/4)):,:])[1:]
+            for u in unique:
+                if u not in valid_labels:
+                    valid_labels.append(u)
+        for u in valid_labels:
+            lungs[ lungs == u ] = -1
+        lungs = lungs == -1
+        #ed = sed3.sed3(data3d, contour=lungs); ed.show()
+
+        # try to separate connected intestines
+        wseeds = np.zeros(data3d.shape, dtype=np.uint8)
+        for z in range(data3d.shape[0]):
+            if np.sum(lungs[z,:,:]) == 0: continue
+            pads = getDataPadding(fatlessbody[z,:,:])
+            height = lungs[z,:,:].shape[0]-pads[0][1]-pads[0][0]
+            # cavities that are in lower 1/3 of slice are lungs
+            wseeds[z,int(pads[0][0]+height*(2/3)):,:] = 1
+            wseeds[z, lungs[z,:,:] == 0 ] = 0
+            # slices that have cavities only in upper 2/3 of slice are intestines
+            # - to ignore trachea slices, use only lower half of z-axis
+            # - do not put any seeds in slices transitioning from lungs to intestines
+            if (z > data3d.shape[0]/2) and (np.sum(wseeds[max(0,z-5):(z+1),:,:] == 1) == 0) and \
+                (np.sum(lungs[z,int(pads[0][0]+height*(2/3)):,:]) == 0):
+                    wseeds[z,:int(pads[0][0]+height*(2/3)),:] = 2
+                    wseeds[z, lungs[z,:,:] == 0 ] = 0
+            # grow seeds into segmented objects in this slice
+            if np.sum(wseeds[z,:,:]) == 0: continue
+            slbl = skimage.measure.label(lungs[z,:,:], background=0)
+            unique = np.unique(slbl)[1:]
+            for u in unique:
+                s = np.unique(wseeds[z, slbl == u ])[1:]
+                if len(s) == 1:
+                    wseeds[z, slbl == u ] = s[0]
+        #ed = sed3.sed3(data3d, contour=lungs, seeds=wseeds); ed.show()
+        lungs = skimage.morphology.watershed(lungs, wseeds, mask=lungs)
+        #ed = sed3.sed3(data3d, contour=lungs, seeds=wseeds); ed.show()
+        lungs = lungs == 1
+
+        # leave only lungs in data (1st and 2nd biggest objects, with similar centroids)
+        lungs = skimage.measure.label(lungs, background=0)
+        #ed = sed3.sed3(lungs); ed.show()
         unique, counts = np.unique(lungs, return_counts=True)
         unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
+        centroids = scipy.ndimage.measurements.center_of_mass(lungs, lungs, unique)
         if len(unique) == 0:
             logger.warning("Couldn't find lungs!")
             return np.zeros(data3d.shape, dtype=np.bool)
 
-        # get 2 biggest blobs
         idx_1st = list(counts).index(max(counts))
         count_1st = counts[idx_1st]
+        centroid_1st = centroids[idx_1st]
+
+        idx_2nd = None
+        count_2nd = 0
+        centroid_2nd = None
         if len(unique) >= 2:
             counts[idx_1st] = 0
             idx_2nd = list(counts).index(max(counts))
             count_2nd = counts[idx_2nd]
             counts[idx_1st] = count_1st
-        else:
-            count_2nd = 0
+            centroid_2nd = centroids[idx_2nd]
 
-        # leave only lungs in data
+        #print(count_1st, count_2nd)
         lungs[ lungs == unique[idx_1st] ] = -1
         if len(unique) >= 2:
-            if count_2nd/count_1st > 0.7: # if second biggest is at least 70% as big
-                lungs[ lungs == unique[idx_2nd] ] = -1
+            ok = True
+            # if second biggest is not at least 40% as big as first -> bad
+            if count_2nd/count_1st < 0.4: ok = False
+            # if centroids are too distant at z and y axis -> bad
+            if (centroid_1st[0]-centroid_2nd[0])*spacing[0] > 50: ok = False
+            if (centroid_1st[1]-centroid_2nd[1])*spacing[1] > 50: ok = False
+
+            if ok: lungs[ lungs == unique[idx_2nd] ] = -1
         lungs = lungs == -1
 
         # remove trachea (only the part sticking out)
         pads = getDataPadding(lungs)
-        s = ( slice(pads[0][0],lungs.shape[0]-pads[0][1]), \
-            slice(pads[1][0],lungs.shape[1]-pads[1][1]), \
-            slice(pads[2][0],lungs.shape[2]-pads[2][1]) )
-        lungs[s] = binaryClosing(lungs[s], structure=getSphericalMask([10,]*3, spacing=spacing))
-        tmp = lungs.copy()
-        tmp[s] = scipy.ndimage.morphology.binary_opening(tmp[s], \
-            structure=getSphericalMask([30,]*3, spacing=spacing))
-        lungs[:getDataPadding(tmp)[0][0],:,:] = 0
-
-        # set minimal valid volume of lungs
-        lungs_vol = (spacing[0]*spacing[1]*spacing[2])*np.sum(lungs)
-        if lungs_vol < 50**3: # mm^3
-            logger.warning("Couldn't find lungs!")
-            return np.zeros(data3d.shape, dtype=np.bool)
+        lungs_depth_mm = (lungs.shape[0]-pads[0][1]-pads[0][0])*spacing[0]
+        if lungs_depth_mm > 200: # if lungs are longer then 200 mm on z-axis -> trying to remove trachea should not lungs from abdomen-only data
+            pads = getDataPadding(lungs)
+            s = ( slice(pads[0][0],lungs.shape[0]-pads[0][1]), \
+                slice(pads[1][0],lungs.shape[1]-pads[1][1]), \
+                slice(pads[2][0],lungs.shape[2]-pads[2][1]) )
+            tmp = lungs.copy()
+            tmp[s] = binaryClosing(tmp[s], structure=getSphericalMask([10,]*3, spacing=spacing))
+            tmp[s] = scipy.ndimage.morphology.binary_opening(tmp[s], \
+                structure=getSphericalMask([30,]*3, spacing=spacing))
+            lungs[:getDataPadding(tmp)[0][0],:,:] = 0
 
         return lungs
+
+    @classmethod
+    def _getAbdomen(cls, data3d, spacing, lungs, fatlessbody): # TODO
+        """ Helps with segmentation of organs in abdomen """
+        logger.error("_getAbdomen() is not implemented yet")
+        return np.zeros(data3d.shape)
+        # bodynav - get_diaphragm_mask might help
 
     @classmethod
     def _getBones(cls, data3d, spacing, fatless, lungs):

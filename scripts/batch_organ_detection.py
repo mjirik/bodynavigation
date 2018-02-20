@@ -199,7 +199,13 @@ def interpolatePointsZ(points, step=0.1):
     points = [ tuple([z_new[i], y_new[i], x_new[i]]) for i in range(len(z_new)) ]
     return points
 
-def processData(datapath, name, outputdir):
+def getRGBA(idx, a=255):
+    """ idx: 0-9 """
+    colors = [ (255,0,0,a), (255,106,0,a), (255,213,0,a), (191,255,0,a), (0,255,21,a), \
+        (0,255,234,a), (0,170,255,a), (43,0,255,a), (255,0,255,a), (255,0,149,a) ]
+    return colors[idx]
+
+def processData(datapath, name, outputdir, parts = []):
     try:
         print("Processing: ", datapath)
 
@@ -207,35 +213,43 @@ def processData(datapath, name, outputdir):
         voxelsize = metadata["voxelsize_mm"]
         obj = OrganDetection(data3d, voxelsize)
 
-        bones_stats = obj.analyzeBones() # in voxels
-        # body = obj.getBody()
-        # fatlessbody = obj.getFatlessBody()
-        # bones = obj.getBones()
-        # lungs = obj.getLungs()
-        vessels = obj.getVessels()
-        vessels_stats = obj.analyzeVessels() # in voxels
-        aorta = obj.getAorta()
-        venacava = obj.getVenaCava()
+        point_sets = []; volume_sets = []
+        VOLUME_APLHA = 100
 
-        # ed = sed3.sed3(body); ed.show()
-        # ed = sed3.sed3(fatlessbody); ed.show()
-        # ed = sed3.sed3(bones); ed.show()
-        # ed = sed3.sed3(lungs); ed.show()
-        # ed = sed3.sed3(vessels); ed.show()
+        if "body" in parts:
+            body = obj.getBody();# body = obj.getBody()
+            volume_sets.append([body, getRGBA(4, a=VOLUME_APLHA)])
+        if "fatlessbody" in parts:
+            fatlessbody = obj.getFatlessBody();# ed = sed3.sed3(fatlessbody); ed.show()
+            volume_sets.append([fatlessbody, getRGBA(1, a=VOLUME_APLHA)])
+        if "lungs" in parts:
+            lungs = obj.getLungs();# ed = sed3.sed3(lungs); ed.show()
+            volume_sets.append([lungs, getRGBA(2, a=VOLUME_APLHA)])
+        if "abdomen" in parts:
+            abdomen = obj.getAbdomen();# ed = sed3.sed3(abdomen); ed.show()
+            volume_sets.append([abdomen, getRGBA(3, a=VOLUME_APLHA)])
+        if "bones" in parts:
+            bones = obj.getBones(); # ed = sed3.sed3(bones); ed.show()
+            volume_sets.append([bones, getRGBA(0, a=VOLUME_APLHA)])
+        if "bones_stats" in parts:
+            bones_stats = obj.analyzeBones()
+            point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), getRGBA(0, a=255), None, 1])
+            point_sets.append([bones_stats["hip_joints"], (0,255,0,255), (0,0,0,255), 7])
+        if "vessels" in parts:
+            vessels = obj.getVessels(); # ed = sed3.sed3(vessels); ed.show()
+            aorta = obj.getAorta(); # ed = sed3.sed3(aorta); ed.show()
+            venacava = obj.getVenaCava(); # ed = sed3.sed3(venacava); ed.show()
+            volume_sets.append([vessels, getRGBA(5, a=VOLUME_APLHA)])
+            volume_sets.append([aorta, getRGBA(6, a=VOLUME_APLHA)])
+            volume_sets.append([venacava, getRGBA(7, a=VOLUME_APLHA)])
+        if "vessels_stats" in parts:
+            vessels_stats = obj.analyzeVessels() # in voxels
+            point_sets.append([interpolatePointsZ(vessels_stats["aorta"], step=0.1), getRGBA(6, a=255), None, 1])
+            point_sets.append([interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), getRGBA(7, a=255), None, 1])
 
         del(obj)
 
-        img = drawPointsTo3DData(data3d, voxelsize, point_sets = [ \
-                [interpolatePointsZ(bones_stats["spine"], step=0.1), (255,0,0), None, 1],
-                [bones_stats["hip_joints"], (0,255,0), (0,0,0), 7],
-                [interpolatePointsZ(vessels_stats["aorta"], step=0.1), (0,255,255), None, 1],
-                [interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), (255,0,255), None, 1]
-            ], volume_sets = [ \
-                [vessels, (0,0,255,50)],
-                [aorta, (0,255,255,100)],
-                [venacava, (255,0,255,100)]
-            ])
-
+        img = drawPointsTo3DData(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
         img.save(os.path.join(outputdir, "%s.png" % name))
         #img.show()
 
@@ -260,6 +274,8 @@ def main():
             help='path to output dir')
     parser.add_argument('-t','--threads', type=int, default=1,
             help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 2.5GB, big ones can go over 8GB.')
+    parser.add_argument('-p','--parts', default="bones_stats,vessels,vessels_stats",
+            help='Body parts to process sparated by ",", defaults: "bones_stats,vessels,vessels_stats"')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -278,10 +294,12 @@ def main():
     if not os.path.exists(outputdir):
         os.makedirs(outputdir)
 
+    parts = [ s.strip().lower() for s in args.parts.split(",") ]
+
     inputs = []
     for dirname in sorted(next(os.walk(args.datadirs))[1]):
         datapath = os.path.abspath(os.path.join(args.datadirs, dirname))
-        inputs.append([datapath, dirname, outputdir])
+        inputs.append([datapath, dirname, outputdir, parts])
 
     pool = Pool(processes=args.threads)
     pool.map(processThread, inputs)
