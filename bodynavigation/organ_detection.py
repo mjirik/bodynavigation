@@ -220,8 +220,9 @@ class OrganDetection(object):
             "body":None,
             "fatlessbody":None,
             "lungs":None,
-            "abdomen":None,
+            "diaphragm":None,
             "bones":None,
+            "abdomen":None,
             "vessels":None,
             "aorta":None,
             "venacava":None,
@@ -442,12 +443,14 @@ class OrganDetection(object):
                 data = self._getFatlessBody(self.data3d, self.spacing, self.getBody(raw=True))
             elif part == "lungs":
                 data = self._getLungs(self.data3d, self.spacing, self.getFatlessBody(raw=True))
-            elif part == "abdomen":
-                data = self._getAbdomen(self.data3d, self.spacing, self.getLungs(raw=True), \
-                    self.getFatlessBody(raw=True))
+            elif part == "diaphragm":
+                data = self._getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
             elif part == "bones":
                 data = self._getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getLungs(raw=True) )
+            elif part == "abdomen":
+                data = self._getAbdomen(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
+                    self.getDiaphragm(raw=True), self.analyzeBones(raw=True))
             elif part == "vessels":
                 data = self._getVessels(self.data3d, self.spacing, \
                     self.getBones(raw=True), self.analyzeBones(raw=True) )
@@ -472,11 +475,14 @@ class OrganDetection(object):
     def getLungs(self, raw=False):
         return self.getPart("lungs", raw=raw)
 
-    def getAbdomen(self, raw=False):
-        return self.getPart("abdomen", raw=raw)
+    def getDiaphragm(self, raw=False):
+        return self.getPart("diaphragm", raw=raw)
 
     def getBones(self, raw=False):
         return self.getPart("bones", raw=raw)
+
+    def getAbdomen(self, raw=False):
+        return self.getPart("abdomen", raw=raw)
 
     def getVessels(self, raw=False):
         return self.getPart("vessels", raw=raw)
@@ -528,7 +534,7 @@ class OrganDetection(object):
         logger.info("_getFatlessBody")
         # remove fat
         fatless = (data3d > 0)
-        fatless[ (body == 1) & (data3d < -300) ] = 1 # body cavities
+        fatless[ (body == 1) & (data3d < -500) ] = 1 # body cavities
         fatless = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask([5,5,5], spacing=spacing))
         # save convex hull along z-axis
         for z in range(fatless.shape[0]):
@@ -648,11 +654,59 @@ class OrganDetection(object):
         return lungs
 
     @classmethod
-    def _getAbdomen(cls, data3d, spacing, lungs, fatlessbody): # TODO
-        """ Helps with segmentation of organs in abdomen """
-        logger.error("_getAbdomen() is not implemented yet")
-        return np.zeros(data3d.shape)
-        # bodynav - get_diaphragm_mask might help
+    def _getDiaphragm(cls, data3d, spacing, lungs):
+        """ Returns interpolated shape of Thoracic diaphragm (continues outsize of body) """
+        logger.info("_getDiaphragm")
+        diaphragm = scipy.ndimage.filters.sobel(lungs.astype(np.int16), axis=0) < -10
+
+        # create diaphragm heightmap
+        heightmap = np.zeros((diaphragm.shape[1], diaphragm.shape[2]), dtype=np.float)
+        lungs_stop = lungs.shape[0]-getDataPadding(lungs)[0][1]
+        diaphragm_start = max(0, lungs_stop - int(100/spacing[0]))
+        for y in range(diaphragm.shape[1]):
+            for x in range(diaphragm.shape[2]):
+                if np.sum(diaphragm[:,y,x]) == 0:
+                    heightmap[y,x] = np.nan
+                else:
+                    tmp = diaphragm[:,y,x][::-1]
+                    z = len(tmp) - np.argmax(tmp) - 1
+                    if z < diaphragm_start:
+                        # make sure that diaphragm is not higher then lowest lungs point -100mm
+                        heightmap[y,x] = np.nan
+                    else:
+                        heightmap[y,x] = z
+
+        # interpolate missing values
+        height_median = np.nanmedian(heightmap)
+        x = np.arange(0, heightmap.shape[1])
+        y = np.arange(0, heightmap.shape[0])
+        heightmap = np.ma.masked_invalid(heightmap)
+        xx, yy = np.meshgrid(x, y)
+        x1 = xx[~heightmap.mask]
+        y1 = yy[~heightmap.mask]
+        newarr = heightmap[~heightmap.mask]
+        heightmap = scipy.interpolate.griddata((x1, y1), newarr.ravel(), (xx, yy), \
+            method='linear', fill_value=height_median)
+        #ed = sed3.sed3(np.expand_dims(heightmap, axis=0)); ed.show()
+
+        # 2D heightmap -> 3D diaphragm
+        diaphragm = np.zeros(diaphragm.shape, dtype=np.bool)
+        for y in range(diaphragm.shape[1]):
+            for x in range(diaphragm.shape[2]):
+                z = int(heightmap[y,x])
+                diaphragm[z,y,x] = 1
+
+        # make sure that diaphragm is lower then lungs volume
+        diaphragm[ lungs == 1 ] = 1
+        for y in range(diaphragm.shape[1]):
+            for x in range(diaphragm.shape[2]):
+                tmp = diaphragm[:,y,x][::-1]
+                z = len(tmp) - np.argmax(tmp) - 1
+                diaphragm[:,y,x] = 0
+                diaphragm[z,y,x] = 1
+
+        #ed = sed3.sed3(data3d, seeds=diaphragm); ed.show()
+        return diaphragm
 
     @classmethod
     def _getBones(cls, data3d, spacing, fatless, lungs):
@@ -716,6 +770,27 @@ class OrganDetection(object):
 
         return bones
 
+    @classmethod
+    def _getAbdomen(cls, data3d, spacing, fatlessbody, diaphragm, bones_stats):
+        """ Helpful for segmentation of organs in abdomen """
+        logger.info("_getAbdomen")
+        # define abdomen as fatless volume under diaphragm
+        abdomen = fatlessbody.copy()
+        for y in range(diaphragm.shape[1]):
+            for x in range(diaphragm.shape[2]):
+                tmp = diaphragm[:,y,x][::-1]
+                z = len(tmp) - np.argmax(tmp) - 1
+                abdomen[:z+1,y,x] = 0
+
+        # remove everything under hip joints
+        if len(bones_stats["hip_joints"]) != 0:
+            hips_start = bones_stats["hip_joints"][0][0]
+            abdomen[hips_start:,:,:] = 0
+
+        #ed = sed3.sed3(data3d, contour=abdomen); ed.show()
+        return abdomen
+
+    @classmethod
     def _getVessels(cls, data3d, spacing, bones, bones_stats, contrast_agent=True):
         """
         Tabular value of blood radiodensity is 13-50 HU.
@@ -733,7 +808,7 @@ class OrganDetection(object):
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
 
         VESSEL_THRESHOLD = 110 # 145
-        SPINE_WIDTH = int(25/spacing[2]) # from center
+        #SPINE_WIDTH = int(25/spacing[2]) # from center
         SPINE_HEIGHT = int(30/spacing[1]) # from center
 
         if contrast_agent:
@@ -1153,6 +1228,7 @@ if __name__ == "__main__":
 
     else: # readydir
         obj = OrganDetection.fromDirectory(os.path.abspath(args.readydir))
+        data3d = obj.data3d
 
     if args.dump is not None:
         for part in obj.masks_comp:
@@ -1179,17 +1255,19 @@ if __name__ == "__main__":
     # fatlessbody = obj.getFatlessBody()
     # bones = obj.getBones()
     # lungs = obj.getLungs()
-    vessels = obj.getVessels()
-    aorta = obj.getAorta()
-    venacava = obj.getVenaCava()
+    abdomen = obj.getAbdomen()
+    # vessels = obj.getVessels()
+    # aorta = obj.getAorta()
+    # venacava = obj.getVenaCava()
 
     # ed = sed3.sed3(data3d, contour=body); ed.show()
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
-    vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
-    vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
-    ed = sed3.sed3(data3d, contour=vc); ed.show()
+    ed = sed3.sed3(data3d, contour=abdomen); ed.show()
+    # vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
+    # vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
+    # ed = sed3.sed3(data3d, contour=vc); ed.show()
 
     # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]

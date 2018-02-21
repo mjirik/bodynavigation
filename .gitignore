@@ -1,5 +1,5 @@
 test_data*
-ready_dir*
+READY_DIR*
 scripts/batch_output
 
 # Byte-compiled / optimized / DLL files
