@@ -205,7 +205,7 @@ def getRGBA(idx, a=255):
         (0,255,234,a), (0,170,255,a), (43,0,255,a), (255,0,255,a), (255,0,149,a) ]
     return colors[idx]
 
-def processData(datapath, name, outputdir, parts = []):
+def processData(datapath, name, outputdir, parts = [], dumpdir = None):
     try:
         print("Processing: ", datapath)
 
@@ -247,11 +247,13 @@ def processData(datapath, name, outputdir, parts = []):
             point_sets.append([interpolatePointsZ(vessels_stats["aorta"], step=0.1), getRGBA(6, a=255), None, 1])
             point_sets.append([interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), getRGBA(7, a=255), None, 1])
 
-        del(obj)
-
         img = drawPointsTo3DData(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
         img.save(os.path.join(outputdir, "%s.png" % name))
         #img.show()
+
+        if dumpdir is not None:
+            if not os.path.exists(dumpdir): os.makedirs(dumpdir)
+            obj.toDirectory(dumpdir)
 
     except:
         print("EXCEPTION! SAVING TRACEBACK!")
@@ -276,6 +278,8 @@ def main():
             help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 2.5GB, big ones can go over 8GB.')
     parser.add_argument('-p','--parts', default="bones_stats,vessels,vessels_stats",
             help='Body parts to process sparated by ",", defaults: "bones_stats,vessels,vessels_stats"')
+    parser.add_argument("--dump", default=None,
+            help='dump all processed data to dir in path')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -299,7 +303,9 @@ def main():
     inputs = []
     for dirname in sorted(next(os.walk(args.datadirs))[1]):
         datapath = os.path.abspath(os.path.join(args.datadirs, dirname))
-        inputs.append([datapath, dirname, outputdir, parts])
+        if args.dump is not None:
+            dumpdir = os.path.join(os.path.abspath(args.dump), dirname)
+        inputs.append([datapath, dirname, outputdir, parts, dumpdir])
 
     pool = Pool(processes=args.threads)
     pool.map(processThread, inputs)

@@ -301,14 +301,14 @@ class OrganDetection(object):
 
         for part in self.masks_comp:
             mask_p = os.path.join(path, "%s.dcm" % part)
-            mask = obj.getPart(part, raw=True).astype(np.int8)
+            mask = self.getPart(part, raw=True).astype(np.int8)
             io3d.datawriter.write(mask, mask_p, 'dcm', {'voxelsize_mm': spacing})
             del(mask)
 
         for part in self.stats:
             stats_p = os.path.join(path, "%s.json" % part)
             with open(stats_p, 'w') as fp:
-                json.dump(obj.getStats(part, raw=True), fp, sort_keys=True)
+                json.dump(self.getStats(part, raw=True), fp, sort_keys=True)
 
     def prepareData(self, data3d, voxelsize, size_normalization=True, rescale=True):
         """
