@@ -9,12 +9,14 @@ from builtins import range              # replaces range with xrange
 
 import logging
 logger = logging.getLogger(__name__)
+import traceback
 
 import sys, os
 import io
 import copy
 from operator import itemgetter
 from itertools import groupby
+import json
 
 import numpy as np
 import scipy
@@ -25,7 +27,8 @@ import skimage.morphology
 import skimage.segmentation
 import skimage.feature
 
-import sed3 # for testing
+import io3d
+import sed3
 
 #
 # Utility Functions
@@ -231,8 +234,7 @@ class OrganDetection(object):
             }
 
     @classmethod
-    def fromReadyData(cls, data3d, spacing, body=None, fatlessbody=None, lungs=None, \
-        bones=None, vessels=None, bones_stats=None, vessels_stats=None ):
+    def fromReadyData(cls, data3d, spacing, masks={}, stats={}):
         """ For super fast testing """
         obj = cls()
 
@@ -245,16 +247,68 @@ class OrganDetection(object):
         obj.orig_coord_scale = np.asarray([1,1,1], dtype=np.float)
         obj.orig_coord_intercept = np.asarray([0,0,0], dtype=np.float)
 
-        if body is not None: obj.masks_comp["body"] = compressArray(body)
-        if fatlessbody is not None: obj.masks_comp["fatlessbody"] = compressArray(fatlessbody)
-        if lungs is not None: obj.masks_comp["lungs"] = compressArray(lungs)
-        if bones is not None: obj.masks_comp["bones"] = compressArray(bones)
-        if vessels is not None: obj.masks_comp["vessels"] = compressArray(vessels)
+        for part in masks:
+            if part not in obj.masks_comp:
+                logger.warning("'%s' is not valid mask name!" % part)
+                continue
+            obj.masks_comp[part] = compressArray(masks[part])
 
-        if bones_stats is not None: obj.stats["bones"] = bones_stats
-        if vessels_stats is not None: obj.stats["vessels"] = vessels_stats
+        for part in stats:
+            if part not in obj.stats:
+                logger.warning("'%s' is not valid part stats name!" % part)
+                continue
+            obj.stats[part] = copy.deepcopy(stats[part])
 
         return obj
+
+    @classmethod
+    def fromDirectory(cls, path):
+        logger.info("Loading already processed data from directory: %s" % path)
+
+        data3d_p = os.path.join(path, "data3d.dcm")
+        if not os.path.exists(data3d_p):
+            logger.error("Missing file 'data3d.dcm'! Could not load ready data.")
+            return
+        data3d, metadata = io3d.datareader.read(data3d_p)
+        spacing = metadata["voxelsize_mm"]
+
+        obj = cls() # to get mask and stats names
+        masks = {}; stats = {}
+
+        for part in obj.masks_comp:
+            mask_p = os.path.join(path, "%s.dcm" % part)
+            if os.path.exists(mask_p):
+                tmp, _ = io3d.datareader.read(mask_p)
+                tmp = tmp.astype(np.bool)
+                masks[part] = tmp
+
+        for part in obj.stats:
+            stats_p = os.path.join(path, "%s.json" % part)
+            if os.path.exists(stats_p):
+                with open(stats_p, 'r') as fp:
+                    tmp = json.load(fp)
+                stats[part] = tmp
+
+        return cls.fromReadyData(data3d, spacing, masks=masks, stats=stats)
+
+    def toDirectory(self, path):
+        """ note: Masks look wierd when opened in ImageJ, but are saved correctly """
+        logger.info("Saving all processed data to directory: %s" % path)
+        spacing = list(self.spacing)
+
+        data3d_p = os.path.join(path, "data3d.dcm")
+        io3d.datawriter.write(self.data3d, data3d_p, 'dcm', {'voxelsize_mm': spacing})
+
+        for part in self.masks_comp:
+            mask_p = os.path.join(path, "%s.dcm" % part)
+            mask = obj.getPart(part, raw=True).astype(np.int8)
+            io3d.datawriter.write(mask, mask_p, 'dcm', {'voxelsize_mm': spacing})
+            del(mask)
+
+        for part in self.stats:
+            stats_p = os.path.join(path, "%s.json" % part)
+            with open(stats_p, 'w') as fp:
+                json.dump(obj.getStats(part, raw=True), fp, sort_keys=True)
 
     def prepareData(self, data3d, voxelsize, size_normalization=True, rescale=True):
         """
@@ -841,22 +895,42 @@ class OrganDetection(object):
 
     ################
 
-    def analyzeBones(self, raw=False):
-        if self.stats["bones"] is not None:
-            bones_stats = copy.deepcopy(self.stats["bones"])
+    def getStats(self, part, raw=False):
+        part = part.strip().lower()
+
+        if part not in self.stats:
+            logger.error("Invalid stats bodypart '%s'! Returning empty dictionary!" % part)
+            data = {}
+
+        elif self.stats[part] is not None:
+            data = copy.deepcopy(self.stats[part])
 
         else:
-            bones_stats = self._analyzeBones( \
+            if part == "bones":
+                data = self._analyzeBones( \
                 data3d=self.data3d, spacing=self.spacing, fatlessbody=self.getFatlessBody(raw=True), \
-                bones=self.getBones(raw=True), lungs=self.getLungs(raw=True)
-                )
-            self.stats["bones"] = copy.deepcopy(bones_stats)
+                bones=self.getBones(raw=True), lungs=self.getLungs(raw=True) )
+            elif part == "vessels":
+                data = self._analyzeVessels( \
+                data3d=self.data3d, spacing=self.spacing, vessels=self.getVessels(raw=True), \
+                bones_stats=self.analyzeBones(raw=True) )
+
+            self.stats[part] = copy.deepcopy(data)
 
         if not raw:
-            bones_stats["spine"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in bones_stats["spine"] ]
-            bones_stats["hip_joints"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in bones_stats["hip_joints"] ]
+            if part == "bones":
+                data["spine"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["spine"] ]
+                data["hip_joints"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["hip_joints"] ]
+            elif part == "vessels":
+                data["aorta"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["aorta"] ]
+                data["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["vena_cava"] ]
+        return data
 
-        return bones_stats
+    def analyzeBones(self, raw=False):
+        return self.getStats("bones", raw=raw)
+
+    def analyzeVessels(self, raw=False):
+        return self.getStats("vessels", raw=raw)
 
     @classmethod
     def _analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs):
@@ -948,22 +1022,6 @@ class OrganDetection(object):
         # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
         return {"spine":points_spine, "hip_joints":points_hip_joints}
-
-    def analyzeVessels(self, raw=False):
-        if self.stats["vessels"] is not None:
-            vessels_stats = copy.deepcopy(self.stats["vessels"])
-
-        else:
-            vessels_stats = self._analyzeVessels( \
-                data3d=self.data3d, spacing=self.spacing, vessels=self.getVessels(raw=True), \
-                bones_stats=self.analyzeBones(raw=True) )
-            self.stats["vessels"] = copy.deepcopy(vessels_stats)
-
-        if not raw:
-            vessels_stats["aorta"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in vessels_stats["aorta"] ]
-            vessels_stats["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in vessels_stats["vena_cava"] ]
-
-        return vessels_stats
 
     @classmethod
     def _analyzeVessels(cls, data3d, spacing, vessels, bones_stats):
@@ -1057,8 +1115,6 @@ class OrganDetection(object):
 
 if __name__ == "__main__":
     import argparse
-    import io3d, sed3
-    import json
 
     logging.basicConfig(stream=sys.stdout)
     logger = logging.getLogger()
@@ -1096,119 +1152,24 @@ if __name__ == "__main__":
         obj = OrganDetection(data3d, voxelsize)
 
     else: # readydir
-        print("Loading all data from ready_dir")
-        data3d_p = os.path.join(args.readydir, "data3d.dcm")
-        body_p = os.path.join(args.readydir, "body.dcm")
-        fatlessbody_p = os.path.join(args.readydir, "fatlessbody.dcm")
-        lungs_p = os.path.join(args.readydir, "lungs.dcm")
-        bones_p = os.path.join(args.readydir, "bones.dcm")
-        vessels_p = os.path.join(args.readydir, "vessels.dcm")
-
-        bones_stats_p = os.path.join(args.readydir, "bones_stats.json")
-        vessels_stats_p = os.path.join(args.readydir, "vessels_stats.json")
-
-        data3d, metadata = io3d.datareader.read(data3d_p)
-        spacing = metadata["voxelsize_mm"]
-
-        body = None
-        fatlessbody = None
-        lungs = None
-        bones = None
-        vessels = None
-
-        bones_stats = None
-        vessels_stats = None
-
-        if os.path.exists(body_p):
-            body, _ = io3d.datareader.read(body_p)
-            body = body.astype(np.bool)
-        if os.path.exists(fatlessbody_p):
-            fatlessbody, _ = io3d.datareader.read(fatlessbody_p)
-            fatlessbody = fatlessbody.astype(np.bool)
-        if os.path.exists(lungs_p):
-            lungs, _ = io3d.datareader.read(lungs_p)
-            lungs = lungs.astype(np.bool)
-        if os.path.exists(bones_p):
-            bones, _ = io3d.datareader.read(bones_p)
-            bones = bones.astype(np.bool)
-        if os.path.exists(vessels_p):
-            vessels, _ = io3d.datareader.read(vessels_p)
-            vessels = vessels.astype(np.bool)
-
-        if os.path.exists(bones_stats_p):
-            with open(bones_stats_p, 'r') as fp:
-                bones_stats = json.load(fp)
-        if os.path.exists(vessels_stats_p):
-            with open(vessels_stats_p, 'r') as fp:
-                vessels_stats = json.load(fp)
-
-        obj = OrganDetection.fromReadyData(data3d, spacing, \
-            body=body, fatlessbody=fatlessbody, lungs=lungs, bones=bones, vessels=vessels, \
-            bones_stats=bones_stats, vessels_stats=vessels_stats )
-
-        del(body)
-        del(fatlessbody)
-        del(lungs)
-        del(bones)
-        del(vessels)
+        obj = OrganDetection.fromDirectory(os.path.abspath(args.readydir))
 
     if args.dump is not None:
-        print("Dumping all data to ready_dir")
+        for part in obj.masks_comp:
+            try:
+                obj.getPart(part, raw=True)
+            except:
+                print(traceback.format_exc())
+
+        for part in obj.stats:
+            try:
+                obj.getStats(part, raw=True)
+            except:
+                print(traceback.format_exc())
+
         dumpdir = os.path.abspath(args.dump)
         if not os.path.exists(dumpdir): os.makedirs(dumpdir)
-
-        data3d_p = os.path.join(dumpdir, "data3d.dcm")
-        body_p = os.path.join(dumpdir, "body.dcm")
-        fatlessbody_p = os.path.join(dumpdir, "fatlessbody.dcm")
-        lungs_p = os.path.join(dumpdir, "lungs.dcm")
-        bones_p = os.path.join(dumpdir, "bones.dcm")
-        vessels_p = os.path.join(dumpdir, "vessels.dcm")
-        aorta_p = os.path.join(dumpdir, "aorta.dcm")
-        venacava_p = os.path.join(dumpdir, "venacava.dcm")
-
-        bones_stats_p = os.path.join(dumpdir, "bones_stats.json")
-        vessels_stats_p = os.path.join(dumpdir, "vessels_stats.json")
-
-        data3d = obj.data3d
-        spacing = list(obj.spacing)
-        io3d.datawriter.write(data3d, data3d_p, 'dcm', {'voxelsize_mm': spacing})
-
-        # note: Masks look wierd when opened in ImageJ, but are saved correctly
-
-        body = obj.getBody(raw=True).astype(np.int8)
-        io3d.datawriter.write(body, body_p, 'dcm', {'voxelsize_mm': spacing})
-        del(body)
-
-        fatlessbody = obj.getFatlessBody(raw=True).astype(np.int8)
-        io3d.datawriter.write(fatlessbody, fatlessbody_p, 'dcm', {'voxelsize_mm': spacing})
-        del(fatlessbody)
-
-        lungs = obj.getLungs(raw=True).astype(np.int8)
-        io3d.datawriter.write(lungs, lungs_p, 'dcm', {'voxelsize_mm': spacing})
-        del(lungs)
-
-        bones = obj.getBones(raw=True).astype(np.int8)
-        io3d.datawriter.write(bones, bones_p, 'dcm', {'voxelsize_mm': spacing})
-        del(bones)
-
-        vessels = obj.getVessels(raw=True).astype(np.int8)
-        io3d.datawriter.write(vessels, vessels_p, 'dcm', {'voxelsize_mm': spacing})
-        del(vessels)
-
-        aorta = obj.getAorta(raw=True).astype(np.int8)
-        io3d.datawriter.write(aorta, aorta_p, 'dcm', {'voxelsize_mm': spacing})
-        del(aorta)
-
-        venacava = obj.getVenaCava(raw=True).astype(np.int8)
-        io3d.datawriter.write(venacava, venacava_p, 'dcm', {'voxelsize_mm': spacing})
-        del(venacava)
-
-        with open(bones_stats_p, 'w') as fp:
-            json.dump(obj.analyzeBones(raw=True), fp, sort_keys=True)
-
-        with open(vessels_stats_p, 'w') as fp:
-            json.dump(obj.analyzeVessels(raw=True), fp, sort_keys=True)
-
+        obj.toDirectory(dumpdir)
         sys.exit(0)
 
     #########
