@@ -277,7 +277,7 @@ def main():
     parser.add_argument('-t','--threads', type=int, default=1,
             help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 2.5GB, big ones can go over 8GB.')
     parser.add_argument('-p','--parts', default="bones_stats,vessels,vessels_stats",
-            help='Body parts to process sparated by ",", defaults: "bones_stats,vessels,vessels_stats"')
+            help='Body parts to process sparated by ",", Use "None" to disable, defaults: "bones_stats,vessels,vessels_stats"')
     parser.add_argument("--dump", default=None,
             help='dump all processed data to dir in path')
     parser.add_argument("-d", "--debug", action="store_true",
@@ -298,7 +298,10 @@ def main():
     if not os.path.exists(outputdir):
         os.makedirs(outputdir)
 
-    parts = [ s.strip().lower() for s in args.parts.split(",") ]
+    if args.parts.strip().lower() == "none":
+        parts = []
+    else:
+        parts = [ s.strip().lower() for s in args.parts.split(",") ]
 
     inputs = []
     for dirname in sorted(next(os.walk(args.datadirs))[1]):

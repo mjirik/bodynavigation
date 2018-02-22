@@ -162,8 +162,7 @@ def growRegion(region, mask, iterations=1):
     for i in range(iterations):
         if np.sum(region) == 0: break
         kernel = kernel1 if i%2 == 0 else kernel2
-        region = scipy.ndimage.binary_dilation(region, structure=kernel)
-        region[ mask == 0 ] = 0
+        region = scipy.ndimage.binary_dilation(region, structure=kernel, mask=mask)
 
     return region
 
@@ -379,7 +378,7 @@ class OrganDetection(object):
 
         # size norming based on body size on xy axis
         # this just recalculates voxelsize (doesnt touch actual data)
-        if size_normalization:
+        if size_normalization: # TODO - use median of widths and heights
             fatlessbody = self._getFatlessBody(data3d, voxelsize, body)
             size_v = [ fatlessbody.shape[dim+1]-np.sum(pad) for dim, pad in enumerate(getDataPadding(fatlessbody[int(fatlessbody.shape[0]/2),:,:])) ]
             size_mm = [ size_v[0]*voxelsize[1], size_v[1]*voxelsize[2] ] # fatlessbody size in mm on X and Y axis
@@ -533,9 +532,16 @@ class OrganDetection(object):
         """
         logger.info("_getFatlessBody")
         # remove fat
-        fatless = (data3d > 0)
-        fatless[ (body == 1) & (data3d < -500) ] = 1 # body cavities
-        fatless = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask([5,5,5], spacing=spacing))
+        fatless = (data3d > 20)
+        fatless = scipy.ndimage.morphology.binary_opening(fatless, structure=np.ones([3,3,3])) # small remove segmentation errors
+        # fill body cavities, but ignore air near borders of body
+        body_border = body & ( scipy.ndimage.morphology.binary_erosion(body, \
+            structure=np.expand_dims(skimage.morphology.disk(9, dtype=np.bool), axis=0)) == 0)
+        fatless[ (data3d < -300) & (body_border == 0) & (body == 1) ] = 1
+        # remove skin
+        tmp = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask([7,7,7], spacing=spacing))
+        fatless[ body_border ] = tmp[ body_border ]
+        #ed = sed3.sed3(data3d, contour=fatless, seeds=body_border); ed.show()
         # save convex hull along z-axis
         for z in range(fatless.shape[0]):
             bsl = skimage.measure.label(body[z,:,:], background=0)
