@@ -185,10 +185,13 @@ class OrganDetection(object):
     """
 
     NORMED_FATLESS_BODY_SIZE = [200,300] # normalized size of fatless body on [Y,X] in mm
-    # [189.8, 251.7] - 3Dircadb1.1
-    # [192.4, 268.2] - 3Dircadb1.2
-    # [205.1, 307.6] - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.332134560740628899985464129848
-    # [220.3, 325.2] - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.117528645891554472837507616577
+    # [186.9, 247.4]mm - 3Dircadb1.1
+    # [180.6, 256.4]mm - 3Dircadb1.2
+    # [139.2, 253.1]mm - 3Dircadb1.19
+    # [157.2, 298.8]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.332134560740628899985464129848
+    # [192.2, 321.4]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.117528645891554472837507616577
+    # [153.3, 276.3]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.164951610473301901732855875499
+    # [190.4, 304.6]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.252450948398764180723210762820
 
     def __init__(self, data3d=None, voxelsize=[1,1,1], size_normalization=True, rescale=True):
         """
@@ -199,22 +202,16 @@ class OrganDetection(object):
         * Voxel size is in mm
         """
 
-        if data3d is not None:
-            self.data3d, self.spacing, self.cut_shape, self.padding = self.prepareData( \
-                data3d, voxelsize, size_normalization=size_normalization, rescale=rescale)
+        # empty undefined values
+        self.data3d = None
+        self.spacing = np.asarray([1,1,1], dtype=np.float)
+        self.cut_shape = (0,0,0)
+        self.padding = [[0,0],[0,0],[0,0]]
+        self.orig_voxelsize = np.asarray([1,1,1], dtype=np.float)
+        self.orig_coord_scale = np.asarray([1,1,1], dtype=np.float)
+        self.orig_coord_intercept = np.asarray([0,0,0], dtype=np.float)
 
-            # for recalculating coordinates to output format ( vec*scale + intercept )
-            self.orig_voxelsize = np.asarray(voxelsize, dtype=np.float)
-            self.orig_coord_scale = np.asarray([ \
-                self.cut_shape[0]/self.data3d.shape[0], \
-                self.cut_shape[1]/self.data3d.shape[1], \
-                self.cut_shape[2]/self.data3d.shape[2] ], dtype=np.float) # [z,y,x] - scale coords of cut and resized data
-            self.orig_coord_intercept = np.asarray([ \
-                self.padding[0][0], \
-                self.padding[1][0], \
-                self.padding[2][0] ], dtype=np.float) # [z,y,x] - move coords of just cut data
-
-        # compressed masks - this lowered memory usage to 0.042% for bones
+        # compressed masks - example: compression lowered memory usage to 0.042% for bones
         self.masks_comp = {
             "body":None,
             "fatlessbody":None,
@@ -233,25 +230,40 @@ class OrganDetection(object):
             "vessels":None
             }
 
+        # init with data3d
+        if data3d is not None:
+            self.data3d, self.spacing, self.cut_shape, self.padding = self.prepareData( \
+                data3d, voxelsize, size_normalization=size_normalization, rescale=rescale)
+
+            # for recalculating coordinates to output format ( vec*scale + intercept )
+            self.orig_voxelsize = np.asarray(voxelsize, dtype=np.float)
+            self.orig_coord_scale = np.asarray([ \
+                self.cut_shape[0]/self.data3d.shape[0], \
+                self.cut_shape[1]/self.data3d.shape[1], \
+                self.cut_shape[2]/self.data3d.shape[2] ], dtype=np.float) # [z,y,x] - scale coords of cut and resized data
+            self.orig_coord_intercept = np.asarray([ \
+                self.padding[0][0], \
+                self.padding[1][0], \
+                self.padding[2][0] ], dtype=np.float) # [z,y,x] - move coords of just cut data
+
     @classmethod
-    def fromReadyData(cls, data3d, spacing, masks={}, stats={}):
+    def fromReadyData(cls, data3d, data3d_info, masks={}, stats={}):
         """ For super fast testing """
         obj = cls()
 
         obj.data3d = data3d
-        obj.spacing = spacing
-        obj.cut_shape = data3d.shape
-        obj.padding = [[0,0],[0,0],[0,0]]
-
-        obj.orig_voxelsize = np.asarray(spacing, dtype=np.float)
-        obj.orig_coord_scale = np.asarray([1,1,1], dtype=np.float)
-        obj.orig_coord_intercept = np.asarray([0,0,0], dtype=np.float)
+        obj.spacing = np.asarray(data3d_info["spacing"], dtype=np.float)
+        obj.cut_shape = np.asarray(data3d_info["cut_shape"], dtype=np.float)
+        obj.padding = copy.deepcopy(data3d_info["padding"])
+        obj.orig_voxelsize = np.asarray(data3d_info["orig_voxelsize"], dtype=np.float)
+        obj.orig_coord_scale = np.asarray(data3d_info["orig_coord_scale"], dtype=np.float)
+        obj.orig_coord_intercept = np.asarray(data3d_info["orig_coord_intercept"], dtype=np.float)
 
         for part in masks:
             if part not in obj.masks_comp:
                 logger.warning("'%s' is not valid mask name!" % part)
                 continue
-            obj.masks_comp[part] = compressArray(masks[part])
+            obj.masks_comp[part] = masks[part]
 
         for part in stats:
             if part not in obj.stats:
@@ -266,11 +278,16 @@ class OrganDetection(object):
         logger.info("Loading already processed data from directory: %s" % path)
 
         data3d_p = os.path.join(path, "data3d.dcm")
+        data3d_info_p = os.path.join(path, "data3d.json")
         if not os.path.exists(data3d_p):
             logger.error("Missing file 'data3d.dcm'! Could not load ready data.")
             return
+        elif not os.path.exists(data3d_info_p):
+            logger.error("Missing file 'data3d.json'! Could not load ready data.")
+            return
         data3d, metadata = io3d.datareader.read(data3d_p)
-        spacing = metadata["voxelsize_mm"]
+        with open(data3d_info_p, 'r') as fp:
+            data3d_info = json.load(fp)
 
         obj = cls() # to get mask and stats names
         masks = {}; stats = {}
@@ -279,8 +296,8 @@ class OrganDetection(object):
             mask_p = os.path.join(path, "%s.dcm" % part)
             if os.path.exists(mask_p):
                 tmp, _ = io3d.datareader.read(mask_p)
-                tmp = tmp.astype(np.bool)
-                masks[part] = tmp
+                masks[part] = compressArray(tmp.astype(np.bool))
+                del(tmp)
 
         for part in obj.stats:
             stats_p = os.path.join(path, "%s.json" % part)
@@ -289,7 +306,7 @@ class OrganDetection(object):
                     tmp = json.load(fp)
                 stats[part] = tmp
 
-        return cls.fromReadyData(data3d, spacing, masks=masks, stats=stats)
+        return cls.fromReadyData(data3d, data3d_info, masks=masks, stats=stats)
 
     def toDirectory(self, path):
         """ note: Masks look wierd when opened in ImageJ, but are saved correctly """
@@ -299,13 +316,28 @@ class OrganDetection(object):
         data3d_p = os.path.join(path, "data3d.dcm")
         io3d.datawriter.write(self.data3d, data3d_p, 'dcm', {'voxelsize_mm': spacing})
 
+        data3d_info_p = os.path.join(path, "data3d.json")
+        data3d_info = {
+            "spacing":copy.deepcopy(list(self.spacing)),
+            "cut_shape":copy.deepcopy(list(self.cut_shape)),
+            "padding":copy.deepcopy(list(self.padding)),
+            "orig_voxelsize":copy.deepcopy(list(self.orig_voxelsize)),
+            "orig_coord_scale":copy.deepcopy(list(self.orig_coord_scale)),
+            "orig_coord_intercept":copy.deepcopy(list(self.orig_coord_intercept))
+            }
+        with open(data3d_info_p, 'w') as fp:
+            json.dump(data3d_info, fp, sort_keys=True)
+
+
         for part in self.masks_comp:
+            if self.masks_comp[part] is None: continue
             mask_p = os.path.join(path, "%s.dcm" % part)
             mask = self.getPart(part, raw=True).astype(np.int8)
             io3d.datawriter.write(mask, mask_p, 'dcm', {'voxelsize_mm': spacing})
             del(mask)
 
         for part in self.stats:
+            if self.stats[part] is None: continue
             stats_p = os.path.join(path, "%s.json" % part)
             with open(stats_p, 'w') as fp:
                 json.dump(self.getStats(part, raw=True), fp, sort_keys=True)
@@ -378,9 +410,43 @@ class OrganDetection(object):
 
         # size norming based on body size on xy axis
         # this just recalculates voxelsize (doesnt touch actual data)
-        if size_normalization: # TODO - use median of widths and heights
-            fatlessbody = self._getFatlessBody(data3d, voxelsize, body)
-            size_v = [ fatlessbody.shape[dim+1]-np.sum(pad) for dim, pad in enumerate(getDataPadding(fatlessbody[int(fatlessbody.shape[0]/2),:,:])) ]
+        if size_normalization:
+            # get median widths and heights from just [lungs_end:(lungs_end+200mm),:,:]
+            fatlessbody = self._getFatlessBody(data3d, voxelsize, body); del(body)
+            lungs = data3d < -300; lungs[ fatlessbody == 0 ] = 0 # very roughly detect end of lungs
+            for z in range(data3d.shape[0]):
+                if np.sum(lungs[z,:,:]) == 0: continue
+                pads = getDataPadding(fatlessbody[z,:,:])
+                height = lungs[z,:,:].shape[0]-pads[0][1]-pads[0][0]
+                if height == 0: continue
+                lungs[z,:int(pads[0][0]+height*(3/4)),:] = 0
+            #ed = sed3.sed3(data3d, seeds=lungs); ed.show()
+            if np.sum(lungs) == 0:
+                lungs_end = 0
+            else:
+                # use only biggest object
+                lungs = skimage.measure.label(lungs, background=0)
+                unique, counts = np.unique(lungs, return_counts=True)
+                unique = unique[1:]; counts = counts[1:]
+                lungs = lungs == unique[list(counts).index(max(counts))]
+                # calc idx of last slice with lungs
+                lungs_end = data3d.shape[0] - getDataPadding(lungs)[0][1]
+            del(lungs)
+
+            widths = []; heights = []
+            for z in range(lungs_end, min(int(lungs_end+200/voxelsize[0]), fatlessbody.shape[0])):
+                if np.sum(fatlessbody[z,:,:]) == 0: continue
+                spads = getDataPadding(fatlessbody[z,:,:])
+                heights.append( fatlessbody[z,:,:].shape[0]-np.sum(spads[0]) )
+                widths.append( fatlessbody[z,:,:].shape[1]-np.sum(spads[1]) )
+
+            if len(widths) != 0:
+                size_v = [ np.median(heights), np.median(widths) ]
+            else:
+                logger.warning("Could not detect median body (abdomen) width and height! Using size of middle slice for normalization.")
+                size_v = [ fatlessbody.shape[dim+1]-np.sum(pad) for dim, pad in enumerate(getDataPadding(fatlessbody[int(fatlessbody.shape[0]/2),:,:])) ]
+            del(fatlessbody)
+
             size_mm = [ size_v[0]*voxelsize[1], size_v[1]*voxelsize[2] ] # fatlessbody size in mm on X and Y axis
             size_scale = [ None, self.NORMED_FATLESS_BODY_SIZE[0]/size_mm[0], self.NORMED_FATLESS_BODY_SIZE[1]/size_mm[1] ]
             size_scale[0] = (size_scale[1]+size_scale[2])/2 # scaling on z-axis is average of scaling on x,y-axis
@@ -391,7 +457,7 @@ class OrganDetection(object):
                 ]
             logger.debug("Voxelsize normalization: %s -> %s" % (str(voxelsize), str(new_voxelsize)))
             voxelsize = new_voxelsize
-        del(body) # not needed anymore
+        else: del(body) # not needed anymore
 
         # resize data on x,y axis (upscaling creates ghosting effect on z-axis)
         if not rescale:
@@ -424,6 +490,11 @@ class OrganDetection(object):
             out = np.round(out).astype(data.dtype)
         out = padArray(out, self.padding, padding_value=padding_value)
         return out
+
+    def getData3D(self, raw=False):
+        data = self.data3d
+        if not raw: data = self.toOutputFormat(data, padding_value=-1024)
+        return data.copy()
 
     def getPart(self, part, raw=False):
         part = part.strip().lower()
@@ -553,7 +624,7 @@ class OrganDetection(object):
         return fatless
 
     @classmethod
-    def _getLungs(cls, data3d, spacing, fatlessbody):
+    def _getLungs(cls, data3d, spacing, fatlessbody): # TODO - check how much memory this eats
         """ Expects lungs to actually be in data """
         logger.info("_getLungs")
         lungs = data3d < -300
@@ -814,14 +885,19 @@ class OrganDetection(object):
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
 
         VESSEL_THRESHOLD = 110 # 145
-        #SPINE_WIDTH = int(25/spacing[2]) # from center
+        SPINE_WIDTH = int(22/spacing[2]) # from center
         SPINE_HEIGHT = int(30/spacing[1]) # from center
 
         if contrast_agent:
             vessels = data3d > VESSEL_THRESHOLD
 
             wseeds = bones.astype(np.uint8) # = 1
-            wseeds[ scipy.ndimage.morphology.distance_transform_edt(bones == 0, sampling=spacing) > 15 ] = 2
+            for z in range(spine_zmin,spine_zmax+1): # draw seeds elipse at spine center
+                sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
+                rr, cc = skimage.draw.ellipse(sc[0], sc[1], SPINE_HEIGHT, SPINE_WIDTH, \
+                    shape=wseeds[z,:,:].shape)
+                wseeds[z,rr,cc] = 1
+            wseeds[ scipy.ndimage.morphology.distance_transform_edt(wseeds == 0, sampling=spacing) > 15 ] = 2
             wseeds[ vessels == 0 ] = 0 # seeds only where there are vessels
 
             vessels = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
@@ -844,8 +920,7 @@ class OrganDetection(object):
 
                 rr, cc = skimage.draw.ellipse(sc[0]-cut_rad[0]-SPINE_HEIGHT, sc[1], \
                     cut_rad[0], cut_rad[1], shape=wseeds[z,:,:].shape)
-                mask = np.zeros(wseeds[z,:,:].shape); mask[rr, cc] = 1
-                wseeds[z, mask == 1] = 1
+                wseeds[z,rr,cc] = 1
 
                 rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], \
                     shape=wseeds[z,:,:].shape)
@@ -1118,7 +1193,7 @@ class OrganDetection(object):
         rad = list( rad / float((spacing[1]+spacing[2])/2.0) )
 
         points_aorta = []; points_vena_cava = []; points_unknown = [];
-        for z in range(spine_zmin,spine_zmax+1):
+        for z in range(spine_zmin,spine_zmax+1): # TODO - ignore space around heart (aorta), start under heart (vena cava)
             sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
             vs = vessels[z,:,:]
 
@@ -1234,7 +1309,7 @@ if __name__ == "__main__":
 
     else: # readydir
         obj = OrganDetection.fromDirectory(os.path.abspath(args.readydir))
-        data3d = obj.data3d
+        data3d = obj.getData3D()
 
     if args.dump is not None:
         for part in obj.masks_comp:
@@ -1261,19 +1336,19 @@ if __name__ == "__main__":
     # fatlessbody = obj.getFatlessBody()
     # bones = obj.getBones()
     # lungs = obj.getLungs()
-    abdomen = obj.getAbdomen()
-    # vessels = obj.getVessels()
-    # aorta = obj.getAorta()
-    # venacava = obj.getVenaCava()
+    #abdomen = obj.getAbdomen()
+    vessels = obj.getVessels()
+    aorta = obj.getAorta()
+    venacava = obj.getVenaCava()
 
     # ed = sed3.sed3(data3d, contour=body); ed.show()
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
-    ed = sed3.sed3(data3d, contour=abdomen); ed.show()
-    # vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
-    # vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
-    # ed = sed3.sed3(data3d, contour=vc); ed.show()
+    # ed = sed3.sed3(data3d, contour=abdomen); ed.show()
+    vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
+    vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
+    ed = sed3.sed3(data3d, contour=vc); ed.show()
 
     # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]

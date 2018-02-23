@@ -201,17 +201,23 @@ def interpolatePointsZ(points, step=0.1):
 
 def getRGBA(idx, a=255):
     """ idx: 0-9 """
-    colors = [ (255,0,0,a), (255,106,0,a), (255,213,0,a), (191,255,0,a), (0,255,21,a), \
-        (0,255,234,a), (0,170,255,a), (43,0,255,a), (255,0,255,a), (255,0,149,a) ]
-    return colors[idx]
+    colors = [ (255,0,0), (255,106,0), (255,213,0), (191,255,0), (0,255,21), \
+        (0,255,234), (0,170,255), (43,0,255), (255,0,255), (255,0,149) ]
+    c = list(colors[idx]); c.append(a)
+    return tuple(c)
 
-def processData(datapath, name, outputdir, parts = [], dumpdir = None):
+def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None):
     try:
         print("Processing: ", datapath)
 
-        data3d, metadata = io3d.datareader.read(datapath)
-        voxelsize = metadata["voxelsize_mm"]
-        obj = OrganDetection(data3d, voxelsize)
+        if readypath is None:
+            data3d, metadata = io3d.datareader.read(datapath)
+            voxelsize = metadata["voxelsize_mm"]
+            obj = OrganDetection(data3d, voxelsize)
+        else:
+            print("Loading preprocessed data from readypath: ", readypath)
+            obj = OrganDetection.fromDirectory(os.path.abspath(readypath))
+            data3d = obj.getData3D(); voxelsize = obj.orig_voxelsize
 
         point_sets = []; volume_sets = []
         VOLUME_APLHA = 100
@@ -280,6 +286,8 @@ def main():
             help='Body parts to process sparated by ",", Use "None" to disable, defaults: "bones_stats,vessels,vessels_stats"')
     parser.add_argument("--dump", default=None,
             help='dump all processed data to dir in path')
+    parser.add_argument('-r','--readydirs', default=None,
+            help='path to dir with dirs with preporcessed data3d.dcm and masks')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -298,17 +306,24 @@ def main():
     if not os.path.exists(outputdir):
         os.makedirs(outputdir)
 
-    if args.parts.strip().lower() == "none":
-        parts = []
-    else:
+    parts = []
+    if args.parts.strip().lower() != "none":
         parts = [ s.strip().lower() for s in args.parts.split(",") ]
+
+    ready_dirnames = []
+    if args.readydirs is not None:
+        ready_dirnames = sorted(next(os.walk(args.readydirs))[1])
 
     inputs = []
     for dirname in sorted(next(os.walk(args.datadirs))[1]):
         datapath = os.path.abspath(os.path.join(args.datadirs, dirname))
+        dumpdir = None
         if args.dump is not None:
             dumpdir = os.path.join(os.path.abspath(args.dump), dirname)
-        inputs.append([datapath, dirname, outputdir, parts, dumpdir])
+        readypath = None
+        if dirname in ready_dirnames:
+            readypath = os.path.abspath(os.path.join(args.readydirs, dirname))
+        inputs.append([datapath, dirname, outputdir, parts, dumpdir, readypath])
 
     pool = Pool(processes=args.threads)
     pool.map(processThread, inputs)
