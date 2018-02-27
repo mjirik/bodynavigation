@@ -210,6 +210,13 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
     try:
         print("Processing: ", datapath)
 
+        onlyfiles = sorted([f for f in os.listdir(datapath) if os.path.isfile(os.path.join(datapath, f))])
+        for f in onlyfiles:
+            if f.strip().lower().endswith(".mhd"):
+                datapath = os.path.join(datapath, f)
+                print("Detected *.mhd file! Changing datapath to: ", datapath)
+                break
+
         if readypath is None:
             data3d, metadata = io3d.datareader.read(datapath)
             voxelsize = metadata["voxelsize_mm"]
@@ -281,7 +288,7 @@ def main():
     parser.add_argument('-o','--outputdir', default="./batch_output",
             help='path to output dir')
     parser.add_argument('-t','--threads', type=int, default=1,
-            help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 2.5GB, big ones can go over 8GB.')
+            help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 3GB, big ones can go over 9GB.')
     parser.add_argument('-p','--parts', default="bones_stats,vessels,vessels_stats",
             help='Body parts to process sparated by ",", Use "None" to disable, defaults: "bones_stats,vessels,vessels_stats"')
     parser.add_argument("--dump", default=None,
