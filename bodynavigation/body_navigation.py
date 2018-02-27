@@ -30,7 +30,7 @@ class BodyNavigation:
             data3d = data3d * 2
 
         # unresized data
-        self.data3d = data3d # some methods require original resolution
+        #self.data3d = data3d # some methods require original resolution
         self.orig_shape = data3d.shape
         self.voxelsize_mm = np.asarray(voxelsize_mm)
 
