@@ -211,11 +211,15 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         print("Processing: ", datapath)
 
         onlyfiles = sorted([f for f in os.listdir(datapath) if os.path.isfile(os.path.join(datapath, f))])
-        for f in onlyfiles:
-            if f.strip().lower().endswith(".mhd"):
-                datapath = os.path.join(datapath, f)
-                print("Detected *.mhd file! Changing datapath to: ", datapath)
-                break
+        if len(onlyfiles) == 1:
+            datapath = os.path.join(datapath, onlyfiles[0])
+            print("Only one file datapath! Changing datapath to: ", datapath)
+        else:
+            for f in onlyfiles:
+                if f.strip().lower().endswith(".mhd"):
+                    datapath = os.path.join(datapath, f)
+                    print("Detected *.mhd file! Changing datapath to: ", datapath)
+                    break
 
         if readypath is None:
             data3d, metadata = io3d.datareader.read(datapath)
