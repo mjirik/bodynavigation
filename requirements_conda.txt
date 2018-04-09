@@ -3,3 +3,8 @@ scipy
 scikit-image
 scikit-learn
 pyqt=4.*
+imtools
+io3d
+pydicom==0.9.*
+sed3
+pandas
