@@ -27,9 +27,10 @@ before_install:
 # command to install dependencies
 install:
     - conda update --yes conda
-    - conda install --yes -n travis pip nose coverage
-    - conda install --yes -n travis --file requirements_conda.txt
+    - conda create --yes -n travis python=$CONDA_PYTHON_VERSION
     - source activate travis
+    - conda install --yes pip nose coverage python=$CONDA_PYTHON_VERSION
+    - conda install --yes --file requirements_conda.txt python=$CONDA_PYTHON_VERSION
     - pip install -r requirements_pip.txt
     - python -m io3d.datasets -l 3Dircadb1.1 jatra_5mm
 #    - ./scripts/get_test_data.sh
