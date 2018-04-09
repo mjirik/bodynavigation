@@ -26,11 +26,11 @@ before_install:
 
 # command to install dependencies
 install:
-    - conda config --add channels conda-forge mjirik
+    - conda config --add channels SimpleITK
+    - conda config --add channels mjirik
     - conda update --yes conda
-    - conda create --yes -n travis python=$CONDA_PYTHON_VERSION
+    - conda create --yes -n travis nose coverage pip python=$CONDA_PYTHON_VERSION
     - source activate travis
-    - conda install --yes pip nose coverage python=$CONDA_PYTHON_VERSION
     - conda install --yes --file requirements_conda.txt python=$CONDA_PYTHON_VERSION
     - pip install -r requirements_pip.txt
     - python -m io3d.datasets -l 3Dircadb1.1 jatra_5mm
