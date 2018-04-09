@@ -48,10 +48,10 @@ from skimage.filters import threshold_otsu as otsu
 try:
     import bodynavigation.body_navigation
     reload(bodynavigation.body_navigation)
-    #print "Importovano body_navigation"
+    #"Importovano body_navigation"
 
 except:
-    #print "Nelze iportovat body_navigation"
+    #"Nelze iportovat body_navigation"
     try:
         import body_navigation
         reload(body_navigation)
@@ -59,9 +59,7 @@ except:
         pass
 
 
-# sys.path.append("/home/mjirik/projects/imtools")
 import imtools
-#sys.path.append("/home/mjirik/projects/lisa/experiments/")
 import sed3
 from imtools import qmisc, misc, ml
 #from lisa import volumetry_evaluation
@@ -96,8 +94,8 @@ def make_data(pattern):
     orig_fnames = glob.glob(sliver_reference_dir + "*orig*" + pattern + ".mhd")
     ref_fnames = glob.glob(sliver_reference_dir + "*seg*" + pattern + ".mhd")
     
-    print orig_fnames
-    print ref_fnames
+    print(orig_fnames)
+    print(ref_fnames)
     
     orig_fnames.sort()
     ref_fnames.sort()
@@ -117,9 +115,9 @@ def make_basic_improvement(orig_data, vs_mm, vs_mm_tmp=[1.5, 1.5, 1.5]):
 
 
 def analyze_object(var):
-    print ""
-    print type(var)
-    print ""
+    print("")
+    print(type(var))
+    print("")
 
 
 def print_2D_gray(img):
