@@ -88,7 +88,7 @@ def make_data(pattern):
     reload(bodynavigation.body_navigation)
     reload(sed3)
     
-    sliver_reference_dir = op.expanduser("C:\Users\Mirab\Documents\Py\lisatest\data\medical\orig\sliver07/training/")
+    sliver_reference_dir = op.expanduser(u"~\Documents\Py\lisatest\data\medical\orig\sliver07/training/")
     
     # ktere soubory chci vybrat
     orig_fnames = glob.glob(sliver_reference_dir + "*orig*" + pattern + ".mhd")
