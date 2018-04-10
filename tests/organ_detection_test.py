@@ -19,8 +19,9 @@ from bodynavigation.organ_detection import OrganDetection
 import sed3 # for testing
 
 # http://www.ircad.fr/softwares/3Dircadb/3Dircadb1/3Dircadb1.1.zip
-TEST_DATA_DIR = "test_data"
+# TEST_DATA_DIR = "test_data"
 #TEST_DATA_DIR = "/home/jirka642/Programming/_Data/DP/3Dircadb1/1"
+TEST_DATA_DIR = "3Dircadb1.1"
 
 class OrganDetectionTest(unittest.TestCase):
     """
@@ -35,7 +36,7 @@ class OrganDetectionTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         datap = io3d.read(
-            io3d.datasets.join_path("PATIENT_DICOM"),
+            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
             dataplus_format=True)
         cls.obj = OrganDetection(datap["data3d"], datap["voxelsize_mm"])
 
@@ -49,7 +50,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # get preprocessed test data
         datap = io3d.read(
-            io3d.datasets.join_path(op.join("PATIENT_DICOM", "MASKS_DICOM", "skin")),
+            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM", "MASKS_DICOM", "skin"),
             # io3d.datasets.join_path("PATIENT_DICOM/MASKS_DICOM/skin"),
             dataplus_format=True)
         test_body = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
@@ -72,10 +73,10 @@ class OrganDetectionTest(unittest.TestCase):
 
         # get preprocessed test data
         datap1 = io3d.read(
-            io3d.datasets.join_path(op.join("PATIENT_DICOM", "leftlung")),
+            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM", "leftlung"),
             dataplus_format=True)
         datap2 = io3d.read(
-            io3d.datasets.join_path(op.join("MASKS_DICOM", "rightlung")),
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "rightlung"),
             dataplus_format=True)
         test_lungs = (datap1["data3d"]+datap2["data3d"]) > 0 # reducing value range to <0,1> from <0,255>
 
@@ -92,7 +93,7 @@ class OrganDetectionTest(unittest.TestCase):
         aorta = self.obj.getAorta()
 
         # get preprocessed test data
-        datap = io3d.read(os.path.join(TEST_DATA_DIR, "MASKS_DICOM", "artery"), dataplus_format=True)
+        datap = io3d.read(io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "artery"), dataplus_format=True)
         test_aorta = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
 
         # ed = sed3.sed3(test_aorta.astype(np.uint8), contour=aorta.astype(np.uint8))
@@ -110,7 +111,7 @@ class OrganDetectionTest(unittest.TestCase):
         venacava = self.obj.getVenaCava()
 
         # get preprocessed test data
-        datap = io3d.read(os.path.join(TEST_DATA_DIR, "MASKS_DICOM", "venoussystem"), dataplus_format=True)
+        datap = io3d.read(io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "venoussystem"), dataplus_format=True)
         test_venacava = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
 
         # ed = sed3.sed3(test_venacava.astype(np.uint8), contour=venacava.astype(np.uint8))
