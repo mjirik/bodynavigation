@@ -50,7 +50,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # get preprocessed test data
         datap = io3d.read(
-            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM", "MASKS_DICOM", "skin"),
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "skin"),
             # io3d.datasets.join_path("PATIENT_DICOM/MASKS_DICOM/skin"),
             dataplus_format=True)
         test_body = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
