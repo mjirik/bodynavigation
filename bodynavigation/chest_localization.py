@@ -59,9 +59,9 @@ except:
         pass
 
 
-import imtools
+# import imtools
 import sed3
-from imtools import qmisc, misc, ml
+from imtools import qmisc, misc
 #from lisa import volumetry_evaluation
 #import tiled_liver_statistics as lst
 from scipy.ndimage.filters import sobel as sobel
