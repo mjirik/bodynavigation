@@ -41,6 +41,7 @@ requirements:
     - scikit-image
     - io3d
     - pandas
+    - sed3
 
   run:
     - python
@@ -51,6 +52,7 @@ requirements:
     - imtools
     - io3d
     - pandas
+    - sed3
 
 test:
   # Python imports
