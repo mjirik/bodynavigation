@@ -73,7 +73,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # get preprocessed test data
         datap1 = io3d.read(
-            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM", "leftlung"),
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "leftlung"),
             dataplus_format=True)
         datap2 = io3d.read(
             io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "rightlung"),
