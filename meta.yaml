@@ -39,6 +39,7 @@ requirements:
     - scipy
     - imtools
     - scikit-image
+    - io3d
 
   run:
     - python
@@ -47,6 +48,7 @@ requirements:
     - astropy
     - scikit-image
     - imtools
+    - io3d
 
 test:
   # Python imports
