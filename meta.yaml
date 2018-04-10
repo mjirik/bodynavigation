@@ -37,6 +37,8 @@ requirements:
     - setuptools
     - numpy
     - scipy
+    - imtools
+    - scikit-image
 
   run:
     - python
@@ -44,6 +46,7 @@ requirements:
     - scipy
     - astropy
     - scikit-image
+    - imtools
 
 test:
   # Python imports
