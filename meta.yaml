@@ -40,6 +40,7 @@ requirements:
     - imtools
     - scikit-image
     - io3d
+    - pandas
 
   run:
     - python
@@ -49,6 +50,7 @@ requirements:
     - scikit-image
     - imtools
     - io3d
+    - pandas
 
 test:
   # Python imports
