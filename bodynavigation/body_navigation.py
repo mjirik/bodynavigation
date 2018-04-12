@@ -17,9 +17,10 @@ import scipy.ndimage
 import skimage.measure
 from . import chest_localization
 
-import sed3
+# import sed3
 
 from imtools import misc, qmisc # https://github.com/mjirik/imtools
+from io3d.misc import resize_to_mm, resize_to_shape
 
 class BodyNavigation:
     """ Range of values in input data must be <-1024;1023> """
@@ -39,7 +40,7 @@ class BodyNavigation:
         if voxelsize_mm is None:
             self.data3dr = data3d
         else:
-            self.data3dr = qmisc.resize_to_mm(data3d, voxelsize_mm, self.working_vs)
+            self.data3dr = resize_to_mm(data3d, voxelsize_mm, self.working_vs)
 
         self.lungs = None
         self.spine = None
@@ -112,7 +113,7 @@ class BodyNavigation:
         self.body_width = body_width * float(self.voxelsize_mm[2])
         self.body_height = body_height * float(self.voxelsize_mm[1])
 
-        return qmisc.resize_to_shape(self.body, self.orig_shape)
+        return resize_to_shape(self.body, self.orig_shape)
 
     def get_spine(self):
         """ Should have been named get_bones() """
@@ -138,7 +139,7 @@ class BodyNavigation:
         # self.center2 = np.mean(np.nonzero(bones), 2)
 
         self.spine = bones
-        return qmisc.resize_to_shape(bones, self.orig_shape)
+        return resize_to_shape(bones, self.orig_shape)
 
     def get_lungs(self): # TODO - this doesnt work correctly, is segmenting a lot of unneeded stuff
         lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -150
@@ -172,7 +173,7 @@ class BodyNavigation:
         lungs = labs > 0
         self.lungs = lungs
         #self.body = (labs == 80)
-        return misc.resize_to_shape(lungs, self.orig_shape)
+        return resize_to_shape(lungs, self.orig_shape)
 
     def get_chest(self):
         """ Compute, where is the chest in CT data.
@@ -230,35 +231,35 @@ class BodyNavigation:
             self.get_ribs()
         ld = scipy.ndimage.morphology.distance_transform_edt(self.chest)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
-        return misc.resize_to_shape(ld, self.orig_shape)
+        return resize_to_shape(ld, self.orig_shape)
 
     def dist_to_ribs(self):
         if self.ribs is None:
             self.get_ribs()
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.ribs)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
-        return misc.resize_to_shape(ld, self.orig_shape)
+        return resize_to_shape(ld, self.orig_shape)
 
     def dist_to_surface(self):
         if self.body is None:
             self.get_body()
         ld = scipy.ndimage.morphology.distance_transform_edt(self.body)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
-        return misc.resize_to_shape(ld, self.orig_shape)
+        return resize_to_shape(ld, self.orig_shape)
 
     def dist_to_lungs(self):
         if self.lungs is None:
             self.get_lungs()
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.lungs)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
-        return misc.resize_to_shape(ld, self.orig_shape)
+        return resize_to_shape(ld, self.orig_shape)
 
     def dist_to_spine(self):
         if self.spine is None:
             self.get_spine()
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
-        return misc.resize_to_shape(ld, self.orig_shape)
+        return resize_to_shape(ld, self.orig_shape)
 
     def find_symmetry(self, degrad=5, return_img=False):
         img = np.sum(self.data3dr > 430, axis=0)
@@ -282,7 +283,7 @@ class BodyNavigation:
             rldst[i ,: ,:] = z
 
         # rldst = scipy.ndimage.morphology.distance_transform_edt(rldst) - int(spine_mean[2])
-        # return misc.resize_to_shape(rldst, self.orig_shape)
+        # return resize_to_shape(rldst, self.orig_shape)
         return rldst
 
     def dist_coronal(self):
@@ -314,7 +315,7 @@ class BodyNavigation:
         # print 'dia level ', self.diaphragm_mask_level
 
         axdst = scipy.ndimage.morphology.distance_transform_edt(axdst) - int(self.diaphragm_mask_level)
-        return misc.resize_to_shape(axdst, self.orig_shape)
+        return resize_to_shape(axdst, self.orig_shape)
 
 
 
@@ -327,7 +328,7 @@ class BodyNavigation:
                scipy.ndimage.morphology.distance_transform_edt(
                 1 - self.diaphragm_mask)
               )
-        return qmisc.resize_to_shape(dst, self.orig_shape)
+        return resize_to_shape(dst, self.orig_shape)
 
     def _get_ia_ib_ic(self, axis):
         """
@@ -585,7 +586,7 @@ class BodyNavigation:
         self.diaphragm_mask_level = np.median(ou)
         self.center0 = self.diaphragm_mask_level * self.working_vs[0]
 
-        return misc.resize_to_shape(self.diaphragm_mask, self.orig_shape)
+        return resize_to_shape(self.diaphragm_mask, self.orig_shape)
 
     def get_center(self):
         self.get_diaphragm_mask()

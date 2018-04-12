@@ -34,13 +34,13 @@ import pickle
 import copy
 import glob
 import io3d
-import pandas as pd
+# import pandas as pd
 import scipy
 import scipy.signal
-import sklearn
-import sklearn.naive_bayes
-import sklearn.tree
-import sklearn.mixture
+# import sklearn
+# import sklearn.naive_bayes
+# import sklearn.tree
+# import sklearn.mixture
 
 from skimage.filters import threshold_otsu as otsu
 
@@ -61,15 +61,15 @@ except:
 
 # import imtools
 import sed3
-from imtools import qmisc, misc
+from io3d.misc import resize_to_shape, resize_to_mm
 #from lisa import volumetry_evaluation
 #import tiled_liver_statistics as lst
-from scipy.ndimage.filters import sobel as sobel
-from scipy.ndimage.filters import laplace as laplace
+# from scipy.ndimage.filters import sobel as sobel
+# from scipy.ndimage.filters import laplace as laplace
 
 from skimage.morphology import convex_hull_image, convex_hull_object, label, closing, opening
 from skimage import morphology
-import skimage
+# import skimage
 
 
 def read_data(orig_fname, ref_fname):
@@ -108,7 +108,7 @@ def make_data(pattern):
 def make_basic_improvement(orig_data, vs_mm, vs_mm_tmp=[1.5, 1.5, 1.5]):
     
     """ Prevzorkuje vstupni obrazek ... voxel size mm """
-    data3dr_tmp = qmisc.resize_to_mm(orig_data, vs_mm, vs_mm_tmp)              # resizovana orig_data na milimetry  
+    data3dr_tmp = resize_to_mm(orig_data, vs_mm, vs_mm_tmp)              # resizovana orig_data na milimetry
     ss = bodynavigation.body_navigation.BodyNavigation(data3dr_tmp, vs_mm_tmp) # objet bodynavigation, vstupuje tam obrazek a voxelsize
     
     return ss, data3dr_tmp
@@ -255,7 +255,7 @@ class ChestLocalization:
             bone_edge_dist_focus = bone_edge_dist > 0*bone_edge_dist_maximum
             blank_body[:] = bone_edge_dist_focus
             ld = scipy.ndimage.morphology.distance_transform_edt(blank_body)
-            return misc.resize_to_shape(ld, self.ss.orig_shape)
+            return resize_to_shape(ld, self.ss.orig_shape)
     
         dh = weak_dist_bone(bone_hull, body)
     
@@ -288,7 +288,7 @@ class ChestLocalization:
             lungs_edge_dist_focus = lungs_edge_dist > 0.2*lungs_edge_dist_maximum               # 0.1 puvodne
             blank_body[:] = lungs_edge_dist_focus
             ld = scipy.ndimage.morphology.distance_transform_edt(blank_body)
-            return misc.resize_to_shape(ld, self.ss.orig_shape)
+            return resize_to_shape(ld, self.ss.orig_shape)
     
         lungs_mask = (dist_lungs(lungs_hull, body) >0 ) & (coronal>0)
         #print_2D_gray(lungs_mask[100])
@@ -370,7 +370,7 @@ class ChestLocalization:
             bone_edge_dist_focus = bone_edge_dist > 0*bone_edge_dist_maximum
             blank_body[:] = bone_edge_dist_focus
             ld = scipy.ndimage.morphology.distance_transform_edt(blank_body)
-            return misc.resize_to_shape(ld, self.ss.orig_shape)
+            return resize_to_shape(ld, self.ss.orig_shape)
         
         def improve_bone_hull(bone_area_filter):
             basic_loc_filter = body & (coronal>0)
