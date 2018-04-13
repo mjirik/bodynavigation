@@ -68,8 +68,13 @@ class BodyNavigationTest(unittest.TestCase):
 
     def test_diaphragm(self):
         dst_diaphragm = self.obj.dist_diaphragm()
-        self.assertGreater(dst_diaphragm[10, 120, 120], 10)
-        self.assertLess(dst_diaphragm[120, 120, 120], -10)
+        # import sed3
+        # ed = sed3.sed3(dst_diaphragm)
+        # ed.show()
+        # above diaphragm
+        self.assertGreater(dst_diaphragm[0, 500, 10], 0)
+        # unter diaphragm
+        self.assertLess(dst_diaphragm[120, 250, 250], -20)
 
     def test_dist_sagital(self):
         dst_sagittal = self.obj.dist_sagittal()
