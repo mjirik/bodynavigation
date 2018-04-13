@@ -456,7 +456,7 @@ class BodyNavigation:
         # print 'ks2 ', kernel_size
 
         # metoda 1
-        kernel = np.ones(kernel_size)
+        kernel = np.ones(np.round(kernel_size).astype(np.int))
         kernel = kernel / (1.0 * np.prod(kernel_size))
         # flat = scipy.ndimage.filters.convolve(flat, kernel)
 
@@ -677,7 +677,7 @@ def find_symmetry_parameters(imin0, trax, tray, angles):
     return trax[am[0]], tray[am[1]], angles[am[2]]
 
 def find_symmetry(img, degrad=5):
-    imin0r = scipy.misc.imresize(img, np.asarray(img.shape)/degrad)
+    imin0r = scipy.misc.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
 
     angles = range(-180,180,15)
     trax = range(1, imin0r.shape[0],10)

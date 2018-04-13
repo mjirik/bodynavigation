@@ -63,10 +63,24 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertGreater(spine_dst[60,10,10], spine_dst[60, 124, 101])
 
     def test_get_dists(self):
-        self.obj.get_spine()
         dst_lungs = self.obj.dist_to_lungs()
-        self.obj.dist_diaphragm()
     # @unittest.skipIf(not interactiveTest, "interactive test")
+
+    def test_diaphragm(self):
+        dst_diaphragm = self.obj.dist_diaphragm()
+        self.assertGreater(dst_diaphragm[10, 120, 120], 10)
+        self.assertLess(dst_diaphragm[120, 120, 120], -10)
+
+    def test_dist_sagital(self):
+        dst_sagittal = self.obj.dist_sagittal()
+        self.assertGreater(dst_sagittal[60, 10, 10], 10)
+        self.assertLess(dst_sagittal[60, 10, 250], -10)
+
+    def test_dist_coronal(self):
+        dst_coronal = self.obj.dist_coronal()
+        self.assertGreater(dst_coronal[60, 10, 10], 10)
+        self.assertLess(dst_coronal[60, 250, 100], -10)
+
 
 if __name__ == "__main__":
     unittest.main()
