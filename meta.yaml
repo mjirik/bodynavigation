@@ -42,6 +42,7 @@ requirements:
     - io3d
     - pandas
     - sed3
+    - astropy
 
   run:
     - python
@@ -53,6 +54,7 @@ requirements:
     - io3d
     - pandas
     - sed3
+    - astropy
 
 test:
   # Python imports
