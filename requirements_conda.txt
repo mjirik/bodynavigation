@@ -8,3 +8,4 @@ io3d
 # pydicom==0.9.* # probably dont nead pydicom. It is imported by io3d
 sed3
 pandas
+astropy
