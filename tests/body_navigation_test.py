@@ -10,10 +10,13 @@ import sys
 import numpy as np
 from nose.plugins.attrib import attr
 
+import io3d
+import bodynavigation
 # from lisa import organ_segmentation
 # import pysegbase.dcmreaddata as dcmr
 # import lisa.data
 
+TEST_DATA_DIR = "3Dircadb1.1"
 
 # nosetests tests/organ_segmentation_test.py:OrganSegmentationTest.test_create_iparams # noqa
 
@@ -21,60 +24,49 @@ class BodyNavigationTest(unittest.TestCase):
     interactiveTest = False
     verbose = False
 
-    def generate_data(self):
+    @classmethod
+    def setUpClass(cls):
+        datap = io3d.read(
+            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
+            dataplus_format=True)
+        cls.obj = bodynavigation.BodyNavigation(datap["data3d"], datap["voxelsize_mm"])
+        cls.shape = datap["data3d"].shape
 
-        img3d = (np.random.rand(30, 30, 30)*10).astype(np.int16)
-        seeds = (np.zeros(img3d.shape)).astype(np.int8)
-        segmentation = (np.zeros(img3d.shape)).astype(np.int8)
-        segmentation[10:25, 4:24, 2:16] = 1
-        img3d = img3d + segmentation*20
-        seeds[12:18, 9:16, 3:6] = 1
-        seeds[19:22, 21:27, 19:21] = 2
+    @classmethod
+    def tearDownClass(cls):
+        cls.obj = None
 
-        voxelsize_mm = [5, 5, 5]
-        metadata = {'voxelsize_mm': voxelsize_mm}
-        return img3d, metadata, seeds, segmentation
+    def test_get_body(self):
+        seg_body = self.obj.get_body()
+        self.assertEqual(seg_body[64, 256, 256], 1)
+        self.assertEqual(seg_body[64, 10, 10], 0)
+        self.assertGreaterEqual(self.shape[0], seg_body.shape[0])
 
+        # check whether inside is positive and outside is zero
+        dst_surface = self.obj.dist_to_surface()
+        # import sed3
+        # ed = sed3.sed3(dst_surface)
+        # ed.show()
+        self.assertGreater(dst_surface[50, 124, 121], 5)
+        self.assertEqual(dst_surface[50, 10, 10], 0)
+
+    def test_get_spine(self):
+        seg_spine = self.obj.get_spine()
+        self.assertEqual(np.max(seg_spine[30:40, 100:150, 50:150]), 1)
+        self.assertEqual(seg_spine[64, 10, 10], 0)
+        spine_center = self.obj.spine_center[1:]
+        spine_center_expected = [124, 101]
+        err = np.linalg.norm(spine_center - spine_center_expected)
+        self.assertLessEqual(err, 100)
+
+        spine_dst = self.obj.dist_to_spine()
+        self.assertGreater(spine_dst[60,10,10], spine_dst[60, 124, 101])
+
+    def test_get_dists(self):
+        self.obj.get_spine()
+        dst_lungs = self.obj.dist_to_lungs()
+        self.obj.dist_diaphragm()
     # @unittest.skipIf(not interactiveTest, "interactive test")
-    @attr("interactive")
-    def test_viewer_seeds(self):
-
-        try:
-            from pysegbase.seed_editor_qt import QTSeedEditor
-        except:
-            print("Deprecated of pyseg_base as submodule")
-            from seed_editor_qt import QTSeedEditor
-        from PyQt4.QtGui import QApplication
-        import numpy as np
-        img3d = (np.random.rand(30, 30, 30)*10).astype(np.int16)
-        seeds = (np.zeros(img3d.shape)).astype(np.int8)
-        seeds[3:6, 12:18, 9:16] = 1
-        seeds[3:6, 19:22, 21:27] = 2
-        # , QMainWindow
-        app = QApplication(sys.argv)
-        pyed = QTSeedEditor(img3d, seeds=seeds)
-        pyed.exec_()
-
-        # deletemask = pyed.getSeeds()
-        # import pdb; pdb.set_trace()
-
-        # pyed = QTSeedEditor(deletemask, mode='draw')
-        # pyed.exec_()
-
-        app.exit()
-    # @unittest.skip("demonstrating skipping")
-
-    # @attr("interactive")
-    # def test_whole_organ_segmentation_interactive(self):
-    #     """
-    #     Interactive test uses dicom data for segmentation
-    #     """
-    #     dcmdir = os.path.join(
-    #         lisa.data.sample_data_path(),
-    #         'matlab/examples/sample_data/DICOM/digest_article/'
-    #     )
-    #         # path_to_script,
-    #         # './../sample_data/matlab/examples/sample_data/DICOM/digest_article/') # noqa
 
 if __name__ == "__main__":
     unittest.main()
