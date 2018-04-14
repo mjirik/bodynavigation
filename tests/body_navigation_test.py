@@ -17,7 +17,7 @@ import bodynavigation
 # import lisa.data
 
 TEST_DATA_DIR = "3Dircadb1.1"
-
+spine_center_workin = [60, 124, 101]
 # nosetests tests/organ_segmentation_test.py:OrganSegmentationTest.test_create_iparams # noqa
 
 class BodyNavigationTest(unittest.TestCase):
@@ -54,8 +54,9 @@ class BodyNavigationTest(unittest.TestCase):
         seg_spine = self.obj.get_spine()
         self.assertEqual(np.max(seg_spine[30:40, 100:150, 50:150]), 1)
         self.assertEqual(seg_spine[64, 10, 10], 0)
-        spine_center = self.obj.spine_center[1:]
-        spine_center_expected = [124, 101]
+        spine_center = self.obj.get_center()[1:]
+        spine_center_expected = [27, 47]
+        # spine_center_working_expected = [124, 101]
         err = np.linalg.norm(spine_center - spine_center_expected)
         self.assertLessEqual(err, 100)
 
@@ -89,6 +90,33 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertGreater(dst_coronal[60, 10, 10], 50)
         self.assertLess(dst_coronal[60, 500, 10], -50)
 
+
+    def test_dist_axial(self):
+        dst = self.obj.dist_axial()
+        # import sed3
+        # ed = sed3.sed3(dst_coronal)
+        # ed.show()
+        self.assertLess(dst[0, 250, 250], 10)
+        self.assertGreater(dst[100, 250, 250], 30)
+
+    @unittest.skip("problem with brodcast together different shapes")
+    def test_chest(self):
+        dst = self.obj.dist_to_chest()
+        # import sed3
+        # ed = sed3.sed3(dst)
+        # ed.show()
+        self.assertLess(dst[10, 10, 10], -10)
+        self.assertGreater(dst[
+                               spine_center_workin[0],
+                               spine_center_workin[1],
+                               spine_center_workin[2],
+                           ], 30)
+
+    @unittest.skip("problem with brodcast together different shapes")
+    def test_ribs(self):
+        dst = self.obj.dist_to_ribs()
+        self.assertLess(dst[10, 10, 10], -10)
+        # import sed3
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,8 +18,6 @@ import skimage.measure
 
 from imtools import misc, qmisc # https://github.com/mjirik/imtools
 
-# -*- coding: cp1250 -*-
-import sys
 #sys.path.append("/home/mjirik/projects/pysegbase")
 # sys.path.append("/home/mjirik/projects/lisa")
 
@@ -343,7 +341,12 @@ class ChestLocalization:
             
             step = 32
             for i in range(len(data3dr_tmp)):
-                mask[i] = np.sum(bone[max(0,i-step/2):min(len(data3dr_tmp),i+step/2)], axis = 0) >= 1
+                mask[i] = np.sum(
+                    bone[
+                    int(max(0, i - step / 2)):
+                    int(min(len(data3dr_tmp), i + step / 2))
+                    ], axis = 0
+                ) >= 1
                 try:
                     mask[i] = convex_hull_image(mask[i])
                 except:
@@ -373,7 +376,7 @@ class ChestLocalization:
             return resize_to_shape(ld, self.ss.orig_shape)
         
         def improve_bone_hull(bone_area_filter):
-            basic_loc_filter = body & (coronal>0)
+            basic_loc_filter = body & (coronal > 0)
             mask = np.zeros(bone_area_filter.shape)
             
             for i in range(len(bone_area_filter)):
