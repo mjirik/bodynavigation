@@ -17,7 +17,9 @@ import bodynavigation
 # import lisa.data
 
 TEST_DATA_DIR = "3Dircadb1.1"
-spine_center_workin = [60, 124, 101]
+spine_center_working = [60, 124, 101]
+ircad1_spine_center_idx = [120, 350, 260]
+ircad1_liver_center_idx = [25, 220, 180]
 # nosetests tests/organ_segmentation_test.py:OrganSegmentationTest.test_create_iparams # noqa
 
 class BodyNavigationTest(unittest.TestCase):
@@ -30,6 +32,7 @@ class BodyNavigationTest(unittest.TestCase):
             io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
             dataplus_format=True)
         cls.obj = bodynavigation.BodyNavigation(datap["data3d"], datap["voxelsize_mm"])
+        cls.data3d = datap["data3d"]
         cls.shape = datap["data3d"].shape
 
     @classmethod
@@ -99,23 +102,45 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertLess(dst[0, 250, 250], 10)
         self.assertGreater(dst[100, 250, 250], 30)
 
-    @unittest.skip("problem with brodcast together different shapes")
+    # @unittest.skip("problem with brodcast together different shapes")
     def test_chest(self):
         dst = self.obj.dist_to_chest()
+        # self.data3d[
+        #     # :,
+        #     ircad1_liver_center_idx[0]:ircad1_liver_center_idx[0] + 20,
+        #     ircad1_liver_center_idx[1]:ircad1_liver_center_idx[1] + 20,
+        #     ircad1_liver_center_idx[2]:ircad1_liver_center_idx[2] + 20,
+        # ] = 1000
         # import sed3
-        # ed = sed3.sed3(dst)
+        # ed = sed3.sed3(self.data3d)
+        # ed = sed3.sed3(self.data3d, contour=(dst > 0))
+        # ed = sed3.sed3(self.dst, contour=(dst > 0))
         # ed.show()
+
+
         self.assertLess(dst[10, 10, 10], -10)
         self.assertGreater(dst[
-                               spine_center_workin[0],
-                               spine_center_workin[1],
-                               spine_center_workin[2],
-                           ], 30)
+                               ircad1_liver_center_idx[0],
+                               ircad1_liver_center_idx[1],
+                               ircad1_liver_center_idx[2],
+                           ], 10)
 
-    @unittest.skip("problem with brodcast together different shapes")
+    # @unittest.skip("problem with brodcast together different shapes")
     def test_ribs(self):
         dst = self.obj.dist_to_ribs()
-        self.assertLess(dst[10, 10, 10], -10)
+        #
+        # import sed3
+        # # ed = sed3.sed3(self.data3d)
+        # ed = sed3.sed3(self.data3d, contour=(dst > 0))
+        # # ed = sed3.sed3(self.dst, contour=(dst > 0))
+        # ed.show()
+
+        self.assertGreater(dst[10, 10, 10], 10)
+        self.assertGreater(dst[
+                               ircad1_liver_center_idx[0],
+                               ircad1_liver_center_idx[1],
+                               ircad1_liver_center_idx[2],
+                           ], 10)
         # import sed3
 
 if __name__ == "__main__":

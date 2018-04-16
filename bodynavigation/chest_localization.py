@@ -283,12 +283,15 @@ class ChestLocalization:
             blank_body = np.ones(body.shape)
             lungs_edge_dist = scipy.ndimage.morphology.distance_transform_edt(lungs_hull)
             lungs_edge_dist_maximum = np.max(lungs_edge_dist)
-            lungs_edge_dist_focus = lungs_edge_dist > 0.2*lungs_edge_dist_maximum               # 0.1 puvodne
+            lungs_edge_dist_focus = lungs_edge_dist > 0.2 * lungs_edge_dist_maximum               # 0.1 puvodne
             blank_body[:] = lungs_edge_dist_focus
             ld = scipy.ndimage.morphology.distance_transform_edt(blank_body)
-            return resize_to_shape(ld, self.ss.orig_shape)
-    
-        lungs_mask = (dist_lungs(lungs_hull, body) >0 ) & (coronal>0)
+            # resized_to_orig = resize_to_shape(ld, self.ss.orig_shape)
+            # return resized_to_orig
+            return ld
+
+        dist_lungs_with_body = dist_lungs(lungs_hull, body)
+        lungs_mask = (dist_lungs_with_body > 0 ) & (coronal > 0)
         #print_2D_gray(lungs_mask[100])
     
         #print_it_all(ss, data3dr_tmp, lungs_mask*3, "001")
@@ -296,11 +299,11 @@ class ChestLocalization:
     
         def improve_lungs(dist_lungs_hulls, final_area_filter):
             """ Upravi masku lungs pro specialni ucely """
-            lungs_hulls = dist_lungs_hulls>0
+            lungs_hulls = dist_lungs_hulls > 0
             new_filter = np.zeros(final_area_filter.shape)
             for i, area_slice in enumerate(final_area_filter):
                 convex = convex_hull_image(area_slice)
-                new_filter[i] = lungs_hulls[i]&convex
+                new_filter[i] = lungs_hulls[i] & convex
             return new_filter
         
         return lungs_mask
@@ -373,7 +376,9 @@ class ChestLocalization:
             bone_edge_dist_focus = bone_edge_dist > 0*bone_edge_dist_maximum
             blank_body[:] = bone_edge_dist_focus
             ld = scipy.ndimage.morphology.distance_transform_edt(blank_body)
-            return resize_to_shape(ld, self.ss.orig_shape)
+            # ld_resized = resize_to_shape(ld, self.ss.orig_shape)
+            # return ld_resized
+            return ld
         
         def improve_bone_hull(bone_area_filter):
             basic_loc_filter = body & (coronal > 0)
@@ -381,20 +386,21 @@ class ChestLocalization:
             
             for i in range(len(bone_area_filter)):
                 try:
-                    down_mask = bone_area_filter[i]&basic_loc_filter[i]
-                    mask[i] = convex_hull_image(down_mask)|bone_area_filter[i]
+                    down_mask = bone_area_filter[i] & basic_loc_filter[i]
+                    mask[i] = convex_hull_image(down_mask) | bone_area_filter[i]
                     mask[i] = scipy.ndimage.morphology.binary_fill_holes(mask[i])
                 except:
                     pass
-            mask = mask>0
+            mask = mask > 0
             return mask
         
         bone_hulls = dist_bone(bone_hull, body)
-        bone_area_filter = improve_bone_hull(bone_hulls>0)#&(bone_hulls<7)
-        
+        bone_area_filter = improve_bone_hull(bone_hulls > 0) # &(bone_hulls<7)
+
+        # v internal_filter nebyl žádný return
         lungs_internal_filter = self.internal_filter(lungs, coronal, body)
         
-        final_area_filter = bone_area_filter & (bone_step_hull|lungs_internal_filter) & body
+        final_area_filter = bone_area_filter & (bone_step_hull | lungs_internal_filter) & body
     
         return final_area_filter
     
@@ -407,7 +413,7 @@ class ChestLocalization:
         area_inv = final_area_filter
         dist_hull = scipy.ndimage.morphology.distance_transform_edt(area_inv)
            
-        self.print_it_all(self.ss, area_inv, intensity_filter*2, "001")
+        self.print_it_all(self.ss, area_inv, intensity_filter * 2, "001")
         
         to_save = area_inv.astype(float)+(img > 200).astype(float)
         
