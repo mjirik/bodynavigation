@@ -1,7 +1,7 @@
 numpy>=1.10.*
 scipy
 scikit-image
-scikit-learn
+scikit-learn>=0.18.*
 pyqt=4.*
 imtools
 io3d
