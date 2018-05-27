@@ -222,7 +222,7 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
                     break
 
         if readypath is None:
-            data3d, metadata = io3d.datareader.read(datapath)
+            data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
             voxelsize = metadata["voxelsize_mm"]
             obj = OrganDetection(data3d, voxelsize)
         else:
