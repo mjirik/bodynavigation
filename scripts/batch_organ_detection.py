@@ -245,6 +245,9 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         if "abdomen" in parts:
             abdomen = obj.getAbdomen();# ed = sed3.sed3(abdomen); ed.show()
             volume_sets.append([abdomen, getRGBA(3, a=VOLUME_APLHA)])
+        if "kidneys" in parts:
+            kidneys = obj.getKidneys(); # ed = sed3.sed3(kidneys); ed.show()
+            volume_sets.append([kidneys, getRGBA(5, a=VOLUME_APLHA)])
         if "bones" in parts:
             bones = obj.getBones(); # ed = sed3.sed3(bones); ed.show()
             volume_sets.append([bones, getRGBA(0, a=VOLUME_APLHA)])
@@ -252,6 +255,9 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
             bones_stats = obj.analyzeBones()
             point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), getRGBA(0, a=255), None, 1])
             point_sets.append([bones_stats["hip_joints"], (0,255,0,255), (0,0,0,255), 7])
+            tmp = list(bones_stats["hip_start"]);
+            while None in tmp: tmp.remove(None)
+            point_sets.append([tmp, (0,0,255,255), (0,0,0,255), 7])
         if "vessels" in parts:
             vessels = obj.getVessels(); # ed = sed3.sed3(vessels); ed.show()
             aorta = obj.getAorta(); # ed = sed3.sed3(aorta); ed.show()

@@ -29,6 +29,7 @@ import skimage.feature
 import io3d
 import sed3
 
+# run with: "python -m bodynavigation.organ_detection -h"
 from .tools import getSphericalMask, binaryClosing, binaryFillHoles, \
     compressArray, decompressArray, getDataPadding, cropArray, padArray, polyfit3D, growRegion
 
@@ -80,6 +81,7 @@ class OrganDetection(object):
             "fatlessbody":None,
             "lungs":None,
             "diaphragm":None,
+            "kidneys":None,
             "bones":None,
             "abdomen":None,
             "vessels":None,
@@ -373,24 +375,36 @@ class OrganDetection(object):
             if part == "body":
                 data = self._getBody(self.data3d, self.spacing)
             elif part == "fatlessbody":
+                self._preloadParts(["body",])
                 data = self._getFatlessBody(self.data3d, self.spacing, self.getBody(raw=True))
             elif part == "lungs":
+                self._preloadParts(["fatlessbody",])
                 data = self._getLungs(self.data3d, self.spacing, self.getFatlessBody(raw=True))
             elif part == "diaphragm":
+                self._preloadParts(["lungs",])
                 data = self._getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
+            elif part == "kidneys":
+                self._preloadParts(["lungs","fatlessbody"])
+                data = self._getKidneys(self.data3d, self.spacing, self.getLungs(raw=True), \
+                    self.getFatlessBody(raw=True))
             elif part == "bones":
+                self._preloadParts(["fatlessbody","lungs", "kidneys"])
                 data = self._getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
-                    self.getLungs(raw=True) )
+                    self.getLungs(raw=True), self.getKidneys(raw=True) )
             elif part == "abdomen":
+                self._preloadParts(["fatlessbody","diaphragm"])
                 data = self._getAbdomen(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getDiaphragm(raw=True), self.analyzeBones(raw=True))
             elif part == "vessels":
+                self._preloadParts(["bones",])
                 data = self._getVessels(self.data3d, self.spacing, \
                     self.getBones(raw=True), self.analyzeBones(raw=True) )
             elif part == "aorta":
+                self._preloadParts(["vessels",])
                 data = self._getAorta(self.data3d, self.spacing, self.getVessels(raw=True), \
                     self.analyzeVessels(raw=True) )
             elif part == "venacava":
+                self._preloadParts(["vessels",])
                 data = self._getVenaCava(self.data3d, self.spacing, self.getVessels(raw=True), \
                     self.analyzeVessels(raw=True) )
 
@@ -398,6 +412,15 @@ class OrganDetection(object):
 
         if not raw: data = self.toOutputFormat(data)
         return data
+
+    def _preloadParts(self, partlist):
+        """ Lowers memory usage """
+        for part in partlist:
+            if part not in self.masks_comp:
+                logger.error("Invalid bodypart '%s'! Skipping preload!" % part)
+                continue
+            if self.masks_comp[part] is None:
+                self.getPart(part, raw=True)
 
     def getBody(self, raw=False):
         return self.getPart("body", raw=raw)
@@ -410,6 +433,9 @@ class OrganDetection(object):
 
     def getDiaphragm(self, raw=False):
         return self.getPart("diaphragm", raw=raw)
+
+    def getKidneys(self, raw=False):
+        return self.getPart("kidneys", raw=raw)
 
     def getBones(self, raw=False):
         return self.getPart("bones", raw=raw)
@@ -649,7 +675,34 @@ class OrganDetection(object):
         return diaphragm
 
     @classmethod
-    def _getBones(cls, data3d, spacing, fatless, lungs):
+    def _getKidneys(cls, data3d, spacing, lungs, fatlessbody):
+        """ between 180 and 300 """
+        logger.info("_getKidneys")
+        spacing_vol = spacing[0]*spacing[1]*spacing[2]
+
+        fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing) # for ignoring ribs
+        kidneys = (fatless_dst > 15) & (data3d > 180) & (data3d < 300); del(fatless_dst) # includes bones
+        kidneys = binaryClosing(kidneys, structure=getSphericalMask([5,]*3, spacing=spacing))
+        kidneys = binaryFillHoles(kidneys, z_axis=True)
+
+        # remove spine
+        bones_only  = (data3d > 500) # only rough bone contours
+        b200_l = skimage.measure.label((data3d > 180), background=0)
+        tmp = b200_l.copy(); tmp[bones_only == 0] = 0
+        bone_labels = np.unique(tmp)[1:]; del(tmp); del(bones_only)
+        for l in np.unique(b200_l)[1:]:
+            if l not in bone_labels:
+                b200_l[b200_l == l] = 0
+        kidneys[b200_l != 0] = 0
+
+        # experimantal volume of kidneys is about 200k mm3
+        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(100000/spacing_vol))
+
+        #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
+        return kidneys
+
+    @classmethod
+    def _getBones(cls, data3d, spacing, fatless, lungs, kidneys):
         """
         Good enough sgementation of all bones
         * data3d - everything, but body must be removed
@@ -686,11 +739,12 @@ class OrganDetection(object):
             b200[ b200 == l ] = -1
         b200 = (b200 == -1); del(seeds_l)
 
-        # remove stuff connected to heart
+        # remove stuff connected to heart and kidneys
         if np.sum(lungs) != 0:
             wseeds = ( bones == 1 ).astype(np.int8) # = 1
             wseeds[ (fatless_dst < 15) & (fatless == 1) & (b200 == 1) ] = 1 # ribs readded
             wseeds[s][:,:int(lungs_hull.shape[1]/2),:][ lungs_hull[:,:int(lungs_hull.shape[1]/2),:] == 1 ] = 2
+            wseeds[kidneys == 1] = 2
             b200 = skimage.morphology.watershed(b200, wseeds, mask=b200) == 1
 
             #ed = sed3.sed3(data3d, seeds=wseeds, contour=r); ed.show()
@@ -926,10 +980,12 @@ class OrganDetection(object):
 
         else:
             if part == "bones":
+                self._preloadParts(["fatlessbody", "bones", "lungs"])
                 data = self._analyzeBones( \
                 data3d=self.data3d, spacing=self.spacing, fatlessbody=self.getFatlessBody(raw=True), \
                 bones=self.getBones(raw=True), lungs=self.getLungs(raw=True) )
             elif part == "vessels":
+                self._preloadParts(["vessels", "bones"])
                 data = self._analyzeVessels( \
                 data3d=self.data3d, spacing=self.spacing, vessels=self.getVessels(raw=True), \
                 bones_stats=self.analyzeBones(raw=True) )
@@ -940,6 +996,9 @@ class OrganDetection(object):
             if part == "bones":
                 data["spine"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["spine"] ]
                 data["hip_joints"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["hip_joints"] ]
+                for i, p in enumerate(data["hip_start"]):
+                    if p is None: continue
+                    data["hip_start"][i] = tuple(self.toOutputCoordinates(p).astype(np.int))
             elif part == "vessels":
                 data["aorta"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["aorta"] ]
                 data["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["vena_cava"] ]
@@ -975,6 +1034,7 @@ class OrganDetection(object):
 
         points_spine = []
         points_hip_joints_l = []; points_hip_joints_r = []
+        points_hip_start_l = {}; points_hip_start_r = {}
         for z in range(lungs_start, bones.shape[0]): # TODO - separate into more sections (spine should be only in middle-lower)
             bs = fatlessbody[z,:,:]
             # separate body/bones into 3 sections (on x-axis)
@@ -1010,6 +1070,12 @@ class OrganDetection(object):
                     points_hip_joints_l.append( (z, int(left_c[0]), int(left_c[1])) )
                     points_hip_joints_r.append( (z, int(right_c[0]), int(right_c[1])) )
 
+            # try to detect hip bones start on z axis
+            if (z >= lungs_end) and (left_v/total_v > 0.1):
+                points_hip_start_l[z] = (z, int(left_c[0]), int(left_c[1]))
+            if (z >= lungs_end) and (right_v/total_v > 0.1):
+                points_hip_start_r[z] = (z, int(right_c[0]), int(right_c[1]))
+
         # calculate centroid of hip points
         points_hip_joints = []
         if len(points_hip_joints_l) != 0:
@@ -1031,6 +1097,20 @@ class OrganDetection(object):
         if len(points_spine) >= 2:
             points_spine = polyfit3D(points_spine)
 
+        # try to detect start of hip bones
+        points_hip_start = [None, None]
+        end_z = bones.shape[0]-1 if len(points_hip_joints)==0 else points_hip_joints[0][0]
+        for z in range(end_z, lungs_start, -1):
+            if z not in points_hip_start_l:
+                if (z+1) in points_hip_start_l:
+                    points_hip_start[0] = points_hip_start_l[z+1]
+                break
+        for z in range(end_z, lungs_start, -1):
+            if z not in points_hip_start_r:
+                if (z+1) in points_hip_start_r:
+                    points_hip_start[1] = points_hip_start_r[z+1]
+                break
+
         # seeds = np.zeros(bones.shape)
         # for p in points_spine_c: seeds[p[0], p[1], p[2]] = 2
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
@@ -1040,7 +1120,7 @@ class OrganDetection(object):
         # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
         # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
-        return {"spine":points_spine, "hip_joints":points_hip_joints}
+        return {"spine":points_spine, "hip_joints":points_hip_joints, "hip_start":points_hip_start}
 
     @classmethod
     def _analyzeVessels(cls, data3d, spacing, vessels, bones_stats):
@@ -1199,19 +1279,21 @@ if __name__ == "__main__":
     # fatlessbody = obj.getFatlessBody()
     # bones = obj.getBones()
     # lungs = obj.getLungs()
-    #abdomen = obj.getAbdomen()
-    vessels = obj.getVessels()
-    aorta = obj.getAorta()
-    venacava = obj.getVenaCava()
+    kidneys = obj.getKidneys()
+    # abdomen = obj.getAbdomen()
+    # vessels = obj.getVessels()
+    # aorta = obj.getAorta()
+    # venacava = obj.getVenaCava()
 
     # ed = sed3.sed3(data3d, contour=body); ed.show()
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
+    ed = sed3.sed3(data3d, contour=kidneys); ed.show()
     # ed = sed3.sed3(data3d, contour=abdomen); ed.show()
-    vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
-    vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
-    ed = sed3.sed3(data3d, contour=vc); ed.show()
+    # vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
+    # vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
+    # ed = sed3.sed3(data3d, contour=vc); ed.show()
 
     # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]
