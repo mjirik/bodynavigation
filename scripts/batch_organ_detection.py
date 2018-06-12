@@ -228,7 +228,7 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         else:
             print("Loading preprocessed data from readypath: ", readypath)
             obj = OrganDetection.fromDirectory(os.path.abspath(readypath))
-            data3d = obj.getData3D(); voxelsize = obj.orig_voxelsize
+            data3d = obj.getData3D(); voxelsize = obj.spacing_source
 
         point_sets = []; volume_sets = []
         VOLUME_APLHA = 100

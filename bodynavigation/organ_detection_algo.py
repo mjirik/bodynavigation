@@ -31,6 +31,10 @@ from .tools import getSphericalMask, binaryClosing, binaryFillHoles, \
 
 class OrganDetectionAlgo(object):
 
+    ####################
+    ### Segmentation ###
+    ####################
+
     @classmethod
     def getBody(cls, data3d, spacing):
         """
@@ -563,9 +567,9 @@ class OrganDetectionAlgo(object):
 
         return venacava
 
-
-    ############################################
-
+    ##################
+    ### Statistics ###
+    ##################
 
     @classmethod
     def analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs):

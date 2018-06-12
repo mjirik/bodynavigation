@@ -11,14 +11,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 import io
+import json
 
 import numpy as np
 import scipy
 import scipy.ndimage
 import skimage.transform
 import skimage.morphology
-
-
 
 def getSphericalMask(shape=[3,3,3], spacing=[1,1,1]):
     shape = (np.asarray(shape, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
@@ -104,6 +103,7 @@ def cropArray(data, pads):
     """
     Removes specified number of values at start and end of every axis from N-dim array
     Pads for 3D data: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
+    Does not create copy of input, but creates view on section of input!
     """
     s = []
     for dim in range(len(data.shape)):
@@ -151,3 +151,16 @@ def growRegion(region, mask, iterations=1):
         region = scipy.ndimage.binary_dilation(region, structure=kernel, mask=mask)
 
     return region
+
+class NumpyEncoder(json.JSONEncoder):
+    """
+    Fixes saving numpy arrays into json
+
+    Example:
+    a = np.array([1, 2, 3])
+    print(json.dumps({'aa': [2, (2, 3, 4), a], 'bb': [2]}, cls=NumpyEncoder))
+    """
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
