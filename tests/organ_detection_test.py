@@ -1,6 +1,12 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# Enable Python3 code in Python2 - Must be first in file!
+from __future__ import print_function   # print("text")
+from __future__ import division         # 2/3 == 0.666; 2//3 == 0
+from __future__ import absolute_import  # 'import submodule2' turns into 'from . import submodule2'
+from builtins import range              # replaces range with xrange
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -23,6 +29,15 @@ import sed3 # for testing
 #TEST_DATA_DIR = "/home/jirka642/Programming/_Data/DP/3Dircadb1/1"
 TEST_DATA_DIR = "3Dircadb1.1"
 
+def diceCoeff(vol1, vol2):
+    """ Computes dice coefficient between two binary volumes """
+    if (vol1.dtype != np.bool) or (vol2.dtype != np.bool):
+        raise Exception("vol1 or vol2 is not np.bool dtype!")
+    a = np.sum( vol1[vol2] )
+    b = np.sum( vol1 )
+    c = np.sum( vol2 )
+    return (2*a)/(b+c)
+
 class OrganDetectionTest(unittest.TestCase):
     """
     Run only this test class:
@@ -32,6 +47,14 @@ class OrganDetectionTest(unittest.TestCase):
         nosetests -v tests.organ_detection_test:OrganDetectionTest.getBody_test
         nosetests -v --logging-level=DEBUG tests.organ_detection_test:OrganDetectionTest.getBody_test
     """
+
+    # Minimal dice coefficients
+    GET_BODY_DICE = 0.95
+    GET_LUNGS_DICE = 0.95
+    GET_AORTA_DICE = 0.40 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
+    GET_VENACAVA_DICE = 0.10 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
+    GET_BONES_DICE =  0.70 # test data don't have segmented whole bones, missing center volumes
+    GET_KIDNEYS_DICE = 0.55 # TODO - make better
 
     @classmethod
     def setUpClass(cls):
@@ -58,14 +81,14 @@ class OrganDetectionTest(unittest.TestCase):
         # ed = sed3.sed3(test_body.astype(np.uint8), contour=body.astype(np.uint8))
         # ed.show()
 
-        # Test requires less then 5% error rate in segmentation
-        test_body_sum = np.sum(test_body)
-        diff_sum = np.sum(abs(test_body-body))
-        self.assertLess(float(diff_sum)/float(test_body_sum), 0.05)
-
         # There must be only one object (body) in segmented data
         test_body_label = skimage.measure.label(test_body, background=0)
         self.assertEqual(np.max(test_body_label), 1)
+
+        # Test requires at least ??% of correct segmentation
+        dice = diceCoeff(test_body, body)
+        print("Dice coeff: %s" % str(dice))
+        self.assertGreater(dice, self.GET_BODY_DICE)
 
     def getLungs_test(self):
         # get segmented data
@@ -83,10 +106,10 @@ class OrganDetectionTest(unittest.TestCase):
         # ed = sed3.sed3(test_lungs.astype(np.uint8), contour=lungs.astype(np.uint8))
         # ed.show()
 
-        # Test requires less then 10% error rate in segmentation
-        test_lungs_sum = np.sum(test_lungs)
-        diff_sum = np.sum(abs(test_lungs-lungs))
-        self.assertLess(float(diff_sum)/float(test_lungs_sum), 0.1)
+        # Test requires at least ??% of correct segmentation
+        dice = diceCoeff(test_lungs, lungs)
+        print("Dice coeff: %s" % str(dice))
+        self.assertGreater(dice, self.GET_LUNGS_DICE)
 
     def getAorta_test(self):
         # get segmented data
@@ -99,11 +122,10 @@ class OrganDetectionTest(unittest.TestCase):
         # ed = sed3.sed3(test_aorta.astype(np.uint8), contour=aorta.astype(np.uint8))
         # ed.show()
 
-        # Test requires less then 50% error rate in segmentation
-        # -> used test data has smaller vessels connected to aorta => that's why the big error
-        test_aorta_sum = np.sum(test_aorta)
-        diff_sum = np.sum(abs(test_aorta-aorta))
-        self.assertLess(float(diff_sum)/float(test_aorta_sum), 2.0)
+        # Test requires at least ??% of correct segmentation
+        dice = diceCoeff(test_aorta, aorta)
+        print("Dice coeff: %s" % str(dice))
+        self.assertGreater(dice, self.GET_AORTA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
 
     def getVenaCava_test(self):
@@ -117,10 +139,47 @@ class OrganDetectionTest(unittest.TestCase):
         # ed = sed3.sed3(test_venacava.astype(np.uint8), contour=venacava.astype(np.uint8))
         # ed.show()
 
-        # Test requires less then 50% error rate in segmentation
-        # -> used test data has smaller vessels connected to aorta => that's why the big error
-        test_venacava_sum = np.sum(test_venacava)
-        diff_sum = np.sum(abs(test_venacava-venacava))
-        self.assertLess(float(diff_sum)/float(test_venacava_sum), 2.0)
+        # Test requires at least ??% of correct segmentation
+        dice = diceCoeff(test_venacava, venacava)
+        print("Dice coeff: %s" % str(dice))
+        self.assertGreater(dice, self.GET_VENACAVA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
+
+    def getBones_test(self):
+        # get segmented data
+        bones = self.obj.getBones()
+
+        # get preprocessed test data
+        datap = io3d.read(io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "bone"), dataplus_format=True)
+        test_bones = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
+
+        # ed = sed3.sed3(test_bones.astype(np.uint8), contour=bones.astype(np.uint8))
+        # ed.show()
+
+        # Test requires at least ??% of correct segmentation
+        dice = diceCoeff(test_bones, bones)
+        print("Dice coeff: %s" % str(dice))
+        self.assertGreater(dice, self.GET_BONES_DICE)
+
+    def getKidneys_test(self):
+        # get segmented data
+        kidneys = self.obj.getKidneys()
+
+        # get preprocessed test data
+        datap1 = io3d.read(
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "leftkidney"),
+            dataplus_format=True)
+        datap2 = io3d.read(
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "rightkidney"),
+            dataplus_format=True)
+        test_kidneys = (datap1["data3d"]+datap2["data3d"]) > 0 # reducing value range to <0,1> from <0,255>
+
+        # ed = sed3.sed3(test_kidneys.astype(np.uint8), contour=kidneys.astype(np.uint8))
+        # ed.show()
+
+        # Test requires at least ??% of correct segmentation
+        dice = diceCoeff(test_kidneys, kidneys)
+        print("Dice coeff: %s" % str(dice))
+        self.assertGreater(dice, self.GET_KIDNEYS_DICE)
+
 
