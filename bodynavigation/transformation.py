@@ -172,14 +172,16 @@ class Transformation(TransformationInf):
         if norm_scale_enable:
             # Fatless body segmentation
             fatlessbody = OrganDetectionAlgo.getFatlessBody(data3d, spacing, body)
+            del(body)
 
-            # get lungs end
+            # get lungs end # TODO - this kills RAM on full body shots
             logger.debug("Detecting end of lungs")
             lungs = OrganDetectionAlgo.getLungs(data3d, spacing, fatlessbody)
             if np.sum(lungs) == 0:
                 lungs_end = 0
             else:
                 lungs_end = data3d.shape[0] - getDataPadding(lungs)[0][1]
+            del(lungs)
 
             logger.debug("Calculating size normalization scale")
             # get median body widths and heights
@@ -198,12 +200,15 @@ class Transformation(TransformationInf):
                 size_v = []
                 for dim, pad in enumerate(getDataPadding(fatlessbody[int(fatlessbody.shape[0]/2),:,:])):
                     size_v.append( fatlessbody.shape[dim+1]-np.sum(pad) )
+            del(fatlessbody)
 
             # Calculate NORMALIZATION SCALE
             size_mm = [ size_v[0]*spacing[1], size_v[1]*spacing[2] ] # fatlessbody size in mm on X and Y axis
             norm_scale = [ None, self.NORMED_FATLESS_BODY_SIZE[0]/size_mm[0], self.NORMED_FATLESS_BODY_SIZE[1]/size_mm[1] ]
             norm_scale[0] = (norm_scale[1]+norm_scale[2])/2 # scaling on z-axis is average of scaling on x,y-axis
             self.trans["norm_scale"] = norm_scale # not used outside of init
+        else:
+            del(body)
 
         # Get VOXEL SCALE, scaling so that data has voxelsize 1x1x1mm
         self.trans["voxel_scale"] = np.asarray([1,1,1], dtype=np.float)

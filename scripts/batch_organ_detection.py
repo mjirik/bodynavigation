@@ -14,6 +14,7 @@ import sys, os, argparse
 import traceback
 
 from multiprocessing import Pool
+import resource
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -206,9 +207,16 @@ def getRGBA(idx, a=255):
     c = list(colors[idx]); c.append(a)
     return tuple(c)
 
-def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None):
+def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None, memorylimit=-1):
     try:
         print("Processing: ", datapath)
+
+        # set memory limit
+        if memorylimit > 0: # resource.RLIMIT_AS works with virtual memory
+            print("Setting memory limit to: %s GB" % str(memorylimit))
+            memorylimit_b = int(memorylimit*(2**30))
+            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+            resource.setrlimit(resource.RLIMIT_AS, (memorylimit_b, min(memorylimit_b,hard)))
 
         onlyfiles = sorted([f for f in os.listdir(datapath) if os.path.isfile(os.path.join(datapath, f))])
         if len(onlyfiles) == 1:
@@ -299,6 +307,8 @@ def main():
             help='path to output dir')
     parser.add_argument('-t','--threads', type=int, default=1,
             help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 3GB, big ones can go over 9GB.')
+    parser.add_argument('-m','--memorylimit', type=int, default=-1,
+            help='How many GB of VIRTUAL memory are individual threads allowed before they are terminated. Might only work on Unix systems. Default is unlimited')
     parser.add_argument('-p','--parts', default="bones_stats,vessels,vessels_stats",
             help='Body parts to process sparated by ",", Use "None" to disable, defaults: "bones_stats,vessels,vessels_stats"')
     parser.add_argument("--dump", default=None,
@@ -340,7 +350,7 @@ def main():
         readypath = None
         if dirname in ready_dirnames:
             readypath = os.path.abspath(os.path.join(args.readydirs, dirname))
-        inputs.append([datapath, dirname, outputdir, parts, dumpdir, readypath])
+        inputs.append([datapath, dirname, outputdir, parts, dumpdir, readypath, args.memorylimit])
 
     pool = Pool(processes=args.threads)
     pool.map(processThread, inputs)

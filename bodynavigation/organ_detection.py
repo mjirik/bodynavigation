@@ -73,6 +73,7 @@ class OrganDetection(object):
 
         # statistics and models
         self.stats = {
+            "lungs":None,
             "bones":None,
             "vessels":None
             }
@@ -229,14 +230,14 @@ class OrganDetection(object):
         del(valid_mask, dst)
         # ed = sed3.sed3(data3d); ed.show()
 
-        # remove anything that is not in body volume # TODO - maybe do this in algorithms
-        body = OrganDetectionAlgo.getBody(data3d, voxelsize)
-        data3d[ body == 0 ] = -1024
-        del(body)
-
         # Data Registration and Transformation
         trans = Transformation(data3d, voxelsize)
         data3d = trans.transData(data3d)
+
+        # remove anything that is not in body volume # TODO - maybe do this in algorithms?
+        body = OrganDetectionAlgo.getBody(data3d, voxelsize)
+        data3d[ body == 0 ] = -1024
+        del(body)
 
         # ed = sed3.sed3(data3d); ed.show()
         return data3d, trans
@@ -278,9 +279,9 @@ class OrganDetection(object):
                 self._preloadParts(["lungs",])
                 data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
             elif part == "kidneys":
-                self._preloadParts(["lungs","fatlessbody"])
-                data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getLungs(raw=True), \
-                    self.getFatlessBody(raw=True))
+                self._preloadParts(["fatlessbody",])
+                data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
+                    self.analyzeLungs(raw=True) )
             elif part == "bones":
                 self._preloadParts(["fatlessbody","lungs", "kidneys"])
                 data = OrganDetectionAlgo.getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
@@ -361,11 +362,15 @@ class OrganDetection(object):
             data = copy.deepcopy(self.stats[part])
 
         else:
+            if part == "lungs":
+                self._preloadParts(["lungs",])
+                data =  OrganDetectionAlgo.analyzeLungs(self.data3d, self.spacing, \
+                    lungs=self.getLungs(raw=True))
             if part == "bones":
-                self._preloadParts(["fatlessbody", "bones", "lungs"])
+                self._preloadParts(["fatlessbody", "bones"])
                 data = OrganDetectionAlgo.analyzeBones( \
                 data3d=self.data3d, spacing=self.spacing, fatlessbody=self.getFatlessBody(raw=True), \
-                bones=self.getBones(raw=True), lungs=self.getLungs(raw=True) )
+                bones=self.getBones(raw=True), lungs_stats=self.analyzeLungs(raw=True) )
             elif part == "vessels":
                 self._preloadParts(["vessels", "bones"])
                 data = OrganDetectionAlgo.analyzeVessels( \
@@ -375,6 +380,13 @@ class OrganDetection(object):
             self.stats[part] = copy.deepcopy(data)
 
         if not raw:
+            if part == "lungs":
+                data["start"] = self.toOutputCoordinates( \
+                    [data["start"], int(self.data3d.shape[1]/2), int(self.data3d.shape[2]/2)] \
+                    ).astype(np.int)[0]
+                data["end"] = self.toOutputCoordinates( \
+                    [data["end"], int(self.data3d.shape[1]/2), int(self.data3d.shape[2]/2)] \
+                    ).astype(np.int)[0]
             if part == "bones":
                 data["spine"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["spine"] ]
                 data["hip_joints"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["hip_joints"] ]
@@ -385,6 +397,9 @@ class OrganDetection(object):
                 data["aorta"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["aorta"] ]
                 data["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["vena_cava"] ]
         return data
+
+    def analyzeLungs(self, raw=False):
+        return self.getStats("lungs", raw=raw)
 
     def analyzeBones(self, raw=False):
         return self.getStats("bones", raw=raw)

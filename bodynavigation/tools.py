@@ -72,13 +72,13 @@ def binaryFillHoles(data, z_axis=False, y_axis=False, x_axis=False):
     return data
 
 def compressArray(mask):
-    logger.debug("compressArray()")
+    """ Compresses numpy array from RAM to RAM """
     mask_comp = io.BytesIO()
     np.savez_compressed(mask_comp, mask)
     return mask_comp
 
 def decompressArray(mask_comp):
-    logger.debug("decompressArray()")
+    """ Decompresses numpy array from RAM to RAM """
     mask_comp.seek(0)
     return np.load(mask_comp)['arr_0']
 

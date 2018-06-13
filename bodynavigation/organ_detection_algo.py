@@ -92,7 +92,7 @@ class OrganDetectionAlgo(object):
         return fatless
 
     @classmethod
-    def getLungs(cls, data3d, spacing, fatlessbody): # TODO - check how much memory this eats
+    def getLungs(cls, data3d, spacing, fatlessbody): # TODO - check how much memory this eats; lower memory usage
         """ Expects lungs to actually be in data """
         logger.info("getLungs()")
         lungs = data3d < -300
@@ -254,13 +254,13 @@ class OrganDetectionAlgo(object):
         return diaphragm
 
     @classmethod
-    def getKidneys(cls, data3d, spacing, lungs, fatlessbody):
+    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats):
         """ between 150 and 300, cant go lower then 150 """
         logger.info("getKidneys()")
         spacing_vol = spacing[0]*spacing[1]*spacing[2]
 
         # work only on data under lungs -5cm
-        lungs_end = lungs.shape[0]-getDataPadding(lungs)[0][1]; del(lungs)
+        lungs_end = lungs_stats["end"]
         lungs_end = int(max(0, lungs_end-(50/spacing[0])))
         orig_shape = tuple(data3d.shape)
         data3d = data3d[lungs_end:,:,:]; fatlessbody = fatlessbody[lungs_end:,:,:]
@@ -572,14 +572,23 @@ class OrganDetectionAlgo(object):
     ##################
 
     @classmethod
-    def analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs):
-        """ Returns: {"spine":points_spine, "hip_joints":points_hip_joints} """
-        logger.info("analyzeBones()")
+    def analyzeLungs(cls, data3d, spacing, lungs):
+        logger.info("analyzeLungs()")
 
-        # remove every bone higher then lungs
         lungs_pad = getDataPadding(lungs)
         lungs_start = lungs_pad[0][0] # start of lungs on z-axis
         lungs_end = lungs.shape[0]-lungs_pad[0][1] # end of lungs on z-axis
+
+        return {"start":lungs_start, "end":lungs_end}
+
+    @classmethod
+    def analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs_stats):
+        """ Returns: {"spine":points_spine, "hip_joints":points_hip_joints, "hip_start":[]} """
+        logger.info("analyzeBones()")
+
+        # remove every bone higher then lungs
+        lungs_start = lungs_stats["start"] # start of lungs on z-axis
+        lungs_end = lungs_stats["end"] # end of lungs on z-axis
         bones[:lungs_start,:,:] = 0 # definitely not spine or hips
         for z in range(0, lungs_end): # remove front parts of ribs (to get correct spine center)
             bs = fatlessbody[z,:,:]; pad = getDataPadding(bs)
