@@ -9,8 +9,9 @@ from builtins import range              # replaces range with xrange
 
 import logging
 logger = logging.getLogger(__name__)
+import traceback
 
-import sys, os, io
+import sys, os
 
 import numpy as np
 import math
@@ -25,32 +26,14 @@ import skimage.feature
 import sklearn.mixture
 
 import json
+import pkg_resources
 
 import io3d
 import sed3
 
-
-#### TODO - duplicated from organ_detection
-
-def compressArray(mask):
-    logger.debug("compressArray()")
-    mask_comp = io.BytesIO()
-    np.savez_compressed(mask_comp, mask)
-    return mask_comp
-
-def decompressArray(mask_comp):
-    logger.debug("decompressArray()")
-    mask_comp.seek(0)
-    return np.load(mask_comp)['arr_0']
-
-####
-
-
-
-
-
-
-
+# run with: "python -m bodynavigation.patlas -h"
+from .tools import compressArray, decompressArray, NumpyEncoder
+from .transformation import TransformationNone, Transformation
 
 
 # class ProbabilisticAtlas(object):
@@ -79,7 +62,7 @@ def decompressArray(mask_comp):
 
 
 
-def normalize(data, target=None): # TODO
+def normalize(data, target=None): # TODO - # TransformationNone, Transformation
     if target is None:
         next_power_of_2 = lambda x: int(1 if x == 0 else 2**math.ceil(math.log(x,2)))
         new_shape = tuple([ next_power_of_2(s) for s in data.shape ])
@@ -129,6 +112,15 @@ def spatialDivision(M,N=1):
 
     return subspaces
 
+def readCompoundMask(path_list):
+    mask, mask_metadata = io3d.datareader.read(path_list[0], dataplus_format=False)
+    mask = mask > 0 # to np.bool
+    for p in path_list[1:]:
+        tmp, _ = io3d.datareader.read(p, dataplus_format=False)
+        tmp = tmp > 0 # to np.bool
+        mask[tmp] = 1
+    return mask, mask_metadata
+
 def buildPAtlas(target_data, train_data, N=4**3):
     """
     target_data["CT_DATA_PATH"] - filesystem path to dicom with target image
@@ -141,7 +133,7 @@ def buildPAtlas(target_data, train_data, N=4**3):
     logger.info("Starting build of PAtlas...")
 
     # prepare target image
-    I, metadata = io3d.datareader.read(target_data["CT_DATA_PATH"])
+    I, metadata = io3d.datareader.read(target_data["CT_DATA_PATH"], dataplus_format=False)
     #I_vs = metadata["voxelsize_mm"]
     I = normalize(I)
     I_Uj = spatialDivision(I,N)
@@ -150,7 +142,7 @@ def buildPAtlas(target_data, train_data, N=4**3):
     Atlas = {}
     for i in range(len(train_data)):
         logger.info("Processing: %s" % train_data[i]["CT_DATA_PATH"])
-        data3d, metadata = io3d.datareader.read(train_data[i]["CT_DATA_PATH"])
+        data3d, metadata = io3d.datareader.read(train_data[i]["CT_DATA_PATH"], dataplus_format=False)
         #data3d_vs = metadata["voxelsize_mm"]
         data3d = normalize(data3d,I)
         data3d_Uj = spatialDivision(data3d,N)
@@ -166,7 +158,7 @@ def buildPAtlas(target_data, train_data, N=4**3):
             if key == "CT_DATA_PATH": continue
             if key not in Atlas: Atlas[key] = []
 
-            mask, mask_metadata = io3d.datareader.read(train_data[i][key])
+            mask, mask_metadata = readCompoundMask(train_data[i][key])
             mask = normalize(mask,I) # TODO - need to use identical transform as on data3d
             X = data3d[mask >= 1] # values of masked data3d
 
@@ -211,12 +203,17 @@ def buildPAtlas(target_data, train_data, N=4**3):
 
 def savePAtlas(PA, PA_stats, path):
     for key in PA:
-        #PA_uint8 = np.round(PA[key]*255.0).astype(np.uint8)
+        logger.info("Saving PAtlas file for '%s'..." % key)
+        #PA_uint8 = np.round(PA[key]*255.0).astype(np.int16)
         #ed = sed3.sed3(PA_uint8); ed.show()
-        io3d.datawriter.write(PA[key], os.path.join(path, "%s.tiff" % key), \
-            'tiff', {'voxelsize_mm': (1.0, 1.0, 1.0)})
+        try:
+            tmp = (PA[key]*10000.0).astype(np.int16) # save resolution is 0.01%
+            fp = str(os.path.join(path, "%s.dcm" % key)) # IMPORTANT - MUST BE STR CONSTANT (or sitk can throw errors)
+            io3d.datawriter.write(tmp, fp, 'dcm', {'voxelsize_mm': (1.0, 1.0, 1.0)})
+        except:
+            traceback.print_exc()
     with open(os.path.join(path, "PA_stats.json"), 'w') as fp:
-        json.dump(PA_stats, fp, encoding="utf-8")
+        json.dump(PA_stats, fp, encoding="utf-8", cls=NumpyEncoder)
 
 def loadPAtlas(path):
     PA = {}
@@ -226,7 +223,8 @@ def loadPAtlas(path):
         name, ext = os.path.splitext(fname)
         if ext == ".json": continue
         logger.info("Loading PAtlas from file '%s'" % fname)
-        data3d, metadata = io3d.datareader.read(fpath)
+        data3d, metadata = io3d.datareader.read(fpath, dataplus_format=False)
+        data3d = data3d.astype(np.float32)/10000.0 # convert back to percantage
         PA[name] = data3d
 
     with open(os.path.join(path, "PA_stats.json"), 'r') as fp:
@@ -237,7 +235,8 @@ def loadPAtlas(path):
 def segmentation(data3d, PA, PA_stats):
     SEG = {}
     for key in PA:
-        # rough segmentation by MAP estimation
+        ## rough segmentation by MAP estimation
+        logger.info("Rough segmentation by MAP estimation...")
         mean = PA_stats[key]["mean"]; std = np.sqrt(PA_stats[key]["var"])
         PA_norm = scipy.stats.norm(mean, std)
 
@@ -253,16 +252,38 @@ def segmentation(data3d, PA, PA_stats):
         for v in range(np.min(data3d), np.max(data3d)+1):
             Pr_I[data3d==v] = data3d_counts[v]
         Pr_I = Pr_I / data3d_sum
+        del(data3d_counts, data3d_sum)
 
         Pr_l_I = ( Pr_I_l*Pr_l ) / Pr_I
-        C = ( Pr_l_I > 0.5 ).astype(np.uint8)
+        C = ( Pr_l_I > 0.7 ).astype(np.uint8) # TODO - this is wrong
+
+        del(Pr_l, Pr_I_l, Pr_I, Pr_l_I)
 
         # use MAP as input for more precise segmentation
-
+        logger.info("Using MAP as input for more precise segmentation...")
         # TODO
 
 
         SEG[key] = C.astype(np.uint8) # TODO
+        continue;
+        # # TODO
+
+
+        # from pysegbase import pycut
+
+
+        # seeds = C
+        # seeds[:,0,0] = 2
+
+        # gc = pycut.ImageGraphCut(data3d)
+        # gc.set_seeds(seeds)
+        # gc.make_gc()
+
+        # SEG[key] = gc.segmentation
+
+        # this implementation of GraphCut eats crazy amount of memory (15GB+)
+        # maybe try directly use pygco library???
+
 
     return SEG
 
@@ -289,23 +310,46 @@ if __name__ == "__main__":
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
+    all_data = []
+
+    #### sliver07 DATA
+
+    # data_root = "/home/jirka642/Programming/_Data/DP/sliver07/PREPARED"
+    # for i in [1,2,3]:
+    # #for i in [1,2,3,4,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]:
+    #     all_data.append({
+    #         "CT_DATA_PATH": os.path.join(data_root, "silver07-orig%s" % str(i).zfill(3), "silver07-orig%s.dcm" % str(i).zfill(3) ),
+    #         "liver": [os.path.join(data_root, "silver07-seg%s" % str(i).zfill(3), "silver07-seg%s.dcm" % str(i).zfill(3) ),]
+    #         })
+
+    #### 3Dircadb1 DATA
+
+    data_root = "/home/jirka642/Programming/_Data/DP/3Dircadb1"
+    with pkg_resources.resource_stream("bodynavigation.files", "3Dircadb1.json") as fp:
+        ircad_info = json.load(fp, encoding="utf-8")
+
+    for k in [1,2,4]:
+    #for k in [1,2,4,5,6,7,8,9,10,11,13,14,15,16,17,18]: # 19
+        k = str(k)
+        tmp = {
+            "CT_DATA_PATH": os.path.join(data_root, ircad_info[k]["ROOT_PATH"], ircad_info[k]["CT_DATA_PATH"])
+        }
+        for mk in ircad_info[k]:
+            if mk in ["CT_DATA_PATH", "ROOT_PATH"]: continue
+            tmp[mk] = []
+            for p in ircad_info[k][mk]:
+                tmp[mk].append( os.path.join(data_root, ircad_info[k]["ROOT_PATH"], p) )
+        all_data.append(tmp)
+
     ####
 
-    data_root = "/home/jirka642/Programming/_Data/DP/sliver07/PREPARED"
-    all_data = []
-    #for i in [1,2,3,4]:
-    for i in [1,2,3,4,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]:
-        all_data.append({
-            "CT_DATA_PATH": os.path.join(data_root, "silver07-orig%s" % str(i).zfill(3), "silver07-orig%s.dcm" % str(i).zfill(3) ),
-            "liver": os.path.join(data_root, "silver07-seg%s" % str(i).zfill(3), "silver07-seg%s.dcm" % str(i).zfill(3) )
-            })
+    patlas_path = "/home/jirka642/Programming/Sources/bodynavigation/PATLAS/"
+    output_path = "/home/jirka642/Programming/Sources/bodynavigation/TMP/"
+
     target_data = {
         "CT_DATA_PATH":all_data[0]["CT_DATA_PATH"]
         }
     train_data = all_data[1:] # remove target image
-
-    patlas_path = "/home/jirka642/Programming/Sources/bodynavigation/PATLAS/"
-    output_path = "/home/jirka642/Programming/Sources/bodynavigation/TMP/"
 
     ####
 
@@ -320,7 +364,7 @@ if __name__ == "__main__":
             PA, PA_stats = loadPAtlas(patlas_path)
         #ed = sed3.sed3(PA["liver"]); ed.show()
 
-        data3d, metadata = io3d.datareader.read(all_data[0]["CT_DATA_PATH"])
+        data3d, metadata = io3d.datareader.read(all_data[0]["CT_DATA_PATH"], dataplus_format=False)
         data3d = normalize(data3d, PA["liver"])
 
 
