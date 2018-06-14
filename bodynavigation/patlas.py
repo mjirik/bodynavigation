@@ -314,13 +314,13 @@ if __name__ == "__main__":
 
     #### sliver07 DATA
 
-    # data_root = "/home/jirka642/Programming/_Data/DP/sliver07/PREPARED"
-    # for i in [1,2,3]:
-    # #for i in [1,2,3,4,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]:
-    #     all_data.append({
-    #         "CT_DATA_PATH": os.path.join(data_root, "silver07-orig%s" % str(i).zfill(3), "silver07-orig%s.dcm" % str(i).zfill(3) ),
-    #         "liver": [os.path.join(data_root, "silver07-seg%s" % str(i).zfill(3), "silver07-seg%s.dcm" % str(i).zfill(3) ),]
-    #         })
+    data_root = "/home/jirka642/Programming/_Data/DP/sliver07/PREPARED"
+    #for i in [1,2,3]:
+    for i in [1,2,3,4,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]:
+        all_data.append({
+            "CT_DATA_PATH": os.path.join(data_root, "silver07-orig%s" % str(i).zfill(3), "silver07-orig%s.dcm" % str(i).zfill(3) ),
+            "liver": [os.path.join(data_root, "silver07-seg%s" % str(i).zfill(3), "silver07-seg%s.dcm" % str(i).zfill(3) ),]
+            })
 
     #### 3Dircadb1 DATA
 
@@ -328,8 +328,8 @@ if __name__ == "__main__":
     with pkg_resources.resource_stream("bodynavigation.files", "3Dircadb1.json") as fp:
         ircad_info = json.load(fp, encoding="utf-8")
 
-    for k in [1,2,4]:
-    #for k in [1,2,4,5,6,7,8,9,10,11,13,14,15,16,17,18]: # 19
+    #for k in [1,2,4]:
+    for k in [1,2,4,5,6,7,8,9,10,11,13,14,15,16,17,18]: # 19
         k = str(k)
         tmp = {
             "CT_DATA_PATH": os.path.join(data_root, ircad_info[k]["ROOT_PATH"], ircad_info[k]["CT_DATA_PATH"])
@@ -369,12 +369,11 @@ if __name__ == "__main__":
 
 
         SEG = segmentation(data3d, PA, PA_stats)
+        #ed = sed3.sed3(data3d, contour=SEG["liver"]); ed.show()
 
-
-        ed = sed3.sed3(data3d, contour=SEG["liver"]); ed.show()
-
-        io3d.datawriter.write(SEG["liver"], os.path.join(output_path, "segmented.dcm"), \
-            'dcm', {'voxelsize_mm': (1.0, 1.0, 1.0)})
+        for key in SEG:
+            fp = str(os.path.join(output_path, "%s_segmented.dcm" % key))
+            io3d.datawriter.write(SEG[key], fp, 'dcm', {'voxelsize_mm': (1.0, 1.0, 1.0)})
 
 
 
