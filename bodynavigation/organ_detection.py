@@ -18,18 +18,12 @@ import json
 import numpy as np
 import scipy
 import scipy.ndimage
-import skimage.measure
-import skimage.transform
-import skimage.morphology
-import skimage.segmentation
-import skimage.feature
 
 import io3d
 import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
-from .tools import getSphericalMask, binaryClosing, binaryFillHoles, NumpyEncoder, \
-    compressArray, decompressArray, getDataPadding, cropArray, padArray, polyfit3D, growRegion
+from .tools import NumpyEncoder, compressArray, decompressArray
 from .organ_detection_algo import OrganDetectionAlgo
 from .transformation import Transformation, TransformationNone
 
@@ -80,7 +74,17 @@ class OrganDetection(object):
 
         # init with data3d
         if data3d is not None:
-            self.data3d, self.transformation = self.prepareData(data3d, voxelsize)
+            logger.info("Preparing input data...")
+
+            # remove noise and errors in data
+            data3d, body = OrganDetectionAlgo.cleanData(data3d, voxelsize)
+
+            # Data Registration and Transformation
+            self.transformation = Transformation(data3d, voxelsize, body=body)
+            self.data3d = self.transformation.transData(data3d)
+            #ed = sed3.sed3(self.data3d); ed.show()
+
+            # remember spacing
             self.spacing = self.transformation.getTargetSpacing()
             self.spacing_source = self.transformation.getSourceSpacing()
 
@@ -145,7 +149,10 @@ class OrganDetection(object):
         return cls.fromReadyData(data3d, data3d_info, masks=masks, stats=stats)
 
     def toDirectory(self, path):
-        """ note: Masks look wierd when opened in ImageJ, but are saved correctly """
+        """
+        note: Masks look wierd when opened in ImageJ, but are saved correctly
+        simpleitk 1.0.1 causes io3d.datawriter.write to hang, downgrade to 0.9.1
+        """
         logger.info("Saving all processed data to directory: %s" % path)
         spacing = list(self.spacing)
 
@@ -163,7 +170,7 @@ class OrganDetection(object):
 
         for part in self.masks_comp:
             if self.masks_comp[part] is None: continue
-            mask_p = os.path.join(path, "%s.dcm" % part)
+            mask_p = os.path.join(path, str("%s.dcm" % part))
             mask = self.getPart(part, raw=True).astype(np.int8)
             io3d.datawriter.write(mask, mask_p, 'dcm', {'voxelsize_mm': spacing})
             del(mask)
@@ -174,83 +181,14 @@ class OrganDetection(object):
             with open(stats_p, 'w') as fp:
                 json.dump(self.getStats(part, raw=True), fp, sort_keys=True, cls=NumpyEncoder)
 
-    def prepareData(self, data3d, voxelsize):
-        """
-        Cleans data and transforms them into better shape/form
-
-        Output:
-            data3d - prepared data3d
-            trans - defines transformation between original and internal data3d
-        """
-        logger.info("Preparing input data...")
-        # fix for io3d <-512;511> value range bug, that is caused by hardcoded slope 0.5 in dcmreader
-        if np.min(data3d) >= -512: data3d = data3d * 2
-
-        # limit value range to <-1024;1024>
-        # [ data3d < -1024 ] => less dense then air - padding values
-        # [ data3d > 1024  ] => more dense then most bones - only teeth (or just CT reaction to teeth fillings)
-        data3d[ data3d < -1024 ] = -1024
-        data3d[ data3d > 1024 ] = 1024
-
-        # set padding value to -1024
-        data3d[ data3d == data3d[0,0,0] ] = -1024
-
-        # <-1024;1024> can fit into int16
-        data3d = data3d.astype(np.int16)
-
-        # filter out noise - median filter with radius 1 (kernel 3x3x3)
-        data3d = scipy.ndimage.filters.median_filter(data3d, 3)
-
-        # ed = sed3.sed3(data3d); ed.show()
-
-        # remove high brightness errors near edges of valid data (takes about 70s)
-        logger.debug("Removing high brightness errors near edges of valid data")
-        valid_mask = data3d > -1024
-        valid_mask = skimage.measure.label(valid_mask, background=0)
-        unique, counts = np.unique(valid_mask, return_counts=True)
-        unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
-        valid_mask = valid_mask == unique[list(counts).index(max(counts))]
-        for z in range(valid_mask.shape[0]):
-            tmp = valid_mask[z,:,:]
-            if np.sum(tmp) == 0: continue
-            tmp = skimage.morphology.convex_hull_image(tmp)
-            # get contours
-            tmp = (skimage.feature.canny(tmp) != 0)
-            # thicken contour (expecting 512x512 resolution)
-            tmp = scipy.ndimage.binary_dilation(tmp, structure=skimage.morphology.disk(11, dtype=np.bool))
-            # lower all values near border bigger then -300 closer to -300
-            dst = scipy.ndimage.morphology.distance_transform_edt(tmp).astype(np.float)
-            dst = dst/np.max(dst)
-            dst[ dst != 0 ] = 0.01**dst[ dst != 0 ]; dst[ dst == 0 ] = 1.0
-
-            mask = data3d[z,:,:] > -300
-            data3d[z,:,:][mask] = ( \
-                ((data3d[z,:,:][mask].astype(np.float)+300)*dst[mask])-300 \
-                ).astype(np.int16)
-        del(valid_mask, dst)
-        # ed = sed3.sed3(data3d); ed.show()
-
-        # Data Registration and Transformation
-        trans = Transformation(data3d, voxelsize)
-        data3d = trans.transData(data3d)
-
-        # remove anything that is not in body volume # TODO - maybe do this in algorithms?
-        body = OrganDetectionAlgo.getBody(data3d, voxelsize)
-        data3d[ body == 0 ] = -1024
-        del(body)
-
-        # ed = sed3.sed3(data3d); ed.show()
-        return data3d, trans
-
     def toOutputCoordinates(self, vector):
         return self.transformation.transCoordinatesInv(vector)
 
-    def toOutputFormat(self, data, cval=0):
-        """ Transforms data to the orginal shape used in creation of class object """
-        return self.transformation.transDataInv(data, cval)
-
     def getData3D(self, raw=False):
-        return self.data3d.copy() if raw else self.toOutputFormat(self.data3d.copy(), cval=-1024)
+        if raw:
+            return self.data3d.copy()
+        else:
+            self.transformation.transDataInv(self.data3d.copy(), cval=-1024)
 
     ####################
     ### Segmentation ###
@@ -305,8 +243,16 @@ class OrganDetection(object):
 
             self.masks_comp[part] = compressArray(data)
 
-        if not raw: data = self.toOutputFormat(data)
+        if not raw:
+            data = self.transformation.transDataInv(data, cval=0)
         return data
+
+    def setPart(self, partname, data, raw=False): # TODO - test this, use this (in patlas?)
+        if not raw:
+            data = self.transformation.transData(data, cval=0)
+        if not np.all(self.data3d.shape == data.shape):
+            logger.warning("Manualy added segmented data does not have correct shape! %s != %s" % (str(self.data3d.shape), str(data.shape)))
+        self.masks_comp[partname] = compressArray(data)
 
     def _preloadParts(self, partlist):
         """ Lowers memory usage """

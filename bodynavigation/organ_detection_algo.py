@@ -26,10 +26,86 @@ import skimage.feature
 import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
-from .tools import getSphericalMask, binaryClosing, binaryFillHoles, \
-    compressArray, decompressArray, getDataPadding, cropArray, padArray, polyfit3D, growRegion
+from .tools import getSphericalMask, binaryClosing, binaryFillHoles, getDataPadding, \
+    cropArray, padArray, polyfit3D, growRegion
 
 class OrganDetectionAlgo(object):
+
+    BODY_THRESHOLD = -300
+
+    KIDNEYS_THRESHOLD_1 = 180 #150 # 180
+    KIDNEYS_THRESHOLD_2 = 180 #250 # 180
+    KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
+
+    VESSELS_THRESHOLD = 110 # 145
+    VESSELS_SPINE_WIDTH = 22 # from center
+    VESSELS_SPINE_HEIGHT = 30 # from center
+
+    VESSELS_AORTA_RADIUS = 12
+    VESSELS_VENACAVA_RADIUS = 12
+
+    @classmethod
+    def cleanData(cls, data3d, spacing, body=None):
+        """
+        Filters out noise, removes some errors in data, sets undefined voxel value to -1024, etc ...
+        """
+        # fix for io3d <-512;511> value range bug, that is caused by hardcoded slope 0.5 in dcmreader
+        if np.min(data3d) >= -512:
+            logger.debug("Fixing io3d <-512;511> value range bug")
+            data3d = data3d * 2
+
+        # set padding value to -1024 (undefined voxel values in space outside of senzor range)
+        logger.debug("Setting 'padding' value")
+        data3d[ data3d == data3d[0,0,0] ] = -1024
+
+        # limit value range to <-1024;32000> so it can fit into int16
+        # [ data3d < -1024 ] => less dense then air - padding values
+        # [ data3d > 32000  ] => near limit of int16
+        logger.debug("Converting to int16")
+        data3d[ data3d < -1024 ] = -1024
+        data3d[ data3d > 32000 ] = 32000
+        data3d = data3d.astype(np.int16)
+
+        # filter out noise - median filter with radius 1 (kernel 3x3x3)
+        logger.debug("Removing noise with filter")
+        data3d = scipy.ndimage.filters.median_filter(data3d, 3)
+        # ed = sed3.sed3(data3d); ed.show()
+
+        # remove high brightness errors near edges of valid data (takes about 70s)
+        logger.debug("Removing high brightness errors near edges of valid data") # TODO - clean this part up
+        valid_mask = data3d > -1024
+        valid_mask = skimage.measure.label(valid_mask, background=0)
+        unique, counts = np.unique(valid_mask, return_counts=True)
+        unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
+        valid_mask = valid_mask == unique[list(counts).index(max(counts))]
+        for z in range(valid_mask.shape[0]):
+            tmp = valid_mask[z,:,:]
+            if np.sum(tmp) == 0: continue
+            tmp = skimage.morphology.convex_hull_image(tmp)
+            # get contours
+            tmp = (skimage.feature.canny(tmp) != 0)
+            # thicken contour (expecting 512x512 resolution)
+            tmp = scipy.ndimage.binary_dilation(tmp, structure=skimage.morphology.disk(11, dtype=np.bool))
+            # lower all values near border bigger then BODY_THRESHOLD closer to BODY_THRESHOLD
+            dst = scipy.ndimage.morphology.distance_transform_edt(tmp).astype(np.float)
+            dst = dst/np.max(dst)
+            dst[ dst != 0 ] = 0.01**dst[ dst != 0 ]; dst[ dst == 0 ] = 1.0
+
+            mask = data3d[z,:,:] > cls.BODY_THRESHOLD
+            data3d[z,:,:][mask] = ( \
+                ((data3d[z,:,:][mask].astype(np.float)+300)*dst[mask])-300 \
+                ).astype(np.int16) # TODO - use cls.BODY_THRESHOLD
+        del(valid_mask, dst)
+        # ed = sed3.sed3(data3d); ed.show()
+
+        # remove anything that is not in body volume
+        logger.debug("Removing all data outside of segmented body")
+        if body is None:
+            body = cls.getBody(data3d, spacing)
+        data3d[ body == 0 ] = -1024
+
+        #ed = sed3.sed3(data3d); ed.show()
+        return data3d, body
 
     ####################
     ### Segmentation ###
@@ -43,10 +119,10 @@ class OrganDetectionAlgo(object):
         """
         logger.info("getBody()")
         # segmentation of body volume
-        body = (data3d > -300).astype(np.bool)
+        body = (data3d > cls.BODY_THRESHOLD).astype(np.bool)
 
         # fill holes
-        body = binaryFillHoles(body, z_axis=True, y_axis=True, x_axis=True)
+        body = binaryFillHoles(body, z_axis=True)
 
         # binary opening
         body = scipy.ndimage.morphology.binary_opening(body, structure=getSphericalMask([5,]*3, spacing=spacing))
@@ -100,6 +176,7 @@ class OrganDetectionAlgo(object):
         lungs = binaryFillHoles(lungs, z_axis=True)
 
         # remove all blobs that don't go through lower 1/4 of body
+        logger.debug("remove all blobs that don't go through lower 1/4 of body")
         lungs = skimage.measure.label(lungs, background=0)
         valid_labels = []
         for z in range(data3d.shape[0]):
@@ -117,6 +194,7 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(data3d, contour=lungs); ed.show()
 
         # try to separate connected intestines
+        logger.debug("try to separate connected intestines")
         wseeds = np.zeros(data3d.shape, dtype=np.uint8)
         for z in range(data3d.shape[0]):
             if np.sum(lungs[z,:,:]) == 0: continue
@@ -146,6 +224,7 @@ class OrganDetectionAlgo(object):
         lungs = lungs == 1
 
         # leave only lungs in data (1st and 2nd biggest objects, with similar centroids)
+        logger.debug("leave only lungs in data")
         lungs = skimage.measure.label(lungs, background=0)
         #ed = sed3.sed3(lungs); ed.show()
         unique, counts = np.unique(lungs, return_counts=True)
@@ -183,6 +262,7 @@ class OrganDetectionAlgo(object):
         lungs = lungs == -1
 
         # remove trachea (only the part sticking out)
+        logger.debug("remove trachea") # TODO - detect if there is one first
         pads = getDataPadding(lungs)
         lungs_depth_mm = (lungs.shape[0]-pads[0][1]-pads[0][0])*spacing[0]
         if lungs_depth_mm > 200: # if lungs are longer then 200 mm on z-axis -> trying to remove trachea should not lungs from abdomen-only data
@@ -267,7 +347,7 @@ class OrganDetectionAlgo(object):
 
         #threshold tisue (without ribs)
         fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing) # for ignoring ribs
-        kidneys = (fatless_dst > 15) & (data3d > 150); del(fatless_dst) # includes bones
+        kidneys = (fatless_dst > 15) & (data3d > cls.KIDNEYS_THRESHOLD_1); del(fatless_dst) # includes bones
         kidneys = binaryClosing(kidneys, structure=getSphericalMask([5,]*3, spacing=spacing))
         kidneys = binaryFillHoles(kidneys, z_axis=True)
         #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
@@ -276,7 +356,7 @@ class OrganDetectionAlgo(object):
 
         # remove spine # TODO - redo
         bones_only  = (data3d > 500) # only rough bone contours
-        b200_l = skimage.measure.label((data3d > 250), background=0) # TODO - check if threshold is ok
+        b200_l = skimage.measure.label((data3d > cls.KIDNEYS_THRESHOLD_2), background=0) # TODO - check if threshold is ok
         tmp = b200_l.copy(); tmp[bones_only == 0] = 0
         bone_labels = np.unique(tmp)[1:]; del(tmp); del(bones_only)
         for l in np.unique(b200_l)[1:]:
@@ -284,16 +364,15 @@ class OrganDetectionAlgo(object):
                 b200_l[b200_l == l] = 0
         kidneys[b200_l != 0] = 0
 
-        # experimantal volume of kidneys is about 200k mm3
-        MIN_KIDNEY_VOL = 100000
-        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(MIN_KIDNEY_VOL/spacing_vol))
+        # remove objects with too small volume
+        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
 
         # TODO - remove connected vessels
 
         # try to add kidney stones + middle part of kidneys #TODO
         kidneys = scipy.ndimage.binary_dilation(kidneys, structure=getSphericalMask([10,]*3, spacing=spacing))
         kidneys[(data3d > 150) == 0] = 0
-        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(MIN_KIDNEY_VOL/spacing_vol))
+        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
 
         #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
         # expand array to original shape
@@ -402,12 +481,11 @@ class OrganDetectionAlgo(object):
 
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
 
-        VESSEL_THRESHOLD = 110 # 145
-        SPINE_WIDTH = int(22/spacing[2]) # from center
-        SPINE_HEIGHT = int(30/spacing[1]) # from center
+        SPINE_WIDTH = int(cls.VESSELS_SPINE_WIDTH/spacing[2])
+        SPINE_HEIGHT = int(cls.VESSELS_SPINE_HEIGHT/spacing[1])
 
         if contrast_agent:
-            vessels = data3d > VESSEL_THRESHOLD
+            vessels = data3d > cls.VESSELS_THRESHOLD
 
             wseeds = bones.astype(np.uint8) # = 1
             for z in range(spine_zmin,spine_zmax+1): # draw seeds elipse at spine center
@@ -457,7 +535,7 @@ class OrganDetectionAlgo(object):
             wseeds = np.zeros(vessels.shape, dtype=np.int8)
             for z in range(spine_zmin,spine_zmax+1):
                 vs = vessels[z,:,:]; sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
-                spine_height = sc[0]-SPINE_HEIGHT
+                SPINE_HEIGHT = sc[0]-SPINE_HEIGHT
 
                 # get circle centers
                 edge = skimage.feature.canny(vs, sigma=0.0)
@@ -481,7 +559,7 @@ class OrganDetectionAlgo(object):
                     dst2 = dst_y**2 + dst_x**2
                     if vs[int(c[0]),int(c[1])] == 0: continue # must be inside segmented vessels
                     elif dst2 > 70**2: continue # max dist from spine
-                    elif c[0] > spine_height: continue # no lower then spine height
+                    elif c[0] > SPINE_HEIGHT: continue # no lower then spine height
                     else: wseeds[z,int(c[0]),int(c[1])] = 1
 
             # convolution with vertical kernel to remove seeds in vessels not going up-down
@@ -541,12 +619,10 @@ class OrganDetectionAlgo(object):
             logger.warning("Couldn't find aorta volume!")
             return np.zeros(vessels.shape, dtype=np.bool)
 
-        VESSEL_RADIUS = 12
-
         aorta = np.zeros(vessels.shape, dtype=np.bool)
         for p in points:
             aorta[p[0],p[1],p[2]] = 1
-        aorta = growRegion(aorta, vessels, iterations=VESSEL_RADIUS)
+        aorta = growRegion(aorta, vessels, iterations=cls.VESSELS_AORTA_RADIUS)
 
         return aorta
 
@@ -558,12 +634,10 @@ class OrganDetectionAlgo(object):
             logger.warning("Couldn't find venacava volume!")
             return np.zeros(vessels.shape, dtype=np.bool)
 
-        VESSEL_RADIUS = 12
-
         venacava = np.zeros(vessels.shape, dtype=np.bool)
         for p in points:
             venacava[p[0],p[1],p[2]] = 1
-        venacava = growRegion(venacava, vessels, iterations=VESSEL_RADIUS)
+        venacava = growRegion(venacava, vessels, iterations=cls.VESSELS_VENACAVA_RADIUS)
 
         return venacava
 
@@ -615,17 +689,21 @@ class OrganDetectionAlgo(object):
             left = bones[z,:,pad[1][0]:left_sep]
             center = bones[z,:,left_sep:right_sep]
             right = bones[z,:,right_sep:(bs.shape[1]-pad[1][1])]
+
             # calc centers and volumes
             left_v = np.sum(left); center_v = np.sum(center); right_v = np.sum(right)
             total_v = left_v+center_v+right_v
             if total_v == 0: continue
-
-            left_c = list(scipy.ndimage.measurements.center_of_mass(left))
-            left_c[1] = left_c[1]+pad[1][0]
-            center_c = list(scipy.ndimage.measurements.center_of_mass(center))
-            center_c[1] = center_c[1]+left_sep
-            right_c  = list(scipy.ndimage.measurements.center_of_mass(right))
-            right_c[1] = right_c[1]+right_sep
+            left_c = [None, None]; center_c = [None, None]; right_c = [None, None]
+            if left_v > 0:
+                left_c = list(scipy.ndimage.measurements.center_of_mass(left))
+                left_c[1] = left_c[1]+pad[1][0]
+            if center_v > 0:
+                center_c = list(scipy.ndimage.measurements.center_of_mass(center))
+                center_c[1] = center_c[1]+left_sep
+            if right_v > 0:
+                right_c  = list(scipy.ndimage.measurements.center_of_mass(right))
+                right_c[1] = right_c[1]+right_sep
 
             # try to detect spine center
             if ((left_v/total_v < 0.2) or (right_v/total_v < 0.2)) and (center_v != 0):

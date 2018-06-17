@@ -17,7 +17,7 @@ import numpy as np
 import skimage.measure
 
 # run with: "python -m bodynavigation.organ_detection -h"
-from .tools import getSphericalMask, binaryClosing, binaryFillHoles, \
+from .tools import getSphericalMask, binaryClosing, binaryFillHoles, resizeWithUpscaleNN, \
     compressArray, decompressArray, getDataPadding, cropArray, padArray, polyfit3D, growRegion
 from .organ_detection_algo import OrganDetectionAlgo
 
@@ -132,15 +132,14 @@ class Transformation(TransformationInf):
     NORMED_FATLESS_BODY_SIZE_Z_RANGE = 200
 
     def __init__(self, data3d=None, spacing=None, norm_scale_enable=True, voxel_scale_enable=True, \
-        z_scale_enable=False):
+        z_scale_enable=True, body=None):
         """
         data3d, spacing - 3d CT data and voxelsize
         norm_scale_enable - try to normalize width and height of body (default True)
         voxel_scale_enable - scale voxels to 1x1x1mm (default True)
-        z_scale_enable - enables scaling of data on z-axis, but creates ghosting effect because of
-            very low resolution on z-axis [see 3Dircadb1.19]. If disabled, target spacing will be
-            changed so that no rescaling will happen on z-axis when calling transData().
-            (default False)
+        z_scale_enable - enables scaling of data on z-axis, roughly 2x memory size.
+            If disabled, target spacing will be changed so that no rescaling will happen \
+            on z-axis when calling transData(). (default False)
         """
         super(Transformation, self).__init__()
 
@@ -160,7 +159,7 @@ class Transformation(TransformationInf):
 
         # Detect data padding and crop work data3d
         logger.debug("Detecting array padding")
-        body = OrganDetectionAlgo.getBody(data3d, spacing)
+        if body is None: body = OrganDetectionAlgo.getBody(data3d, spacing)
         padding = getDataPadding(body)
         data3d = cropArray(data3d, padding)
         body = cropArray(body, padding)
@@ -248,22 +247,14 @@ class Transformation(TransformationInf):
             self.trans["padding"][2][0] ], dtype=np.float) # [z,y,x] - move coords of just cut data
 
     def transData(self, data3d, cval=0):
-        out = cropArray(data3d, self.trans["padding"])
-        out = skimage.transform.resize(
-            out, np.asarray(self.target["shape"]), order=3, mode="reflect", clip=True, preserve_range=True
-            )
-        if data3d.dtype in [np.bool,np.int,np.uint]:
-            out = np.round(out).astype(data3d.dtype)
-        return out.astype(data3d.dtype)
+        data3d = cropArray(data3d, self.trans["padding"])
+        data3d = resizeWithUpscaleNN(data3d, np.asarray(self.target["shape"]))
+        return data3d
 
     def transDataInv(self, data3d, cval=0):
-        out = skimage.transform.resize(
-            data3d, np.asarray(self.trans["cut_shape"]), order=3, mode="reflect", clip=True, preserve_range=True
-            )
-        if data3d.dtype in [np.bool,np.int,np.uint]:
-            out = np.round(out).astype(data3d.dtype)
-        out = padArray(out, self.trans["padding"], padding_value=cval)
-        return out.astype(data3d.dtype)
+        data3d = resizeWithUpscaleNN(data3d, np.asarray(self.trans["cut_shape"]))
+        data3d = padArray(data3d, self.trans["padding"], padding_value=cval)
+        return data3d
 
     def transCoordinates(self, coords):
         return ( np.asarray(coords) - np.asarray(self.trans["coord_intercept"]) ) / np.asarray(self.trans["coord_scale"])

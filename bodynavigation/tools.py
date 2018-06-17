@@ -138,7 +138,9 @@ def polyfit3D(points, dtype=np.int, deg=3):
     points = [ tuple(np.asarray([z_new[i], y_new[i], x_new[i]]).astype(dtype)) for i in range(len(z_new)) ]
     return points
 
-def growRegion(region, mask, iterations=1):
+def growRegion(region, mask, iterations=1): # TODO - redo this, based on custom distance transform ???
+    # TODO - remove parts of mask that are not connected to region
+
     region[ mask == 0 ] = 0
 
     kernel1 = np.zeros((3,3,3), dtype=np.bool)
@@ -164,3 +166,48 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
+
+def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", clip=True, preserve_range=True):
+    """
+    All upscaling is done with 0 order interpolation (Nearest-neighbor) to prevent ghosting effect.
+        (Examples of ghosting effect can be seen for example in 3Dircadb1.19)
+    Any downscaling is done with given interpolation order.
+    If input is binary mask (np.bool) order=0 is forced.
+    """
+    if data.dtype == np.bool: order = 0 # for masks
+    dtype = data.dtype # remember correct dtype
+
+    # calc both resize shapes
+    scale = np.asarray(data.shape, dtype=np.float) / np.asarray(toshape, dtype=np.float)
+    downscale_shape = np.asarray(toshape, dtype=np.int).copy()
+    if scale[0] > 1.0: downscale_shape[0] = data.shape[0]
+    if scale[1] > 1.0: downscale_shape[1] = data.shape[1]
+    if scale[2] > 1.0: downscale_shape[2] = data.shape[2]
+    upscale_shape = np.asarray(toshape, dtype=np.int).copy()
+
+    # downscale with given interpolation order
+    data = skimage.transform.resize(data, downscale_shape, order=order, mode=mode, clip=clip, \
+        preserve_range=preserve_range)
+
+    # fix dtype after skimage.transform.resize
+    if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
+        data = np.round(data).astype(dtype)
+    elif (data.dtype != dtype):
+        data = data.astype(dtype)
+
+    # upscale with 0 order interpolation
+    if not np.all(downscale_shape == upscale_shape):
+        data = skimage.transform.resize(data, upscale_shape, order=0, mode=mode, clip=clip, \
+            preserve_range=preserve_range)
+
+        # fix dtype after skimage.transform.resize
+        if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
+            data = np.round(data).astype(dtype)
+        elif (data.dtype != dtype):
+            data = data.astype(dtype)
+
+    return data
+
+
+
+

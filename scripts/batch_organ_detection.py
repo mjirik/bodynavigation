@@ -104,13 +104,13 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
     new_shape_x = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[2] * voxelsize[2]))
 
     view_z = skimage.transform.resize(
-            view_z, new_shape_z, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_z, new_shape_z, order=1, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
     view_y = skimage.transform.resize(
-            view_y, new_shape_y, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_y, new_shape_y, order=1, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
     view_x = skimage.transform.resize(
-            view_x, new_shape_x, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_x, new_shape_x, order=1, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
 
     tmp = []
@@ -354,6 +354,8 @@ def main():
 
     pool = Pool(processes=args.threads)
     pool.map(processThread, inputs)
+    pool.terminate() # pool.close()
+    pool.join()
 
 if __name__ == "__main__":
     main()
