@@ -26,8 +26,8 @@ import sed3 # for testing
 
 # http://www.ircad.fr/softwares/3Dircadb/3Dircadb1/3Dircadb1.1.zip
 # TEST_DATA_DIR = "test_data"
-TEST_DATA_DIR = "/home/jirka642/Programming/_Data/DP/3Dircadb1/1"
-#TEST_DATA_DIR = "3Dircadb1.1"
+#TEST_DATA_DIR = "/home/jirka642/Programming/_Data/DP/3Dircadb1/1"
+TEST_DATA_DIR = "3Dircadb1.1"
 
 def diceCoeff(vol1, vol2):
     """ Computes dice coefficient between two binary volumes """
