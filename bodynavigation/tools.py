@@ -35,7 +35,7 @@ def binaryClosing(data, structure, cval=0):
     Big sized structures can make this take a long time
     """
     padding = np.max(structure.shape)
-    tmp = np.zeros(np.asarray(data.shape)+padding*2) + cval
+    tmp = (np.zeros(np.asarray(data.shape)+padding*2, dtype=data.dtype) + cval).astype(np.bool)
     tmp[padding:-padding,padding:-padding,padding:-padding] = data
     tmp = scipy.ndimage.morphology.binary_closing(tmp, structure=structure)
     return tmp[padding:-padding,padding:-padding,padding:-padding]
@@ -116,7 +116,7 @@ def padArray(data, pads, padding_value=0):
     Pads for 3D data: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
     """
     full_shape = np.asarray(data.shape) + np.asarray([ np.sum(pads[dim]) for dim in range(len(pads))])
-    out = np.zeros(full_shape, dtype=data.dtype) + padding_value
+    out = (np.zeros(full_shape, dtype=data.dtype) + padding_value).astype(data.dtype)
     s = []
     for dim in range(len(data.shape)):
         s.append( slice( pads[dim][0], out.shape[dim]-pads[dim][1] ) )
@@ -143,9 +143,9 @@ def growRegion(region, mask, iterations=1): # TODO - redo this, based on custom 
 
     region[ mask == 0 ] = 0
 
-    kernel1 = np.zeros((3,3,3), dtype=np.bool)
+    kernel1 = np.zeros((3,3,3), dtype=np.bool).astype(np.bool)
     kernel1[:,1,1] = 1; kernel1[1,1,:] = 1; kernel1[1,:,1] = 1
-    kernel2 = np.zeros((3,3,3), dtype=np.bool)
+    kernel2 = np.zeros((3,3,3), dtype=np.bool).astype(np.bool)
     kernel2[:,1,1] = 1; kernel2[1,:,:] = 1
     for i in range(iterations):
         if np.sum(region) == 0: break

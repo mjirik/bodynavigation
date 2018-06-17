@@ -232,7 +232,7 @@ class OrganDetectionAlgo(object):
         centroids = scipy.ndimage.measurements.center_of_mass(lungs, lungs, unique)
         if len(unique) == 0:
             logger.warning("Couldn't find lungs!")
-            return np.zeros(data3d.shape, dtype=np.bool)
+            return np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
 
         idx_1st = list(counts).index(max(counts))
         count_1st = counts[idx_1st]
@@ -315,7 +315,7 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(np.expand_dims(heightmap, axis=0)); ed.show()
 
         # 2D heightmap -> 3D diaphragm
-        diaphragm = np.zeros(diaphragm.shape, dtype=np.bool)
+        diaphragm = np.zeros(diaphragm.shape, dtype=np.bool).astype(np.bool)
         for y in range(diaphragm.shape[1]):
             for x in range(diaphragm.shape[2]):
                 z = int(heightmap[y,x])
@@ -376,7 +376,7 @@ class OrganDetectionAlgo(object):
 
         #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
         # expand array to original shape
-        kidneys_s = kidneys; kidneys = np.zeros(orig_shape, dtype=kidneys.dtype)
+        kidneys_s = kidneys; kidneys = np.zeros(orig_shape, dtype=kidneys.dtype).astype(kidneys.dtype)
         kidneys[lungs_end:,:,:] = kidneys_s
 
         return kidneys
@@ -475,7 +475,7 @@ class OrganDetectionAlgo(object):
         points_spine = bones_stats["spine"]
         if len(points_spine) == 0:
             logger.warning("Couldn't find vessels!")
-            return np.zeros(data3d.shape, dtype=np.bool)
+            return np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
         # get spine z-range
         spine_zmin = points_spine[0][0]; spine_zmax = points_spine[-1][0]
 
@@ -602,7 +602,7 @@ class OrganDetectionAlgo(object):
 
         else: # without contrast agent, blood is 13-50 HU
             logger.warning("Couldn't find vessels!")
-            return np.zeros(data3d.shape, dtype=np.bool)
+            return np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
 
             # TODO - try it anyway
             # - FIND EDGES, THRESHOLD EDGES - canny
@@ -617,9 +617,9 @@ class OrganDetectionAlgo(object):
         points = vessels_stats["aorta"]
         if len(points) == 0 or np.sum(vessels) == 0:
             logger.warning("Couldn't find aorta volume!")
-            return np.zeros(vessels.shape, dtype=np.bool)
+            return np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
 
-        aorta = np.zeros(vessels.shape, dtype=np.bool)
+        aorta = np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
         for p in points:
             aorta[p[0],p[1],p[2]] = 1
         aorta = growRegion(aorta, vessels, iterations=cls.VESSELS_AORTA_RADIUS)
@@ -632,9 +632,9 @@ class OrganDetectionAlgo(object):
         points = vessels_stats["vena_cava"]
         if len(points) == 0 or np.sum(vessels) == 0:
             logger.warning("Couldn't find venacava volume!")
-            return np.zeros(vessels.shape, dtype=np.bool)
+            return np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
 
-        venacava = np.zeros(vessels.shape, dtype=np.bool)
+        venacava = np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
         for p in points:
             venacava[p[0],p[1],p[2]] = 1
         venacava = growRegion(venacava, vessels, iterations=cls.VESSELS_VENACAVA_RADIUS)
