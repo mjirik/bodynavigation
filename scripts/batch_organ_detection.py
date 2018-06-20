@@ -14,6 +14,7 @@ import sys, os, argparse
 import traceback
 
 from multiprocessing import Pool
+import resource
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -103,13 +104,13 @@ def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
     new_shape_x = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[2] * voxelsize[2]))
 
     view_z = skimage.transform.resize(
-            view_z, new_shape_z, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_z, new_shape_z, order=1, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
     view_y = skimage.transform.resize(
-            view_y, new_shape_y, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_y, new_shape_y, order=1, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
     view_x = skimage.transform.resize(
-            view_x, new_shape_x, order=3, mode="reflect", clip=True, preserve_range=True,
+            view_x, new_shape_x, order=1, mode="reflect", clip=True, preserve_range=True,
             ).astype(np.int32)
 
     tmp = []
@@ -206,9 +207,16 @@ def getRGBA(idx, a=255):
     c = list(colors[idx]); c.append(a)
     return tuple(c)
 
-def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None):
+def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None, memorylimit=-1):
     try:
         print("Processing: ", datapath)
+
+        # set memory limit
+        if memorylimit > 0: # resource.RLIMIT_AS works with virtual memory
+            print("Setting memory limit to: %s GB" % str(memorylimit))
+            memorylimit_b = int(memorylimit*(2**30))
+            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+            resource.setrlimit(resource.RLIMIT_AS, (memorylimit_b, min(memorylimit_b,hard)))
 
         onlyfiles = sorted([f for f in os.listdir(datapath) if os.path.isfile(os.path.join(datapath, f))])
         if len(onlyfiles) == 1:
@@ -222,13 +230,13 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
                     break
 
         if readypath is None:
-            data3d, metadata = io3d.datareader.read(datapath)
+            data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
             voxelsize = metadata["voxelsize_mm"]
             obj = OrganDetection(data3d, voxelsize)
         else:
             print("Loading preprocessed data from readypath: ", readypath)
             obj = OrganDetection.fromDirectory(os.path.abspath(readypath))
-            data3d = obj.getData3D(); voxelsize = obj.orig_voxelsize
+            data3d = obj.getData3D(); voxelsize = obj.spacing_source
 
         point_sets = []; volume_sets = []
         VOLUME_APLHA = 100
@@ -245,6 +253,9 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         if "abdomen" in parts:
             abdomen = obj.getAbdomen();# ed = sed3.sed3(abdomen); ed.show()
             volume_sets.append([abdomen, getRGBA(3, a=VOLUME_APLHA)])
+        if "kidneys" in parts:
+            kidneys = obj.getKidneys(); # ed = sed3.sed3(kidneys); ed.show()
+            volume_sets.append([kidneys, getRGBA(5, a=VOLUME_APLHA)])
         if "bones" in parts:
             bones = obj.getBones(); # ed = sed3.sed3(bones); ed.show()
             volume_sets.append([bones, getRGBA(0, a=VOLUME_APLHA)])
@@ -252,6 +263,9 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
             bones_stats = obj.analyzeBones()
             point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), getRGBA(0, a=255), None, 1])
             point_sets.append([bones_stats["hip_joints"], (0,255,0,255), (0,0,0,255), 7])
+            tmp = list(bones_stats["hip_start"]);
+            while None in tmp: tmp.remove(None)
+            point_sets.append([tmp, (0,0,255,255), (0,0,0,255), 7])
         if "vessels" in parts:
             vessels = obj.getVessels(); # ed = sed3.sed3(vessels); ed.show()
             aorta = obj.getAorta(); # ed = sed3.sed3(aorta); ed.show()
@@ -293,6 +307,8 @@ def main():
             help='path to output dir')
     parser.add_argument('-t','--threads', type=int, default=1,
             help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 3GB, big ones can go over 9GB.')
+    parser.add_argument('-m','--memorylimit', type=int, default=-1,
+            help='How many GB of VIRTUAL memory are individual threads allowed before they are terminated. Might only work on Unix systems. Default is unlimited')
     parser.add_argument('-p','--parts', default="bones_stats,vessels,vessels_stats",
             help='Body parts to process sparated by ",", Use "None" to disable, defaults: "bones_stats,vessels,vessels_stats"')
     parser.add_argument("--dump", default=None,
@@ -334,10 +350,12 @@ def main():
         readypath = None
         if dirname in ready_dirnames:
             readypath = os.path.abspath(os.path.join(args.readydirs, dirname))
-        inputs.append([datapath, dirname, outputdir, parts, dumpdir, readypath])
+        inputs.append([datapath, dirname, outputdir, parts, dumpdir, readypath, args.memorylimit])
 
     pool = Pool(processes=args.threads)
     pool.map(processThread, inputs)
+    pool.terminate() # pool.close()
+    pool.join()
 
 if __name__ == "__main__":
     main()

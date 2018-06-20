@@ -34,9 +34,9 @@ install:
     - source activate travis
     - conda install --yes --file requirements_conda.txt python=$CONDA_PYTHON_VERSION
     - pip install -r requirements_pip.txt
-    - python -m io3d.datasets -l 3Dircadb1.1 jatra_5mm
+    - python -m io3d.datasets -l 3Dircadb1.1
 #    - ./scripts/get_test_data.sh
 # command to run tests
-script: nosetests -v --with-coverage --cover-package=bodynavigation
+script: nosetests -v -s --with-coverage --cover-package=bodynavigation
 after_success:
     - coveralls
