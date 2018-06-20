@@ -29,7 +29,6 @@ class BodyNavigation:
         # temporary fix for io3d <-512;511> value range bug
         if np.min(data3d) >= -512:
             data3d = data3d * 2
-
         # unresized data
         #self.data3d = data3d # some methods require original resolution
         self.orig_shape = data3d.shape
@@ -517,6 +516,11 @@ class BodyNavigation:
 
         return flat
 
+    def get_diaphragm_profile_image_orig_shape_mm(self, axis=0, preprocessing=True, return_preprocessed_image=False):
+        diaphragm_profile = get_diaphragm_profile_image(axis=axis, preprocessing=preprocessing, return_preprocessed_image=return_preprocessed_image)
+        diaphragm_profile_orig_shape = skimage.transform.resize(diaphragm_profile, self.orig_shape[1:])
+        diaphragm_profile_orig_shape_mm = diaphragm_profile_orig_shape * self.working_vs[0]
+        return diaphragm_profile_orig_shape_mm
 
     def get_diaphragm_profile_image(self, axis=0, preprocessing=True, return_preprocessed_image=False):
         flat = self.get_diaphragm_profile_image_with_empty_areas(axis)
