@@ -141,12 +141,12 @@ class BodyNavigation:
         self.spine_wvs = bones
         return resize_to_shape(bones, self.orig_shape)
 
-	def get_lungs(self):
-		if self.use_new_get_lungs_setup:
-			return self.get_lungs_martin()
-		else:
-			return self.get_lungs_orig()
-			
+    def get_lungs(self):
+        if self.use_new_get_lungs_setup:
+            return self.get_lungs_martin()
+        else:
+            return self.get_lungs_orig()
+
     def get_lungs_orig(self): # TODO - this doesnt work correctly, is segmenting a lot of unneeded stuff
         lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -150
         lungs[0, :, :] = 1
@@ -180,7 +180,7 @@ class BodyNavigation:
         self.lungs = lungs
         #self.body = (labs == 80)
         return resize_to_shape(lungs, self.orig_shape)
-	
+
     def get_lungs_martin(self):
         '''
         Set self.lungs ndarray same size as 
