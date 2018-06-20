@@ -25,7 +25,7 @@ from io3d.misc import resize_to_mm, resize_to_shape
 class BodyNavigation:
     """ Range of values in input data must be <-1024;1023> """
 
-    def __init__(self, data3d, voxelsize_mm):
+    def __init__(self, data3d, voxelsize_mm, use_new_get_lungs_setup=False):
         # temporary fix for io3d <-512;511> value range bug
         if np.min(data3d) >= -512:
             data3d = data3d * 2
@@ -52,6 +52,7 @@ class BodyNavigation:
         self.spine_center = None
         self.ribs = None
         self.chest = None
+		self.use_new_get_lungs_setup = use_new_get_lungs_setup
 
         self.set_parameters()
 
@@ -141,7 +142,13 @@ class BodyNavigation:
         self.spine = bones
         return resize_to_shape(bones, self.orig_shape)
 
-    def get_lungs(self): # TODO - this doesnt work correctly, is segmenting a lot of unneeded stuff
+	def get_lungs():
+		if self.use_new_get_lungs_setup:
+			return self.get_lungs_martin()
+		else:
+			return self.get_lungs_orig()
+			
+    def get_lungs_orig(self): # TODO - this doesnt work correctly, is segmenting a lot of unneeded stuff
         lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -150
         lungs[0, :, :] = 1
 
@@ -174,6 +181,13 @@ class BodyNavigation:
         self.lungs = lungs
         #self.body = (labs == 80)
         return resize_to_shape(lungs, self.orig_shape)
+	
+	def get_lungs_martin(self):
+		'''
+		Set self.lungs ndarray same size as 
+		'''
+		# Waiting for Martin's implementation
+		return None
 
     def get_chest(self):
         """ Compute, where is the chest in CT data.
