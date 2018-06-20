@@ -183,12 +183,12 @@ class BodyNavigation:
         #self.body = (labs == 80)
         return resize_to_shape(lungs, self.orig_shape)
 	
-	def get_lungs_martin(self):
-		'''
-		Set self.lungs ndarray same size as 
-		'''
-		# Waiting for Martin's implementation
-		return None
+    def get_lungs_martin(self):
+        '''
+        Set self.lungs ndarray same size as 
+        '''
+        # Waiting for Martin's implementation
+        return None
 
     def get_chest(self):
         """ Compute, where is the chest in CT data.
