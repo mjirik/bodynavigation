@@ -142,7 +142,7 @@ class BodyNavigation:
         self.spine_wvs = bones
         return resize_to_shape(bones, self.orig_shape)
 
-	def get_lungs():
+	def get_lungs(self):
 		if self.use_new_get_lungs_setup:
 			return self.get_lungs_martin()
 		else:
