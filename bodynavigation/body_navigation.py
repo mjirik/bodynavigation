@@ -52,8 +52,7 @@ class BodyNavigation:
         self.spine_center_wvs = None
         self.ribs = None
         self.chest = None
-		self.use_new_get_lungs_setup = use_new_get_lungs_setup
-
+        self.use_new_get_lungs_setup = use_new_get_lungs_setup
         self.set_parameters()
 
     def set_parameters(self, version=0):
