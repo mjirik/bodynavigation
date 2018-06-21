@@ -186,7 +186,75 @@ class BodyNavigation:
         Set self.lungs ndarray same size as 
         '''
         # Waiting for Martin's implementation
-        return None
+
+        lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -450
+        lungs[0, :, :] = 1
+
+        lungs = scipy.ndimage.morphology.binary_fill_holes(lungs)
+        labs, n = scipy.ndimage.measurements.label(lungs == 0)
+        cornerlab = [
+            labs[0, 0, 0],
+            labs[0, 0, -1],
+            labs[0, -1, 0],
+            labs[0, -1, -1],
+            labs[-1, 0, 0],
+            labs[-1, 0, -1],
+            labs[-1, -1, 0],
+            labs[-1, -1, -1]
+        ]
+
+        lb = np.median(cornerlab)
+        labs[labs == lb] = 0
+
+        labs[labs == labs[0, 0, 0]] = 0
+        labs[labs == labs[0, 0, -1]] = 0
+        labs[labs == labs[0, -1, 0]] = 0
+        labs[labs == labs[0, -1, -1]] = 0
+        labs[labs == labs[-1, 0, 0]] = 0
+        labs[labs == labs[-1, 0, -1]] = 0
+        labs[labs == labs[-1, -1, 0]] = 0
+        labs[labs == labs[-1, -1, -1]] = 0
+
+        lungs = labs > 0
+        self.lungs = lungs
+        # self.body = (labs == 80)
+        thresholded_lungs = resize_to_shape(lungs, self.orig_shape)
+
+    # new code transformed into function
+
+        segmented = self.data3dr < -400
+
+        preselection_cavities = thresholded_lungs * segmented
+
+        #setting the first slice to one to close all of the cavities, so the fill holes works better
+        first_slice = copy.copy(preselection_cavities[-1, :, :])  # -1 means last slice, which is here the uppest in the image
+        preselection_cavities[-1, :, :] = 1
+        precav_filled = scipy.ndimage.morphology.binary_fill_holes(preselection_cavities)
+        precav_filled[-1, :, :] = first_slice
+
+        precav_erosion = scipy.ndimage.morphology.binary_erosion(precav_filled)
+        labeled = skimage.morphology.label(precav_erosion)
+
+        for f in range(1, np.max(labeled) + 1):
+
+            cavity = data3d[labeled == f]
+
+            cavity_mean_intensity = np.std(cavity)
+            #print("Dircadb"+str(i)+"label"+str(f)+cavity_mean_intensity)
+            #print(cavity_mean_intensity)
+            #dict3[name, "cavity"+ str(f)]=cavity
+            #dict3[name, "intensity"+ str(f)]=np.mean(cavity)
+            #print(dict3[name, "intensity"+ str(f)], np.std(cavity))
+
+            if cavity_mean_intensity > 50: #not too sure about the value of 50
+                #idea would be to take the mean value of the highest ones and but a little lower one as the limit
+                # this sets not lung-areas to zero. Theoretically :D
+                precav_erosion[labeled == f] = 0
+                #print(cavity_mean_intensity)
+
+        precav_erosion = scipy.ndimage.morphology.binary_dilation(precav_filled) #dilation becuase of erosion before
+
+        return precav_erosion * data3d
 
     def get_chest(self):
         """ Compute, where is the chest in CT data.
