@@ -147,6 +147,7 @@ class BodyNavigationTest(unittest.TestCase):
         # bn = bodynavigation.BodyNavigation(use_new_get_lungs_setup=True)
         self.obj.use_new_get_lungs_setup=True
         dst_diaphragm = self.obj.dist_diaphragm()
+        dst_diaphragm = self.obj.get_lungs_martin()
         # import sed3
         # ed = sed3.sed3(dst_diaphragm)
         # ed.show()
