@@ -16,6 +16,7 @@ import scipy
 import scipy.ndimage
 import skimage.measure
 from . import chest_localization
+import copy
 
 # import sed3
 
@@ -25,7 +26,7 @@ from io3d.misc import resize_to_mm, resize_to_shape
 class BodyNavigation:
     """ Range of values in input data must be <-1024;1023> """
 
-    def __init__(self, data3d, voxelsize_mm, use_new_get_lungs_setup=False):
+    def __init__(self, data3d, voxelsize_mm, use_new_get_lungs_setup=True):
         # temporary fix for io3d <-512;511> value range bug
         if np.min(data3d) >= -512:
             data3d = data3d * 2
@@ -218,13 +219,13 @@ class BodyNavigation:
         lungs = labs > 0
         self.lungs = lungs
         # self.body = (labs == 80)
-        thresholded_lungs = resize_to_shape(lungs, self.orig_shape)
+
 
     # new code transformed into function
 
         segmented = self.data3dr < -400
 
-        preselection_cavities = thresholded_lungs * segmented
+        preselection_cavities = lungs * segmented
 
         #setting the first slice to one to close all of the cavities, so the fill holes works better
         first_slice = copy.copy(preselection_cavities[-1, :, :])  # -1 means last slice, which is here the uppest in the image
@@ -237,7 +238,7 @@ class BodyNavigation:
 
         for f in range(1, np.max(labeled) + 1):
 
-            cavity = data3d[labeled == f]
+            cavity = self.data3dr[labeled == f]
 
             cavity_mean_intensity = np.std(cavity)
             #print("Dircadb"+str(i)+"label"+str(f)+cavity_mean_intensity)
@@ -254,7 +255,7 @@ class BodyNavigation:
 
         precav_erosion = scipy.ndimage.morphology.binary_dilation(precav_filled) #dilation becuase of erosion before
 
-        return precav_erosion * data3d
+        return precav_erosion
 
     def get_chest(self):
         """ Compute, where is the chest in CT data.
