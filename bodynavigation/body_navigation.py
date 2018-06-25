@@ -255,7 +255,9 @@ class BodyNavigation:
 
         precav_erosion = scipy.ndimage.morphology.binary_dilation(precav_filled) #dilation becuase of erosion before
 
-        return precav_erosion
+        # return precav_erosion
+        self.lungs = precav_erosion
+        return resize_to_shape(precav_erosion, self.orig_shape)
 
     def get_chest(self):
         """ Compute, where is the chest in CT data.
