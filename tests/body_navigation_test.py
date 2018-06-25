@@ -143,5 +143,19 @@ class BodyNavigationTest(unittest.TestCase):
                            ], 10)
         # import sed3
 
+    def test_diaphragm_martin(self):
+        # bn = bodynavigation.BodyNavigation(use_new_get_lungs_setup=True)
+        self.obj.use_new_get_lungs_setup=True
+        dst_diaphragm = self.obj.dist_diaphragm()
+        dst_diaphragm = self.obj.get_lungs_martin()
+        # import sed3
+        # ed = sed3.sed3(dst_diaphragm)
+        # ed.show()
+        # above diaphragm
+        self.assertGreater(dst_diaphragm[0, 500, 10], 0)
+        # unter diaphragm
+        self.assertLess(dst_diaphragm[120, 250, 250], -20)
+        self.obj.use_new_get_lungs_setup=False
+
 if __name__ == "__main__":
     unittest.main()
