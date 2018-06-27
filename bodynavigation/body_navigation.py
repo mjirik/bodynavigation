@@ -245,7 +245,7 @@ class BodyNavigation:
             cavity_mean_intensity = np.std(cavity)
 
             if cavity_mean_intensity > 50: #not too sure about the value of 50
-                #idea would be to take the mean value of the highest ones and but a little lower one as the limit
+                #idea would be to take the mean value of the highest ones and set the little lower one as the limit
                 # this sets not lung-areas to zero. Theoretically :D
                 precav_erosion[labeled == f] = 0
                 #print(cavity_mean_intensity)
