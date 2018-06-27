@@ -184,9 +184,11 @@ class BodyNavigation:
 
     def get_lungs_martin(self):
         '''
-        Set self.lungs ndarray same size as 
+        Improved version of get.lungs function. Call with ss.get_lungs if get_lungs_martin is default.
+        first part checks if the CT-bed enables a clear segmentation of the background.
+        Then we threshold and label all cavities. After that, we compare the mean value of the real grayscale-image in
+        these labeled areas and only take the brighter ones. (Because in lung areas there are "white" alveoli)
         '''
-        # Waiting for Martin's implementation
 
         lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -450
         lungs[0, :, :] = 1
@@ -241,11 +243,6 @@ class BodyNavigation:
             cavity = self.data3dr[labeled == f]
 
             cavity_mean_intensity = np.std(cavity)
-            #print("Dircadb"+str(i)+"label"+str(f)+cavity_mean_intensity)
-            #print(cavity_mean_intensity)
-            #dict3[name, "cavity"+ str(f)]=cavity
-            #dict3[name, "intensity"+ str(f)]=np.mean(cavity)
-            #print(dict3[name, "intensity"+ str(f)], np.std(cavity))
 
             if cavity_mean_intensity > 50: #not too sure about the value of 50
                 #idea would be to take the mean value of the highest ones and but a little lower one as the limit
