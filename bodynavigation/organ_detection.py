@@ -179,7 +179,7 @@ class OrganDetection(object):
             if self.stats[part] is None: continue
             stats_p = os.path.join(path, "%s.json" % part)
             with open(stats_p, 'w') as fp:
-                json.dump(self.getStats(part, raw=True), fp, sort_keys=True, cls=NumpyEncoder)
+                json.dump(self.analyzePart(part, raw=True), fp, sort_keys=True, cls=NumpyEncoder)
 
     def toOutputCoordinates(self, vector):
         return self.transformation.transCoordinatesInv(vector)
@@ -297,7 +297,7 @@ class OrganDetection(object):
     ### Statistics ###
     ##################
 
-    def getStats(self, part, raw=False):
+    def analyzePart(self, part, raw=False):
         part = part.strip().lower()
 
         if part not in self.stats:
@@ -345,13 +345,13 @@ class OrganDetection(object):
         return data
 
     def analyzeLungs(self, raw=False):
-        return self.getStats("lungs", raw=raw)
+        return self.analyzePart("lungs", raw=raw)
 
     def analyzeBones(self, raw=False):
-        return self.getStats("bones", raw=raw)
+        return self.analyzePart("bones", raw=raw)
 
     def analyzeVessels(self, raw=False):
-        return self.getStats("vessels", raw=raw)
+        return self.analyzePart("vessels", raw=raw)
 
 
 
@@ -406,7 +406,7 @@ if __name__ == "__main__":
 
         for part in obj.stats:
             try:
-                obj.getStats(part, raw=True)
+                obj.analyzePart(part, raw=True)
             except:
                 print(traceback.format_exc())
 
