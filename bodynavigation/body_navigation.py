@@ -23,8 +23,10 @@ import copy
 from imtools import misc, qmisc # https://github.com/mjirik/imtools
 from io3d.misc import resize_to_mm, resize_to_shape
 
+from .organ_detection_algo import OrganDetectionAlgo
+
 class BodyNavigation:
-    """ Range of values in input data must be <-1024;1023> """
+    """ Range of values in input data must be <-1024;intmax> """
 
     def __init__(self, data3d, voxelsize_mm, use_new_get_lungs_setup=True):
         # temporary fix for io3d <-512;511> value range bug
@@ -64,22 +66,9 @@ class BodyNavigation:
 
     def get_body(self):
         # create segmented 3d data
-        body = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=2) > -300
-
-        # fills first and last slice with 1s, for binary_fill_holes processing # TODO - do this better way
-        body[0, :, :] = 1
-        body[-1, :, :] = 1
-        body = scipy.ndimage.morphology.binary_fill_holes(body)
-        # removes 1s from first and last slice
-        body[0, :, :] = body[1, :, :]
-        body[-1, :, :] = body[-2, :, :]
-
-        # leave only biggest object in data
-        body_label = skimage.measure.label(body, background=0)
-        unique, counts = np.unique(body_label, return_counts=True)
-        unique = unique[1:]; counts = counts[1:] # remove background label
-        body = body_label == unique[list(counts).index(max(counts))]
-
+        body = OrganDetectionAlgo.getBody(\
+            scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=2), \
+            self.working_vs)
         self.body = body
 
         # get body width and height
