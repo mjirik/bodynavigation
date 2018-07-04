@@ -188,7 +188,7 @@ class OrganDetection(object):
         if raw:
             return self.data3d.copy()
         else:
-            self.transformation.transDataInv(self.data3d.copy(), cval=-1024)
+            return self.transformation.transDataInv(self.data3d.copy(), cval=-1024)
 
     ####################
     ### Segmentation ###
