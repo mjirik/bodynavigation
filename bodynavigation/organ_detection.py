@@ -402,6 +402,8 @@ class OrganDetection(object):
 if __name__ == "__main__":
     import argparse
 
+    from .results_drawer import ResultsDrawer
+
     logging.basicConfig(stream=sys.stdout)
     logger = logging.getLogger()
     logger.setLevel(logging.WARNING)
@@ -413,7 +415,9 @@ if __name__ == "__main__":
     parser.add_argument('-r','--readydir', default=None,
             help='path to ready data dir (for testing)')
     parser.add_argument("--dump", default=None,
-            help='dump all processed data to path and exit')
+            help='process and fump all data to path and exit')
+    parser.add_argument("--draw", default=None,
+            help='draw and show segmentation results for specified parts. example: "bones,vessels,lungs"')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -439,6 +443,7 @@ if __name__ == "__main__":
 
     else: # readydir
         obj = OrganDetection.fromDirectory(os.path.abspath(args.readydir))
+        voxelsize = obj.spacing_source
         data3d = obj.getData3D()
 
     if args.dump is not None:
@@ -459,6 +464,14 @@ if __name__ == "__main__":
         obj.toDirectory(dumpdir)
         sys.exit(0)
 
+    if args.draw is not None:
+        parts = [ s.strip().lower() for s in args.draw.split(",") ]
+        masks = [ obj.getPart(p) for p in parts ]
+        rd = ResultsDrawer()
+        img = rd.drawImageAutocolor(data3d, voxelsize, volume_sets = masks)
+        img.show()
+
+
     #########
     print("-----------------------------------------------------------")
     data3d = obj.getData3D()
@@ -467,7 +480,7 @@ if __name__ == "__main__":
     # fatlessbody = obj.getFatlessBody()
     # bones = obj.getBones()
     # lungs = obj.getLungs()
-    kidneys = obj.getKidneys()
+    # kidneys = obj.getKidneys()
     # abdomen = obj.getAbdomen()
     # vessels = obj.getVessels()
     # aorta = obj.getAorta()
@@ -477,7 +490,7 @@ if __name__ == "__main__":
     # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
-    ed = sed3.sed3(data3d, contour=kidneys); ed.show()
+    # ed = sed3.sed3(data3d, contour=kidneys); ed.show()
     # ed = sed3.sed3(data3d, contour=abdomen); ed.show()
     # vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
     # vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3

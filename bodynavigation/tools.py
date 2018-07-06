@@ -229,6 +229,10 @@ def resizeSkimage(data, toshape, order=1, mode="reflect"):
 
     return data
 
+# TODO - test resize version with RegularGridInterpolator, (only linear and nn order)
+# https://scipy.github.io/devdocs/generated/scipy.interpolate.RegularGridInterpolator.html
+# https://stackoverflow.com/questions/30056577/correct-usage-of-scipy-interpolate-regulargridinterpolator
+
 def resize(data, toshape, order=1, mode="reflect"):
     return resizeScipy(data, toshape, order=order, mode=mode)
 

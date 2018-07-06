@@ -17,13 +17,12 @@ from multiprocessing import Pool
 import resource
 
 import numpy as np
-from PIL import Image, ImageDraw
-import skimage.transform
 
 sys.path.append("..")
 import bodynavigation.organ_detection
 print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.organ_detection.__file__))
 from bodynavigation.organ_detection import OrganDetection
+from bodynavigation.results_drawer import ResultsDrawer
 
 import io3d
 import sed3
@@ -31,161 +30,6 @@ import sed3
 """
 /usr/bin/time -v python batch_organ_detection.py -d -o ./batch_output/ -i ../test_data_3Dircadb1/ --dump ../READY_DIR_NEW/ -p "lungs,bones,bones_stats,kidneys" -t 3
 """
-
-def drawPoints(img, points, axis, colour=(255,0,0,255), outline=None, size=1):
-    if len(points) == 0: return img
-    if len(colour)==3:
-        colour = (colour[0],colour[1],colour[2],255)
-
-    z, y, x = zip(*points)
-    if axis == 0:
-        points_2d = zip(x, y)
-    elif axis == 1:
-        points_2d = zip(x, z)
-    elif axis == 2:
-        points_2d = zip(y, z)
-    else:
-        raise Exception("Invalid axis value: %s" % str(axis))
-
-    img_d = Image.new('RGBA', img.size)
-
-    draw = ImageDraw.Draw(img_d)
-    for p in points_2d: # p = [x,y]
-
-        xy = [p[0]-(size/2), p[1]-(size/2), p[0]+(size/2), p[1]+(size/2)]
-        draw.rectangle(xy, fill=colour, outline=outline)
-    del(draw)
-
-    img = Image.composite(img_d, img, img_d)
-    return img
-
-def drawVolume(img, mask, colour=(255,0,0,100)):
-    if len(colour)==3:
-        colour = (colour[0],colour[1],colour[2],255)
-    img_mask = np.zeros((mask.shape[0],mask.shape[1], 4), dtype=np.uint8)
-    img_mask[:,:,0] = colour[0]
-    img_mask[:,:,1] = colour[1]
-    img_mask[:,:,2] = colour[2]
-    img_mask[:,:,3] = mask.astype(np.uint8)*colour[3]
-    img_mask = Image.fromarray(img_mask, 'RGBA')
-    #img_mask.show()
-    img = Image.composite(img_mask, img, img_mask)
-    return img
-
-def drawPointsTo3DData(data3d, voxelsize, point_sets = [], volume_sets = []):
-    """
-    point_sets = [[points, colour=(255,0,0), outline=None, size=3],...]
-    volume_sets = [[mask, colour=(255,0,0)],...]
-    Returns RGB Image object
-    """
-
-    data3d[ data3d < -1024 ] = -1024
-    data3d[ data3d > 1024 ] = 1024
-    data3d = data3d + abs(np.min(data3d))
-
-    # axis views
-    view_z = np.sum(data3d, axis=0, dtype=np.int32).astype(np.float)
-    view_z = (view_z*(255.0/view_z.max())).astype(np.int32)
-
-    view_y = np.sum(data3d, axis=1, dtype=np.int32).astype(np.float)
-    view_y = (view_y*(255.0/view_y.max())).astype(np.int32)
-
-    view_x = np.sum(data3d, axis=2, dtype=np.int32).astype(np.float)
-    view_x = (view_x*(255.0/view_x.max())).astype(np.int32)
-
-    tmp = []
-    for vset in volume_sets:
-        mask, colour = tuple(vset)
-        mask_z = np.sum(mask.astype(np.uint32), axis=0, dtype=np.uint32) != 0
-        mask_y = np.sum(mask.astype(np.uint32), axis=1, dtype=np.uint32) != 0
-        mask_x = np.sum(mask.astype(np.uint32), axis=2, dtype=np.uint32) != 0
-        tmp.append(([mask_z, mask_y, mask_x], colour))
-    volume_sets = tmp
-
-    # resize to 1x1x1 voxelsize
-    new_shape_z = (int(data3d.shape[1] * voxelsize[1]), int(data3d.shape[2] * voxelsize[2]))
-    new_shape_y = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[1] * voxelsize[1]))
-    new_shape_x = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[2] * voxelsize[2]))
-
-    view_z = skimage.transform.resize(
-            view_z, new_shape_z, order=1, mode="reflect", clip=True, preserve_range=True,
-            ).astype(np.int32)
-    view_y = skimage.transform.resize(
-            view_y, new_shape_y, order=1, mode="reflect", clip=True, preserve_range=True,
-            ).astype(np.int32)
-    view_x = skimage.transform.resize(
-            view_x, new_shape_x, order=1, mode="reflect", clip=True, preserve_range=True,
-            ).astype(np.int32)
-
-    tmp = []
-    for pset in point_sets:
-        points, colour, outline, size = tuple(pset)
-        points = [ list(np.asarray(p)*voxelsize) for p in points ]
-        tmp.append((points, colour, outline, size))
-    point_sets = tmp
-
-    tmp = []
-    for vset in volume_sets:
-        masks, colour = tuple(vset)
-        mask_z, mask_y, mask_x = tuple(masks)
-        mask_z = skimage.transform.resize(
-            mask_z, new_shape_z, order=0, mode="reflect", clip=True, preserve_range=True,
-            ).astype(np.bool)
-        #ed = sed3.sed3(np.expand_dims(mask_z.astype(np.int8), axis=0)); ed.show()
-        mask_y = skimage.transform.resize(
-            mask_y, new_shape_y, order=0, mode="reflect", clip=True, preserve_range=True,
-            ).astype(np.bool)
-        #ed = sed3.sed3(np.expand_dims(mask_y.astype(np.int8), axis=0)); ed.show()
-        mask_x = skimage.transform.resize(
-            mask_x, new_shape_x, order=0, mode="reflect", clip=True, preserve_range=True,
-            ).astype(np.bool)
-        #ed = sed3.sed3(np.expand_dims(mask_x.astype(np.int8), axis=0)); ed.show()
-        tmp.append(([mask_z, mask_y, mask_x], colour))
-    volume_sets = tmp
-
-    # draw view_z
-    img = Image.fromarray(view_z, 'I').convert("RGBA")
-    for vset in volume_sets:
-        masks, colour = tuple(vset)
-        mask_z, mask_y, mask_x = tuple(masks)
-        img = drawVolume(img, mask_z, colour)
-    for pset in point_sets:
-        points, colour, outline, size = tuple(pset)
-        img = drawPoints(img, points, axis=0, colour=colour, outline=outline, size=size)
-    img_z = img
-
-    # draw view_y
-    img = Image.fromarray(view_y, 'I').convert("RGBA")
-    for vset in volume_sets:
-        masks, colour = tuple(vset)
-        mask_z, mask_y, mask_x = tuple(masks)
-        img = drawVolume(img, mask_y, colour)
-    for pset in point_sets:
-        points, colour, outline, size = tuple(pset)
-        img = drawPoints(img, points, axis=1, colour=colour, outline=outline, size=size)
-    img_y = img
-
-    # draw view_x
-    img = Image.fromarray(view_x, 'I').convert("RGBA")
-    for vset in volume_sets:
-        masks, colour = tuple(vset)
-        mask_z, mask_y, mask_x = tuple(masks)
-        img = drawVolume(img, mask_x, colour)
-    for pset in point_sets:
-        points, colour, outline, size = tuple(pset)
-        img = drawPoints(img, points, axis=2, colour=colour, outline=outline, size=size)
-    img_x = img
-
-    # connect and retorn images
-    img = Image.new('RGBA', (max(img_y.size[0]+img_x.size[0], img_z.size[0]), \
-        max(img_y.size[1]+img_z.size[1], img_x.size[1]+img_z.size[1])))
-
-    img.paste(img_y, (0,0))
-    img.paste(img_x, (img_y.size[0],0))
-    img.paste(img_z, (0,max(img_y.size[1], img_x.size[1])))
-    #img.show(); sys.exit(0)
-
-    return img.convert("RGB")
 
 def interpolatePointsZ(points, step=0.1):
     if len(points) <= 1: return points
@@ -203,13 +47,6 @@ def interpolatePointsZ(points, step=0.1):
 
     points = [ tuple([z_new[i], y_new[i], x_new[i]]) for i in range(len(z_new)) ]
     return points
-
-def getRGBA(idx, a=255):
-    """ idx: 0-9 """
-    colors = [ (255,0,0), (255,106,0), (255,213,0), (191,255,0), (0,255,21), \
-        (0,255,234), (0,170,255), (43,0,255), (255,0,255), (255,0,149) ]
-    c = list(colors[idx]); c.append(a)
-    return tuple(c)
 
 def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None, memorylimit=-1):
     try:
@@ -245,27 +82,29 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         point_sets = []; volume_sets = []
         VOLUME_APLHA = 100
 
+        rd = ResultsDrawer()
+
         if "body" in parts:
             body = obj.getBody();# body = obj.getBody()
-            volume_sets.append([body, getRGBA(4, a=VOLUME_APLHA)])
+            volume_sets.append([body, rd.getRGBA(4, a=VOLUME_APLHA)])
         if "fatlessbody" in parts:
             fatlessbody = obj.getFatlessBody();# ed = sed3.sed3(fatlessbody); ed.show()
-            volume_sets.append([fatlessbody, getRGBA(1, a=VOLUME_APLHA)])
+            volume_sets.append([fatlessbody, rd.getRGBA(1, a=VOLUME_APLHA)])
         if "lungs" in parts:
             lungs = obj.getLungs();# ed = sed3.sed3(lungs); ed.show()
-            volume_sets.append([lungs, getRGBA(2, a=VOLUME_APLHA)])
+            volume_sets.append([lungs, rd.getRGBA(2, a=VOLUME_APLHA)])
         if "abdomen" in parts:
             abdomen = obj.getAbdomen();# ed = sed3.sed3(abdomen); ed.show()
-            volume_sets.append([abdomen, getRGBA(3, a=VOLUME_APLHA)])
+            volume_sets.append([abdomen, rd.getRGBA(3, a=VOLUME_APLHA)])
         if "kidneys" in parts:
             kidneys = obj.getKidneys(); # ed = sed3.sed3(kidneys); ed.show()
-            volume_sets.append([kidneys, getRGBA(5, a=VOLUME_APLHA)])
+            volume_sets.append([kidneys, rd.getRGBA(5, a=VOLUME_APLHA)])
         if "bones" in parts:
             bones = obj.getBones(); # ed = sed3.sed3(bones); ed.show()
-            volume_sets.append([bones, getRGBA(0, a=VOLUME_APLHA)])
+            volume_sets.append([bones, rd.getRGBA(0, a=VOLUME_APLHA)])
         if "bones_stats" in parts:
             bones_stats = obj.analyzeBones()
-            point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), getRGBA(0, a=255), None, 1])
+            point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), rd.getRGBA(0, a=255), None, 1])
             point_sets.append([bones_stats["hip_joints"], (0,255,0,255), (0,0,0,255), 7])
             tmp = list(bones_stats["hip_start"]);
             while None in tmp: tmp.remove(None)
@@ -274,15 +113,15 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
             vessels = obj.getVessels(); # ed = sed3.sed3(vessels); ed.show()
             aorta = obj.getAorta(); # ed = sed3.sed3(aorta); ed.show()
             venacava = obj.getVenaCava(); # ed = sed3.sed3(venacava); ed.show()
-            volume_sets.append([vessels, getRGBA(5, a=VOLUME_APLHA)])
-            volume_sets.append([aorta, getRGBA(6, a=VOLUME_APLHA)])
-            volume_sets.append([venacava, getRGBA(7, a=VOLUME_APLHA)])
+            volume_sets.append([vessels, rd.getRGBA(5, a=VOLUME_APLHA)])
+            volume_sets.append([aorta, rd.getRGBA(6, a=VOLUME_APLHA)])
+            volume_sets.append([venacava, rd.getRGBA(7, a=VOLUME_APLHA)])
         if "vessels_stats" in parts:
             vessels_stats = obj.analyzeVessels() # in voxels
-            point_sets.append([interpolatePointsZ(vessels_stats["aorta"], step=0.1), getRGBA(6, a=255), None, 1])
-            point_sets.append([interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), getRGBA(7, a=255), None, 1])
+            point_sets.append([interpolatePointsZ(vessels_stats["aorta"], step=0.1), rd.getRGBA(6, a=255), None, 1])
+            point_sets.append([interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), rd.getRGBA(7, a=255), None, 1])
 
-        img = drawPointsTo3DData(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
+        img = rd.drawImage(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
         img.save(os.path.join(outputdir, "%s.png" % name))
         #img.show()
 
