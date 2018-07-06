@@ -28,6 +28,10 @@ from bodynavigation.organ_detection import OrganDetection
 import io3d
 import sed3
 
+"""
+/usr/bin/time -v python batch_organ_detection.py -d -o ./batch_output/ -i ../test_data_3Dircadb1/ --dump ../READY_DIR_NEW/ -p "lungs,bones,bones_stats,kidneys" -t 3
+"""
+
 def drawPoints(img, points, axis, colour=(255,0,0,255), outline=None, size=1):
     if len(points) == 0: return img
     if len(colour)==3:
@@ -306,7 +310,7 @@ def main():
     parser.add_argument('-o','--outputdir', default="./batch_output",
             help='path to output dir')
     parser.add_argument('-t','--threads', type=int, default=1,
-            help='How many processes (CPU cores) to use. Max MEM usage for smaller data is around 3GB, big ones can go over 9GB.')
+            help="How many processes (CPU cores) to use. Max expected MEM usage for abdomen only data is around 2GB, for whole body data it's around 5GB.")
     parser.add_argument('-m','--memorylimit', type=int, default=-1,
             help='How many GB of VIRTUAL memory are individual threads allowed before they are terminated. Might only work on Unix systems. Default is unlimited')
     parser.add_argument('-p','--parts', default="bones_stats,vessels,vessels_stats",

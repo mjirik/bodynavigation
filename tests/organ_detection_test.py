@@ -25,8 +25,6 @@ from bodynavigation.organ_detection import OrganDetection
 import sed3 # for testing
 
 # http://www.ircad.fr/softwares/3Dircadb/3Dircadb1/3Dircadb1.1.zip
-# TEST_DATA_DIR = "test_data"
-#TEST_DATA_DIR = "/home/jirka642/Programming/_Data/DP/3Dircadb1/1"
 TEST_DATA_DIR = "3Dircadb1.1"
 
 def diceCoeff(vol1, vol2):
@@ -51,10 +49,11 @@ class OrganDetectionTest(unittest.TestCase):
     # Minimal dice coefficients
     GET_BODY_DICE = 0.95
     GET_LUNGS_DICE = 0.95
-    GET_AORTA_DICE = 0.35 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
-    GET_VENACAVA_DICE = 0.10 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
-    GET_BONES_DICE =  0.70 # test data don't have segmented whole bones, missing center volumes
-    GET_KIDNEYS_DICE = 0.55 # TODO - make better
+    GET_BONES_DICE =  0.75 # test data don't have segmented whole bones, missing center volumes
+    GET_KIDNEYS_DICE = 0.75
+    GET_AORTA_DICE = 0.25 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
+    GET_VENACAVA_DICE = 0.25 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
+
 
     @classmethod
     def setUpClass(cls):

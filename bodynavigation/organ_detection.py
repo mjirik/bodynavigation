@@ -14,6 +14,7 @@ import traceback
 import sys, os
 import copy
 import json
+import tempfile, shutil
 
 import numpy as np
 import scipy
@@ -23,26 +24,34 @@ import io3d
 import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
-from .tools import NumpyEncoder, compressArray, decompressArray
+from .tools import NumpyEncoder, compressArray, decompressArray, toMemMap, delMemMap
 from .organ_detection_algo import OrganDetectionAlgo
 from .transformation import Transformation, TransformationNone
+
+"""
+/usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data_imaging.nci.nih.gov/imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.203506725591245239614099471316
+/usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data_3Dircadb1/3Dircadb1.1
+"""
 
 class OrganDetection(object):
     """
     This class is only 'user interface', all algorithms are in OrganDetectionAlgo
 
-    * getORGAN()
+    * getPart("bodypart") OR getBODYPART()
         - resizes output to corect shape (unless you use "raw=True")
         - saves (compressed) output in RAM for future calls
     """
 
-    def __init__(self, data3d=None, voxelsize=[1,1,1]):
+    def __init__(self, data3d=None, voxelsize=[1,1,1], low_mem=True):
         """
         * Values of input data should be in HU units (or relatively close). [air -1000, water 0]
             https://en.wikipedia.org/wiki/Hounsfield_scale
         * All coordinates and sizes are in [Z,Y,X] format
         * Expecting data3d to be corectly oriented
         * Voxel size is in mm
+
+        low_mem - tries to lower memory usage by saving data3d and masks to temporary files
+            on filesystem. Uses np.memmap which might not work with some functions.
         """
 
         # empty undefined values
@@ -72,6 +81,11 @@ class OrganDetection(object):
             "vessels":None
             }
 
+        # create directory for temporary files
+        self.tempdir = None
+        if low_mem:
+            self.tempdir = tempfile.mkdtemp(prefix="organ_detection_")
+
         # init with data3d
         if data3d is not None:
             logger.info("Preparing input data...")
@@ -79,25 +93,46 @@ class OrganDetection(object):
             # remove noise and errors in data
             data3d, body = OrganDetectionAlgo.cleanData(data3d, voxelsize)
 
+            # dump/read cleaned data3d from file
+            if self.tempdir is not None:
+                data3d = toMemMap(data3d, os.path.join(self.tempdir, "data3d_clean.dat"))
+
             # Data Registration and Transformation
             self.transformation = Transformation(data3d, voxelsize, body=body)
-            self.data3d = self.transformation.transData(data3d)
+            self.setData3D(data3d, raw=False) # sets self.data3d
+
+            # remove dumped cleaned data3d
+            if self.tempdir is not None:
+                delMemMap(data3d)
+
             #ed = sed3.sed3(self.data3d); ed.show()
 
             # remember spacing
             self.spacing = self.transformation.getTargetSpacing()
             self.spacing_source = self.transformation.getSourceSpacing()
 
+    def __del__(self):
+        """ Decontructor """
+
+        # imports are set to None or deleted on app exit
+        try:
+            shutil.get_archive_formats()
+        except:
+            import shutil
+
+        # remove tempdir
+        if self.tempdir is not None:
+            shutil.rmtree(self.tempdir)
+
     @classmethod
     def fromReadyData(cls, data3d, data3d_info, masks={}, stats={}):
         """ For super fast testing """
         obj = cls()
 
-        obj.data3d = data3d
         obj.transformation = Transformation.fromDict(data3d_info["transformation"])
         obj.spacing = np.asarray(data3d_info["spacing"], dtype=np.float)
         obj.spacing_source = obj.transformation.getSourceSpacing()
-
+        obj.setData3D(data3d, raw=True)
 
         for part in masks:
             if part not in obj.masks_comp:
@@ -188,7 +223,16 @@ class OrganDetection(object):
         if raw:
             return self.data3d.copy()
         else:
-            return self.transformation.transDataInv(self.data3d.copy(), cval=-1024)
+            return self.transformation.transDataInv(self.data3d, cval=-1024).copy()
+
+    def setData3D(self, data3d, raw=False):
+        if not raw:
+            data3d = self.transformation.transData(data3d, cval=-1024)
+
+        if self.tempdir is not None:
+            self.data3d = toMemMap(data3d, os.path.join(self.tempdir, "data3d.dat"))
+        else:
+            self.data3d = data3d
 
     ####################
     ### Segmentation ###
@@ -417,6 +461,7 @@ if __name__ == "__main__":
 
     #########
     print("-----------------------------------------------------------")
+    data3d = obj.getData3D()
 
     # body = obj.getBody()
     # fatlessbody = obj.getFatlessBody()

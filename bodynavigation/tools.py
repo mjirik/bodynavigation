@@ -10,14 +10,20 @@ from builtins import range              # replaces range with xrange
 import logging
 logger = logging.getLogger(__name__)
 
-import io
+import io, os
 import json
+import copy
 
 import numpy as np
 import scipy
 import scipy.ndimage
 import skimage.transform
 import skimage.morphology
+
+# dont display some anoying warnings
+import warnings
+warnings.filterwarnings('ignore', '.* scipy .* output shape of zoom.*')
+
 
 def getSphericalMask(shape=[3,3,3], spacing=[1,1,1]):
     shape = (np.asarray(shape, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
@@ -81,6 +87,26 @@ def decompressArray(mask_comp):
     """ Decompresses numpy array from RAM to RAM """
     mask_comp.seek(0)
     return np.load(mask_comp)['arr_0']
+
+def toMemMap(data3d, filepath):
+    """
+    Move numpy array from RAM to file
+    np.memmap might not work with some functions that np.array would have worked with. Sometimes
+    can even crash without error.
+    """
+    data3d_tmp = data3d
+    data3d = np.memmap(filepath, dtype=data3d.dtype, mode='w+', shape=data3d.shape)
+    data3d[:] = data3d_tmp[:]; del(data3d_tmp)
+    data3d.flush()
+    return data3d
+
+def delMemMap(data3d):
+    """ Deletes file used for memmap. Trying to use array after this runs will crash Python """
+    filename = copy.deepcopy(data3d.filename)
+    data3d.flush()
+    data3d._mmap.close()
+    del(data3d)
+    os.remove(filename)
 
 def getDataPadding(data):
     """
@@ -167,7 +193,46 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
-def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", clip=True, preserve_range=True):
+def resizeScipy(data, toshape, order=1, mode="reflect"):
+    """
+    Resize array to shape with scipy.ndimage.zoom
+
+    Using this because skimage.transform.resize consumes absurd amount of RAM memory
+    (many times size of input array), while scipy.ndimage.zoom consumes none.
+    scipy.ndimage.zoom also keeps correct dtype of output array.
+
+    Has slightly different output from skimage version, and a lot of minor bugs:
+    https://github.com/scipy/scipy/issues/7324
+    https://github.com/scipy/scipy/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3Ascipy.ndimage%20zoom
+    """
+    zoom = np.asarray(toshape, dtype=np.float) / np.asarray(data.shape, dtype=np.float)
+    data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode)
+    if np.any(data.shape != toshape):
+        logger.error("Wrong output shape of zoom: %s != %s" % (str(data.shape), str(toshape)))
+    return data
+
+def resizeSkimage(data, toshape, order=1, mode="reflect"):
+    """
+    Resize array to shape with skimage.transform.resize
+    Eats memory like crazy. (many times size of input array)
+    """
+    dtype = data.dtype # remember correct dtype
+
+    data = skimage.transform.resize(data, toshape, order=order, mode=mode, clip=True, \
+        preserve_range=True)
+
+    # fix dtype after skimage.transform.resize
+    if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
+        data = np.round(data).astype(dtype)
+    elif (data.dtype != dtype):
+        data = data.astype(dtype)
+
+    return data
+
+def resize(data, toshape, order=1, mode="reflect"):
+    return resizeScipy(data, toshape, order=order, mode=mode)
+
+def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect"):
     """
     All upscaling is done with 0 order interpolation (Nearest-neighbor) to prevent ghosting effect.
         (Examples of ghosting effect can be seen for example in 3Dircadb1.19)
@@ -175,7 +240,6 @@ def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", clip=True, prese
     If input is binary mask (np.bool) order=0 is forced.
     """
     if data.dtype == np.bool: order = 0 # for masks
-    dtype = data.dtype # remember correct dtype
 
     # calc both resize shapes
     scale = np.asarray(data.shape, dtype=np.float) / np.asarray(toshape, dtype=np.float)
@@ -186,28 +250,10 @@ def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", clip=True, prese
     upscale_shape = np.asarray(toshape, dtype=np.int).copy()
 
     # downscale with given interpolation order
-    data = skimage.transform.resize(data, downscale_shape, order=order, mode=mode, clip=clip, \
-        preserve_range=preserve_range)
-
-    # fix dtype after skimage.transform.resize
-    if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
-        data = np.round(data).astype(dtype)
-    elif (data.dtype != dtype):
-        data = data.astype(dtype)
+    data = resize(data, downscale_shape, order=order, mode=mode)
 
     # upscale with 0 order interpolation
     if not np.all(downscale_shape == upscale_shape):
-        data = skimage.transform.resize(data, upscale_shape, order=0, mode=mode, clip=clip, \
-            preserve_range=preserve_range)
-
-        # fix dtype after skimage.transform.resize
-        if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
-            data = np.round(data).astype(dtype)
-        elif (data.dtype != dtype):
-            data = data.astype(dtype)
+        data = resize(data, upscale_shape, order=0, mode=mode)
 
     return data
-
-
-
-

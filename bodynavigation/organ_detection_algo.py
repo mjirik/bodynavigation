@@ -31,15 +31,22 @@ from .tools import getSphericalMask, binaryClosing, binaryFillHoles, getDataPadd
 
 class OrganDetectionAlgo(object):
 
+    """
+    All tresholds are in HU
+    All sizes are in mm
+    """
+
     BODY_THRESHOLD = -300
+
+    LUNGS_TRACHEA_MAXWIDTH = 40 # from side to side
 
     KIDNEYS_THRESHOLD_1 = 180 #150 # 180
     KIDNEYS_THRESHOLD_2 = 180 #250 # 180
     KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
 
     VESSELS_THRESHOLD = 110 # 145
-    VESSELS_SPINE_WIDTH = 22 # from center
-    VESSELS_SPINE_HEIGHT = 30 # from center
+    VESSELS_SPINE_WIDTH = 22 # from center (radius)
+    VESSELS_SPINE_HEIGHT = 30 # from center (radius)
 
     VESSELS_AORTA_RADIUS = 12
     VESSELS_VENACAVA_RADIUS = 12
@@ -168,7 +175,7 @@ class OrganDetectionAlgo(object):
         return fatless
 
     @classmethod
-    def getLungs(cls, data3d, spacing, fatlessbody): # TODO - check how much memory this eats; lower memory usage
+    def getLungs(cls, data3d, spacing, fatlessbody):
         """ Expects lungs to actually be in data """
         logger.info("getLungs()")
         lungs = data3d < -300
@@ -222,6 +229,7 @@ class OrganDetectionAlgo(object):
         lungs = skimage.morphology.watershed(lungs, wseeds, mask=lungs)
         #ed = sed3.sed3(data3d, contour=lungs, seeds=wseeds); ed.show()
         lungs = lungs == 1
+        del(wseeds)
 
         # leave only lungs in data (1st and 2nd biggest objects, with similar centroids)
         logger.debug("leave only lungs in data")
@@ -262,19 +270,25 @@ class OrganDetectionAlgo(object):
         lungs = lungs == -1
 
         # remove trachea (only the part sticking out)
-        logger.debug("remove trachea") # TODO - detect if there is one first
+        logger.debug("remove trachea")
         pads = getDataPadding(lungs)
         lungs_depth_mm = (lungs.shape[0]-pads[0][1]-pads[0][0])*spacing[0]
-        if lungs_depth_mm > 200: # if lungs are longer then 200 mm on z-axis -> trying to remove trachea should not lungs from abdomen-only data
-            pads = getDataPadding(lungs)
-            s = ( slice(pads[0][0],lungs.shape[0]-pads[0][1]), \
-                slice(pads[1][0],lungs.shape[1]-pads[1][1]), \
-                slice(pads[2][0],lungs.shape[2]-pads[2][1]) )
-            tmp = lungs.copy()
-            tmp[s] = binaryClosing(tmp[s], structure=getSphericalMask([10,]*3, spacing=spacing))
-            tmp[s] = scipy.ndimage.morphology.binary_opening(tmp[s], \
-                structure=getSphericalMask([30,]*3, spacing=spacing))
-            lungs[:getDataPadding(tmp)[0][0],:,:] = 0
+        # remove only if lungs are longer then 200 mm on z-axis (not abdomen-only data)
+        if lungs_depth_mm > 200:
+            trachea_start_z = None; max_width = 0
+            for z in range(lungs.shape[0]-1, 0, -1):
+                if np.sum(lungs[z,:,:]) == 0: continue
+                pad = getDataPadding(lungs[z,:,:])
+                width = lungs[z,:,:].shape[1]-(pad[1][0]+pad[1][1])
+
+                if max_width <= width:
+                    max_width = width
+                    trachea_start_z = None
+                elif (trachea_start_z is None) and (width*spacing[1] < cls.LUNGS_TRACHEA_MAXWIDTH):
+                    trachea_start_z = z
+
+            if trachea_start_z is not None:
+                lungs[:trachea_start_z,:,:] = 0
 
         return lungs
 
