@@ -98,7 +98,7 @@ class OrganDetection(object):
                 data3d = toMemMap(data3d, os.path.join(self.tempdir, "data3d_clean.dat"))
 
             # Data Registration and Transformation
-            self.transformation = Transformation(data3d, voxelsize, body=body)
+            self.transformation = Transformation(data3d, voxelsize, body=body, voxelsize_resize_only=True)
             self.setData3D(data3d, raw=False) # sets self.data3d
 
             # remove dumped cleaned data3d

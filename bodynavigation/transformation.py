@@ -132,14 +132,16 @@ class Transformation(TransformationInf):
     NORMED_FATLESS_BODY_SIZE_Z_RANGE = 200
 
     def __init__(self, data3d=None, spacing=None, norm_scale_enable=True, voxel_scale_enable=True, \
-        z_scale_enable=True, body=None):
+        z_scale_enable=True, voxelsize_resize_only=False, body=None):
         """
-        data3d, spacing - 3d CT data and voxelsize
+        data3d, spacing - 3D CT data and voxelsize
         norm_scale_enable - try to normalize width and height of body (default True)
         voxel_scale_enable - scale voxels to 1x1x1mm (default True)
         z_scale_enable - enables scaling of data on z-axis, roughly 2x memory size.
             If disabled, target spacing will be changed so that no rescaling will happen \
             on z-axis when calling transData(). (default False)
+        voxel_resize - if True, only voxelsize is changed without resizing actual data at all.
+            (roughly 2x memory size of scaled [no z axis])
         """
         super(Transformation, self).__init__()
 
@@ -205,7 +207,7 @@ class Transformation(TransformationInf):
             size_mm = [ size_v[0]*spacing[1], size_v[1]*spacing[2] ] # fatlessbody size in mm on X and Y axis
             norm_scale = [ None, self.NORMED_FATLESS_BODY_SIZE[0]/size_mm[0], self.NORMED_FATLESS_BODY_SIZE[1]/size_mm[1] ]
             norm_scale[0] = (norm_scale[1]+norm_scale[2])/2 # scaling on z-axis is average of scaling on x,y-axis
-            self.trans["norm_scale"] = norm_scale # not used outside of init
+            self.trans["norm_scale"] = np.asarray(norm_scale, dtype=np.float) # not used outside of init
         else:
             del(body)
 
@@ -221,20 +223,25 @@ class Transformation(TransformationInf):
                 ], dtype=np.float)
             self.trans["voxel_scale"] = voxel_scale # not used outside of init
 
-        # Get FINAL SCALE, scaling so that final data is normalized and has voxelsize 1x1x1/??x1x1mm
-        self.trans["scale"] = self.trans["norm_scale"]*self.trans["voxel_scale"]
-        if not z_scale_enable:
-            self.target["spacing"][0] = self.source["spacing"][0] * self.trans["norm_scale"][0] # TODO - test if is correct
-            self.trans["scale"][0] = 1.0
-        logger.debug("Final scale: %s" % str(self.trans["scale"]))
+        # Get FINAL SCALE
+        if voxelsize_resize_only: # only voxelsize is changed, without scaling data
+            self.trans["scale"] = np.asarray([1,1,1], dtype=np.float)
+            self.target["spacing"] = self.source["spacing"] * self.trans["norm_scale"]
+            self.target["shape"] = self.trans["cut_shape"]
+        else: # scaling so that final data is normalized and has voxelsize 1x1x1/??x1x1mm
+            self.trans["scale"] = self.trans["norm_scale"]*self.trans["voxel_scale"]
+            if not z_scale_enable:
+                self.target["spacing"][0] = self.source["spacing"][0] * self.trans["norm_scale"][0] # TODO - test if is correct
+                self.trans["scale"][0] = 1.0
+            logger.debug("Final scale: %s" % str(self.trans["scale"]))
 
-        # Calculate transformed shape and spacing
-        logger.debug("Calculating transformed shape and help variables")
-        self.target["shape"] = np.asarray(np.round([ \
-            self.trans["cut_shape"][0] * self.trans["scale"][0], \
-            self.trans["cut_shape"][1] * self.trans["scale"][1], \
-            self.trans["cut_shape"][2] * self.trans["scale"][2] \
-            ]), dtype=np.int)
+            # Calculate transformed shape and spacing
+            logger.debug("Calculating transformed shape and help variables")
+            self.target["shape"] = np.asarray(np.round([ \
+                self.trans["cut_shape"][0] * self.trans["scale"][0], \
+                self.trans["cut_shape"][1] * self.trans["scale"][1], \
+                self.trans["cut_shape"][2] * self.trans["scale"][2] \
+                ]), dtype=np.int)
 
         # for recalculating coordinates to output format ( vec*scale + intercept )
         self.trans["coord_scale"] = np.asarray([ \
