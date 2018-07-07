@@ -48,7 +48,7 @@ def interpolatePointsZ(points, step=0.1):
     points = [ tuple([z_new[i], y_new[i], x_new[i]]) for i in range(len(z_new)) ]
     return points
 
-def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None, memorylimit=-1):
+def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None, memorylimit=-1, draw_solid=False):
     try:
         print("Processing: ", datapath)
 
@@ -80,8 +80,10 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
             data3d = obj.getData3D(); voxelsize = obj.spacing_source
 
         point_sets = []; volume_sets = []
-        rd = ResultsDrawer(default_volume_alpha=100)
-        #rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
+        if draw_solid:
+            rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
+        else:
+            rd = ResultsDrawer(default_volume_alpha=100)
 
         parts_stats = [x for x in parts if x.endswith("_stats")]
         parts_masks = [x for x in parts if (x not in parts_stats)]
@@ -153,6 +155,8 @@ def main():
             help='dump all processed data to dir in path')
     parser.add_argument('-r','--readydirs', default=None,
             help='path to dir with dirs with preporcessed data3d.dcm and masks')
+    parser.add_argument("--drawsolid", action="store_true",
+            help='Drawn segmented data are not transparent and have depth')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -188,7 +192,7 @@ def main():
         readypath = None
         if dirname in ready_dirnames:
             readypath = os.path.abspath(os.path.join(args.readydirs, dirname))
-        inputs.append([datapath, dirname, outputdir, parts, dumpdir, readypath, args.memorylimit])
+        inputs.append([datapath, dirname, outputdir, parts, dumpdir, readypath, args.memorylimit, args.drawsolid])
 
     pool = Pool(processes=args.threads)
     pool.map(processThread, inputs)

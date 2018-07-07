@@ -415,7 +415,7 @@ if __name__ == "__main__":
     parser.add_argument('-r','--readydir', default=None,
             help='path to ready data dir (for testing)')
     parser.add_argument("--dump", default=None,
-            help='process and fump all data to path and exit')
+            help='process and dump all data to path and exit')
     parser.add_argument("--draw", default=None,
             help='draw and show segmentation results for specified parts. example: "bones,vessels,lungs"')
     parser.add_argument("-d", "--debug", action="store_true",
