@@ -261,3 +261,10 @@ def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect"):
         data = resize(data, upscale_shape, order=0, mode=mode)
 
     return data
+
+def firstNonzero(data3d, axis, invalid_val=-1):
+    """
+    Returns (N-1)D array with indexes of first non-zero elements along defined axis
+    """
+    mask = data3d != 0
+    return np.where(mask.any(axis=axis), mask.argmax(axis=axis), invalid_val)

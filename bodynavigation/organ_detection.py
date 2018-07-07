@@ -468,6 +468,7 @@ if __name__ == "__main__":
         parts = [ s.strip().lower() for s in args.draw.split(",") ]
         masks = [ obj.getPart(p) for p in parts ]
         rd = ResultsDrawer()
+        #rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
         img = rd.drawImageAutocolor(data3d, voxelsize, volume_sets = masks)
         img.show()
 

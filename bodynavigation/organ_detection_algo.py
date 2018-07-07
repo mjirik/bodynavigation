@@ -38,6 +38,8 @@ class OrganDetectionAlgo(object):
 
     BODY_THRESHOLD = -300
 
+    FATLESSBODY_THRESHOLD = 20
+
     LUNGS_TRACHEA_MAXWIDTH = 40 # from side to side
 
     KIDNEYS_THRESHOLD_1 = 180 #150 # 180
@@ -154,12 +156,13 @@ class OrganDetectionAlgo(object):
         """
         logger.info("getFatlessBody()")
         # remove fat
-        fatless = (data3d > 20)
-        fatless = scipy.ndimage.morphology.binary_opening(fatless, structure=np.ones([3,3,3])) # small remove segmentation errors
+        fatless = (data3d > cls.FATLESSBODY_THRESHOLD)
+        fatless = scipy.ndimage.morphology.binary_opening(fatless, \
+            structure=getSphericalMask([5,]*3, spacing=spacing)) # remove small segmentation errors
         # fill body cavities, but ignore air near borders of body
         body_border = body & ( scipy.ndimage.morphology.binary_erosion(body, \
             structure=np.expand_dims(skimage.morphology.disk(9, dtype=np.bool), axis=0)) == 0)
-        fatless[ (data3d < -300) & (body_border == 0) & (body == 1) ] = 1
+        fatless[ (data3d < cls.BODY_THRESHOLD) & (body_border == 0) & (body == 1) ] = 1
         # remove skin
         tmp = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask([7,7,7], spacing=spacing))
         fatless[ body_border ] = tmp[ body_border ]
@@ -348,7 +351,7 @@ class OrganDetectionAlgo(object):
         return diaphragm
 
     @classmethod
-    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats):
+    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats): # TODO - fix this; dont segment bones
         """ between 150 and 300, cant go lower then 150 """
         logger.info("getKidneys()")
         spacing_vol = spacing[0]*spacing[1]*spacing[2]
@@ -396,7 +399,7 @@ class OrganDetectionAlgo(object):
         return kidneys
 
     @classmethod
-    def getBones(cls, data3d, spacing, fatless, lungs, kidneys):
+    def getBones(cls, data3d, spacing, fatless, lungs, kidneys): # TODO - fix this; sometimes segments kidneys
         """
         Good enough sgementation of all bones
         * data3d - everything, but body must be removed
@@ -479,7 +482,7 @@ class OrganDetectionAlgo(object):
         return abdomen
 
     @classmethod
-    def getVessels(cls, data3d, spacing, bones, bones_stats, contrast_agent=True):
+    def getVessels(cls, data3d, spacing, bones, bones_stats, contrast_agent=True): # TODO - fix this; doesnt work for voxelsize only resize
         """
         Tabular value of blood radiodensity is 13-50 HU.
         When contrast agent is used, it rises to roughly 100-140 HU.

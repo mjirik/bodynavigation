@@ -80,46 +80,45 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
             data3d = obj.getData3D(); voxelsize = obj.spacing_source
 
         point_sets = []; volume_sets = []
-        VOLUME_APLHA = 100
-
-        rd = ResultsDrawer()
+        rd = ResultsDrawer(default_volume_alpha=100)
+        #rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
 
         if "body" in parts:
             body = obj.getBody();# body = obj.getBody()
-            volume_sets.append([body, rd.getRGBA(4, a=VOLUME_APLHA)])
+            volume_sets.append([body, rd.getRGBA(4)])
         if "fatlessbody" in parts:
             fatlessbody = obj.getFatlessBody();# ed = sed3.sed3(fatlessbody); ed.show()
-            volume_sets.append([fatlessbody, rd.getRGBA(1, a=VOLUME_APLHA)])
+            volume_sets.append([fatlessbody, rd.getRGBA(1)])
         if "lungs" in parts:
             lungs = obj.getLungs();# ed = sed3.sed3(lungs); ed.show()
-            volume_sets.append([lungs, rd.getRGBA(2, a=VOLUME_APLHA)])
+            volume_sets.append([lungs, rd.getRGBA(2)])
         if "abdomen" in parts:
             abdomen = obj.getAbdomen();# ed = sed3.sed3(abdomen); ed.show()
-            volume_sets.append([abdomen, rd.getRGBA(3, a=VOLUME_APLHA)])
+            volume_sets.append([abdomen, rd.getRGBA(3)])
         if "kidneys" in parts:
             kidneys = obj.getKidneys(); # ed = sed3.sed3(kidneys); ed.show()
-            volume_sets.append([kidneys, rd.getRGBA(5, a=VOLUME_APLHA)])
+            volume_sets.append([kidneys, rd.getRGBA(5)])
         if "bones" in parts:
             bones = obj.getBones(); # ed = sed3.sed3(bones); ed.show()
-            volume_sets.append([bones, rd.getRGBA(0, a=VOLUME_APLHA)])
+            volume_sets.append([bones, rd.getRGBA(0)])
         if "bones_stats" in parts:
             bones_stats = obj.analyzeBones()
-            point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), rd.getRGBA(0, a=255), None, 1])
-            point_sets.append([bones_stats["hip_joints"], (0,255,0,255), (0,0,0,255), 7])
+            point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), rd.getRGBA(0), (0,0,0), 1])
+            point_sets.append([bones_stats["hip_joints"], (0,255,0), (0,0,0), 7])
             tmp = list(bones_stats["hip_start"]);
             while None in tmp: tmp.remove(None)
-            point_sets.append([tmp, (0,0,255,255), (0,0,0,255), 7])
+            point_sets.append([tmp, (0,0,255), (0,0,0), 7])
         if "vessels" in parts:
             vessels = obj.getVessels(); # ed = sed3.sed3(vessels); ed.show()
             aorta = obj.getAorta(); # ed = sed3.sed3(aorta); ed.show()
             venacava = obj.getVenaCava(); # ed = sed3.sed3(venacava); ed.show()
-            volume_sets.append([vessels, rd.getRGBA(5, a=VOLUME_APLHA)])
-            volume_sets.append([aorta, rd.getRGBA(6, a=VOLUME_APLHA)])
-            volume_sets.append([venacava, rd.getRGBA(7, a=VOLUME_APLHA)])
+            volume_sets.append([vessels, rd.getRGBA(5)])
+            volume_sets.append([aorta, rd.getRGBA(6)])
+            volume_sets.append([venacava, rd.getRGBA(7)])
         if "vessels_stats" in parts:
             vessels_stats = obj.analyzeVessels() # in voxels
-            point_sets.append([interpolatePointsZ(vessels_stats["aorta"], step=0.1), rd.getRGBA(6, a=255), None, 1])
-            point_sets.append([interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), rd.getRGBA(7, a=255), None, 1])
+            point_sets.append([interpolatePointsZ(vessels_stats["aorta"], step=0.1), rd.getRGBA(6), (0,0,0), 1])
+            point_sets.append([interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), rd.getRGBA(7), (0,0,0), 1])
 
         img = rd.drawImage(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
         img.save(os.path.join(outputdir, "%s.png" % name))
