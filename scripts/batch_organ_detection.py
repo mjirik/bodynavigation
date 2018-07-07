@@ -83,42 +83,38 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         rd = ResultsDrawer(default_volume_alpha=100)
         #rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
 
-        if "body" in parts:
-            body = obj.getBody();# body = obj.getBody()
-            volume_sets.append([body, rd.getRGBA(4)])
-        if "fatlessbody" in parts:
-            fatlessbody = obj.getFatlessBody();# ed = sed3.sed3(fatlessbody); ed.show()
-            volume_sets.append([fatlessbody, rd.getRGBA(1)])
-        if "lungs" in parts:
-            lungs = obj.getLungs();# ed = sed3.sed3(lungs); ed.show()
-            volume_sets.append([lungs, rd.getRGBA(2)])
-        if "abdomen" in parts:
-            abdomen = obj.getAbdomen();# ed = sed3.sed3(abdomen); ed.show()
-            volume_sets.append([abdomen, rd.getRGBA(3)])
-        if "kidneys" in parts:
-            kidneys = obj.getKidneys(); # ed = sed3.sed3(kidneys); ed.show()
-            volume_sets.append([kidneys, rd.getRGBA(5)])
-        if "bones" in parts:
-            bones = obj.getBones(); # ed = sed3.sed3(bones); ed.show()
-            volume_sets.append([bones, rd.getRGBA(0)])
-        if "bones_stats" in parts:
-            bones_stats = obj.analyzeBones()
-            point_sets.append([interpolatePointsZ(bones_stats["spine"], step=0.1), rd.getRGBA(0), (0,0,0), 1])
-            point_sets.append([bones_stats["hip_joints"], (0,255,0), (0,0,0), 7])
-            tmp = list(bones_stats["hip_start"]);
-            while None in tmp: tmp.remove(None)
-            point_sets.append([tmp, (0,0,255), (0,0,0), 7])
-        if "vessels" in parts:
-            vessels = obj.getVessels(); # ed = sed3.sed3(vessels); ed.show()
-            aorta = obj.getAorta(); # ed = sed3.sed3(aorta); ed.show()
-            venacava = obj.getVenaCava(); # ed = sed3.sed3(venacava); ed.show()
-            volume_sets.append([vessels, rd.getRGBA(5)])
-            volume_sets.append([aorta, rd.getRGBA(6)])
-            volume_sets.append([venacava, rd.getRGBA(7)])
-        if "vessels_stats" in parts:
-            vessels_stats = obj.analyzeVessels() # in voxels
-            point_sets.append([interpolatePointsZ(vessels_stats["aorta"], step=0.1), rd.getRGBA(6), (0,0,0), 1])
-            point_sets.append([interpolatePointsZ(vessels_stats["vena_cava"], step=0.1), rd.getRGBA(7), (0,0,0), 1])
+        parts_stats = [x for x in parts if x.endswith("_stats")]
+        parts_masks = [x for x in parts if (x not in parts_stats)]
+
+        if "vessels" in parts_masks:
+            if "aorta" not in parts_masks: parts_masks.append("aorta")
+            if "venacava" not in parts_masks: parts_masks.append("venacava")
+
+        COLOR_IDX = {
+            "body":7, "fatlessbody":8, "lungs":9, "abdomen":4, "kidneys":6, "bones":2, \
+            "vessels":5, "aorta":3, "venacava":0
+            }
+        i = 0
+        for p in parts:
+            if p not in COLOR_IDX:
+                while i in list(COLOR_IDX.values()): i+=1
+                COLOR_IDX[p] = i
+
+        for part in parts_masks:
+            volume_sets.append([obj.getPart(part), {"color":rd.getRGBA(COLOR_IDX[part])}])
+
+        for ps in parts_stats:
+            part = ps.replace("_stats", "")
+            stats = obj.analyzePart(part)
+
+            if ps == "bones_stats":
+                point_sets.append([interpolatePointsZ(stats["spine"], step=0.1), {"color":rd.getRGBA(2), "border":(0,0,0), "size":1}])
+                point_sets.append([stats["hip_joints"], {"color":(0,255,0), "border":(0,0,0), "size":7}])
+                point_sets.append([stats["hip_start"], {"color":(0,0,255), "border":(0,0,0), "size":7}])
+
+            elif ps == "vessels_stats":
+                point_sets.append([interpolatePointsZ(stats["aorta"], step=0.1), {"color":rd.getRGBA(3), "border":(0,0,0), "size":1}])
+                point_sets.append([interpolatePointsZ(stats["vena_cava"], step=0.1), {"color":rd.getRGBA(0), "border":(0,0,0), "size":1}])
 
         img = rd.drawImage(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
         img.save(os.path.join(outputdir, "%s.png" % name))

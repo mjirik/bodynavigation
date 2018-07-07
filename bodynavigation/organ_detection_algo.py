@@ -775,6 +775,7 @@ class OrganDetectionAlgo(object):
                 if (z+1) in points_hip_start_r:
                     points_hip_start[1] = points_hip_start_r[z+1]
                 break
+        while None in points_hip_start: points_hip_start.remove(None)
 
         # seeds = np.zeros(bones.shape)
         # for p in points_spine_c: seeds[p[0], p[1], p[2]] = 2

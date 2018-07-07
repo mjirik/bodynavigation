@@ -25,8 +25,8 @@ class ResultsDrawer(object):
     """
 
     COLORS = [
-        (255,0,0), (255,106,0), (255,213,0), (191,255,0), (0,255,21), \
-        (0,255,234), (0,170,255), (43,0,255), (255,0,255), (255,0,149)
+        (43, 0, 255), (255, 0, 149), (255, 0, 0), (0, 170, 255), (191, 255, 0), \
+        (0, 255, 234), (255, 0, 255), (0, 255, 21), (255, 106, 0),  (255, 213, 0)
         ]
 
     def __init__(self, data3d_forced_min = -1024, data3d_forced_max = 1024,\
@@ -34,7 +34,14 @@ class ResultsDrawer(object):
             default_point_border = (0,0,0), default_point_size = 5, \
             mask_depth = False, mask_depth_sort = False, mask_depth_scale = 0.75 ):
         """
-        mask_depth_sort - forced True if mask_depth=True
+        These values are used for transformation of dicom values to <0;255> value range.
+        data3d_forced_min, data3d_forced_max
+
+        These are default values that are used if user does not give them.
+        default_volume_alpha, default_point_alpha, default_point_border, default_point_size
+
+        Following enables displaying depth of segmented data, enables only drawing parts of masks that are not hidden behind other masks, and defines how fast does color darken in depth mode. (mask_depth_sort is forced True if mask_depth=True)
+        mask_depth, mask_depth_sort, mask_depth_scale
         """
         self.data3d_forced_min = data3d_forced_min
         self.data3d_forced_max = data3d_forced_max
@@ -57,7 +64,17 @@ class ResultsDrawer(object):
         if a is not None: c.append(a)
         return tuple(c)
 
-    def _drawPoints(self, img, points, colour=(255,0,0,255), outline=None, size=1):
+    def _validateColor(self, c, default_a=255):
+        c = list(c)
+        if len(c)==3:
+            c = [c[0],c[1],c[2],default_a]
+        elif c[3] == None:
+            c[3] = default_a
+        for i in range(4):
+            c[i] = int(min(255, max(0, c[i])))
+        return tuple(c)
+
+    def _drawPoints(self, img, points, meta={}):
         """
         Draws points into image (view)
 
@@ -65,52 +82,49 @@ class ResultsDrawer(object):
         points - 2D coordinates
         """
         if len(points) == 0: return img
-        if len(colour)==3:
-            colour = (colour[0],colour[1],colour[2],self.default_point_alpha)
-        if colour[3] == None:
-            colour[3] = self.default_point_alpha
+        color = (255,0,0,self.default_point_alpha) if ("color" not in meta) else meta["color"]
+        color = self._validateColor(color, self.default_point_alpha)
+        border = self.default_point_border if ("border" not in meta) else meta["border"]
+        size = self.default_point_size if ("size" not in meta) else meta["size"]
 
         img_d = Image.new('RGBA', img.size)
         draw = ImageDraw.Draw(img_d)
 
-        # draw outline/border
-        if outline is not None:
+        # draw border
+        if border is not None:
             bsize = size+2
             for p in points: # p = [x,y]
                 xy = [p[0]-(bsize/2), p[1]-(bsize/2), p[0]+(bsize/2), p[1]+(bsize/2)]
-                draw.rectangle(xy, fill=outline)
+                draw.rectangle(xy, fill=border)
 
         # draw points
         for p in points: # p = [x,y]
             xy = [p[0]-(size/2), p[1]-(size/2), p[0]+(size/2), p[1]+(size/2)]
-            draw.rectangle(xy, fill=colour)
+            draw.rectangle(xy, fill=color)
 
         img = Image.composite(img_d, img, img_d)
         return img
 
-    def _drawVolume(self, img, mask, colour=(255,0,0,150)):
+    def _drawVolume(self, img, mask, meta={}):
         """
         Draws volume (mask) into image (view)
 
         img - 2D Image
         mask - 2D array; bool or int32 <0,1;256>
         """
-        # get base colour
-        if len(colour)==3:
-            colour = (colour[0],colour[1],colour[2],self.default_volume_alpha)
-        if colour[3] == None:
-            colour[3] = self.default_volume_alpha
+        color = (255,0,0,self.default_volume_alpha) if ("color" not in meta) else meta["color"]
+        color = self._validateColor(color, self.default_volume_alpha)
 
         mask = mask.astype(np.uint8) # fixes future numpy warning
         img_mask = np.zeros((mask.shape[0],mask.shape[1], 4), dtype=np.uint8)
         for d in range(np.max(1, mask.min()), mask.max()+1): # range(1,256+1)
             scale = 1.0 - (((d-1)/255.0) * self.mask_depth_scale )
             mask_d = (mask == d)
-            img_mask[mask_d,0] = int(colour[0]*scale)
-            img_mask[mask_d,1] = int(colour[1]*scale)
-            img_mask[mask_d,2] = int(colour[2]*scale)
+            img_mask[mask_d,0] = int(color[0]*scale)
+            img_mask[mask_d,1] = int(color[1]*scale)
+            img_mask[mask_d,2] = int(color[2]*scale)
 
-        img_mask[:,:,3] = (mask!=0).astype(np.uint8)*colour[3]
+        img_mask[:,:,3] = (mask!=0).astype(np.uint8)*color[3]
         img_mask = Image.fromarray(img_mask, 'RGBA')
         #img_mask.show()
         img = Image.composite(img_mask, img, img_mask)
@@ -178,8 +192,8 @@ class ResultsDrawer(object):
 
         view - numpy array <0;255>
         axis - 0,1,2
-        point_sets - [[(points_z, colour=(255,0,0,100), outline=None, size=3),..],...]
-        volume_sets - [[(mask_z, colour=(255,0,0,100)),...],...]
+        point_sets - [[(points_z, {"color":(255,0,0,100), "border":(0,0,0,255), "size":5}),..],...]
+        volume_sets - [[(mask_z, {"color":(255,0,0,100)}),...],...]
 
         Returns RGB Image object
         """
@@ -187,11 +201,11 @@ class ResultsDrawer(object):
 
         img = Image.fromarray(view, 'I').convert("RGBA")
         for vset in volume_sets:
-            mask, colour = tuple(vset[axis])
-            img = self._drawVolume(img, mask, colour)
+            mask, meta = tuple(vset[axis])
+            img = self._drawVolume(img, mask, meta)
         for pset in point_sets:
-            points, colour, outline, size = tuple(pset[axis])
-            img = self._drawPoints(img, points, colour=colour, outline=outline, size=size)
+            points, meta = tuple(pset[axis])
+            img = self._drawPoints(img, points, meta)
 
         return img
 
@@ -226,8 +240,8 @@ class ResultsDrawer(object):
 
     def drawImage(self, data3d, voxelsize, point_sets = [], volume_sets = []):
         """
-        point_sets = [[points, colour=(255,0,0,100), outline=None, size=3],...]
-        volume_sets = [[mask, colour=(255,0,0,100)],...]
+        point_sets = [[points, {"color":(255,0,0,100), "border":(0,0,0,255), "size":5}],...]
+        volume_sets = [[mask, {"color":(255,0,0,100)}],...]
         Returns RGB Image object
 
         Save with: img.save(os.path.join(outputdir, "%s.png" % name))
@@ -246,25 +260,25 @@ class ResultsDrawer(object):
 
         tmp = []
         for vset in volume_sets:
-            mask, colour = tuple(vset)
+            mask, meta = tuple(vset)
             mask_z = self._getView(mask, voxelsize, axis=0, mask=True)
             mask_y = self._getView(mask, voxelsize, axis=1, mask=True)
             mask_x = self._getView(mask, voxelsize, axis=2, mask=True)
             if not self.mask_depth_sort:
                 mask_z = mask_z != 0; mask_y = mask_y != 0; mask_x = mask_x != 0;
-            tmp.append([ (mask_z, colour), (mask_y, colour), (mask_x, colour) ])
+            tmp.append([ (mask_z, meta), (mask_y, meta), (mask_x, meta) ])
         volume_sets = tmp
 
         tmp = []
         for pset in point_sets:
-            points, colour, outline, size = tuple(pset)
+            points, meta = tuple(pset)
             points_z = self._getViewPoints(points, voxelsize, axis=0)
             points_y = self._getViewPoints(points, voxelsize, axis=1)
             points_x = self._getViewPoints(points, voxelsize, axis=2)
             tmp.append([
-                (points_z, colour, outline, size),
-                (points_y, colour, outline, size),
-                (points_x, colour, outline, size)
+                (points_z, meta),
+                (points_y, meta),
+                (points_x, meta)
                 ])
         point_sets = tmp
 
@@ -305,37 +319,37 @@ class ResultsDrawer(object):
 
         return img.convert("RGB")
 
-    def colorSets(self, point_sets = [], volume_sets = []):
+    def colorSets(self, points = [], volumes = []):
         """
         Adds colors to point_sets and volume_sets
 
         Input:
-            point_sets = [points, ...]
-            volume_sets = [mask, ...]
+            points = [points, ...]
+            volumes = [mask, ...]
 
         Output:
-            point_sets = [[points, colour=(255,0,0,100), outline=(0,0,0,255), size=5],...]
-            volume_sets = [[mask, colour=(255,0,0,100)],...]
+            point_sets = [[points, {"color":(255,0,0,100), "border":(0,0,0,255), "size":5}],...]
+            volume_sets = [[mask, {"color":(255,0,0,100)}],...]
         """
         idx = 0 # color index
 
         vs = []
-        for mask in volume_sets:
-            vs.append([mask, self.getRGBA(idx, a=self.default_volume_alpha)])
+        for mask in volumes:
+            vs.append([mask, {"color":self.getRGBA(idx, a=self.default_volume_alpha)}])
             idx += 1
 
         ps = []
-        for points in point_sets:
-            ps.append([points, self.getRGBA(idx, a=self.default_point_alpha), \
-                self.default_point_border, self.default_point_size])
+        for points in points:
+            ps.append([points, {"color":self.getRGBA(idx, a=self.default_point_alpha), \
+                "border":self.default_point_border, "size":self.default_point_size}])
             idx += 1
 
         return ps, vs
 
-    def drawImageAutocolor(self, data3d, voxelsize, point_sets = [], volume_sets = []):
+    def drawImageAutocolor(self, data3d, voxelsize, points = [], volumes = []):
         """
-        point_sets = [points, ...]
-        volume_sets = [mask, ...]
+        points = [points, ...]
+        volumes = [mask, ...]
         Returns RGB Image object
 
         Automatically adds colors to point_sets and volume_sets
@@ -343,5 +357,5 @@ class ResultsDrawer(object):
         Save with: img.save(os.path.join(outputdir, "%s.png" % name))
         Open with: img.show()
         """
-        ps, vs = self.colorSets(point_sets, volume_sets)
+        ps, vs = self.colorSets(points, volumes)
         return self.drawImage(data3d, voxelsize, point_sets=ps, volume_sets=vs)
