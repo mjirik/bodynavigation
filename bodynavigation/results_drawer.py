@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 
 from .tools import firstNonzero, resize
 
-class ResultsDrawer(object):
+class ResultsDrawer(object): # TODO - custom resolution by setting target voxelsize, default (1,1,1)
     """
     Draws composite image of segmentation results with views along each axis
     Usage:

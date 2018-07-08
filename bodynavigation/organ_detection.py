@@ -75,11 +75,9 @@ class OrganDetection(object):
             }
 
         # statistics and models
-        self.stats = {
-            "lungs":None,
-            "bones":None,
-            "vessels":None
-            }
+        self.stats = {}
+        for part in self.masks_comp:
+            self.stats[part] = None
 
         # create directory for temporary files
         self.tempdir = None
@@ -261,7 +259,7 @@ class OrganDetection(object):
                 self._preloadParts(["lungs",])
                 data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
             elif part == "kidneys":
-                self._preloadParts(["fatlessbody",])
+                self._preloadParts(["fatlessbody",]); self._preloadStats(["lungs",])
                 data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.analyzeLungs(raw=True) )
             elif part == "bones":
@@ -269,19 +267,19 @@ class OrganDetection(object):
                 data = OrganDetectionAlgo.getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getLungs(raw=True), self.getKidneys(raw=True) )
             elif part == "abdomen":
-                self._preloadParts(["fatlessbody","diaphragm"])
+                self._preloadParts(["fatlessbody","diaphragm"]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.getAbdomen(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getDiaphragm(raw=True), self.analyzeBones(raw=True))
             elif part == "vessels":
-                self._preloadParts(["bones",])
+                self._preloadParts(["bones",]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.getVessels(self.data3d, self.spacing, \
                     self.getBones(raw=True), self.analyzeBones(raw=True) )
             elif part == "aorta":
-                self._preloadParts(["vessels",])
+                self._preloadParts(["vessels",]); self._preloadStats(["vessels",])
                 data = OrganDetectionAlgo.getAorta(self.data3d, self.spacing, self.getVessels(raw=True), \
                     self.analyzeVessels(raw=True) )
             elif part == "venacava":
-                self._preloadParts(["vessels",])
+                self._preloadParts(["vessels",]); self._preloadStats(["vessels",])
                 data = OrganDetectionAlgo.getVenaCava(self.data3d, self.spacing, self.getVessels(raw=True), \
                     self.analyzeVessels(raw=True) )
 
@@ -299,7 +297,10 @@ class OrganDetection(object):
         self.masks_comp[partname] = compressArray(data)
 
     def _preloadParts(self, partlist):
-        """ Lowers memory usage """
+        """
+        Lowers memory usage, by making sure that only data that are required for current
+        process are loaded.
+        """
         for part in partlist:
             if part not in self.masks_comp:
                 logger.error("Invalid bodypart '%s'! Skipping preload!" % part)
@@ -357,12 +358,12 @@ class OrganDetection(object):
                 data =  OrganDetectionAlgo.analyzeLungs(self.data3d, self.spacing, \
                     lungs=self.getLungs(raw=True))
             if part == "bones":
-                self._preloadParts(["fatlessbody", "bones"])
+                self._preloadParts(["fatlessbody", "bones"]); self._preloadStats(["lungs",])
                 data = OrganDetectionAlgo.analyzeBones( \
                 data3d=self.data3d, spacing=self.spacing, fatlessbody=self.getFatlessBody(raw=True), \
                 bones=self.getBones(raw=True), lungs_stats=self.analyzeLungs(raw=True) )
             elif part == "vessels":
-                self._preloadParts(["vessels", "bones"])
+                self._preloadParts(["vessels", "bones"]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.analyzeVessels( \
                 data3d=self.data3d, spacing=self.spacing, vessels=self.getVessels(raw=True), \
                 bones_stats=self.analyzeBones(raw=True) )
@@ -388,6 +389,18 @@ class OrganDetection(object):
                 data["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["vena_cava"] ]
         return data
 
+    def _preloadStats(self, statlist):
+        """
+        Lowers memory usage, by making sure that only data that are required for current
+        process are loaded.
+        """
+        for part in statlist:
+            if part not in self.stats:
+                logger.error("Invalid stats bodypart '%s'! Skipping preload!" % part)
+                continue
+            if self.stats[part] is None:
+                self.analyzePart(part, raw=True)
+
     def analyzeLungs(self, raw=False):
         return self.analyzePart("lungs", raw=raw)
 
@@ -401,7 +414,6 @@ class OrganDetection(object):
 
 if __name__ == "__main__":
     import argparse
-
     from .results_drawer import ResultsDrawer
 
     logging.basicConfig(stream=sys.stdout)
@@ -418,6 +430,10 @@ if __name__ == "__main__":
             help='process and dump all data to path and exit')
     parser.add_argument("--draw", default=None,
             help='draw and show segmentation results for specified parts. example: "bones,vessels,lungs"')
+    parser.add_argument("--drawdepth", action="store_true",
+            help='draw image in solid depth mode.')
+    parser.add_argument("--show", default=None,
+            help='Show one specific segmented part with sed3 viewer. example: "bones"')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -440,11 +456,10 @@ if __name__ == "__main__":
         data3d, metadata = io3d.datareader.read(args.datadir, dataplus_format=False)
         voxelsize = metadata["voxelsize_mm"]
         obj = OrganDetection(data3d, voxelsize)
-
     else: # readydir
         obj = OrganDetection.fromDirectory(os.path.abspath(args.readydir))
         voxelsize = obj.spacing_source
-        data3d = obj.getData3D()
+    data3d = obj.getData3D() # display results on processed data3d
 
     if args.dump is not None:
         for part in obj.masks_comp:
@@ -467,48 +482,40 @@ if __name__ == "__main__":
     if args.draw is not None:
         parts = [ s.strip().lower() for s in args.draw.split(",") ]
         masks = [ obj.getPart(p) for p in parts ]
-        rd = ResultsDrawer()
-        #rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
-        img = rd.drawImageAutocolor(data3d, voxelsize, volume_sets = masks)
+        if args.drawdepth:
+            rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
+        else:
+            rd = ResultsDrawer()
+        img = rd.drawImageAutocolor(data3d, voxelsize, volumes = masks)
         img.show()
+
+    if args.show is not None:
+        seg = obj.getPart(args.show)
+        ed = sed3.sed3(data3d, contour=seg); ed.show()
+
 
 
     #########
     print("-----------------------------------------------------------")
-    data3d = obj.getData3D()
-
-    # body = obj.getBody()
-    # fatlessbody = obj.getFatlessBody()
     # bones = obj.getBones()
-    # lungs = obj.getLungs()
-    # kidneys = obj.getKidneys()
-    # abdomen = obj.getAbdomen()
     # vessels = obj.getVessels()
     # aorta = obj.getAorta()
     # venacava = obj.getVenaCava()
 
-    # ed = sed3.sed3(data3d, contour=body); ed.show()
-    # ed = sed3.sed3(data3d, contour=fatlessbody); ed.show()
-    # ed = sed3.sed3(data3d, contour=bones); ed.show()
-    # ed = sed3.sed3(data3d, contour=lungs); ed.show()
-    # ed = sed3.sed3(data3d, contour=kidneys); ed.show()
-    # ed = sed3.sed3(data3d, contour=abdomen); ed.show()
-    # vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
-    # vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
-    # ed = sed3.sed3(data3d, contour=vc); ed.show()
-
     # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]
-
     # seeds = np.zeros(bones.shape)
     # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
     # for p in points_hip_joints: seeds[p[0], p[1], p[2]] = 2
     # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
     # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
+    # vc = np.zeros(vessels.shape, dtype=np.int8); vc[ vessels == 1 ] = 1
+    # vc[ aorta == 1 ] = 2; vc[ venacava == 1 ] = 3
+    # ed = sed3.sed3(data3d, contour=vc); ed.show()
+
     # vessels_stats = obj.analyzeVessels()
     # points_aorta = vessels_stats["aorta"];  points_vena_cava = vessels_stats["vena_cava"]
-
     # seeds = np.zeros(vessels.shape)
     # for p in points_aorta: seeds[p[0], p[1], p[2]] = 1
     # for p in points_vena_cava: seeds[p[0], p[1], p[2]] = 2

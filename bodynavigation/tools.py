@@ -25,14 +25,20 @@ import warnings
 warnings.filterwarnings('ignore', '.* scipy .* output shape of zoom.*')
 
 
-def getSphericalMask(shape=[3,3,3], spacing=[1,1,1]):
-    shape = (np.asarray(shape, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
-    shape[0] = max(shape[0], 1); shape[1] = max(shape[1], 1); shape[2] = max(shape[2], 1)
+def getSphericalMask(size=5, spacing=[1,1,1]):
+    """ Size is in mm """
+    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
+    shape[shape < 1] = 1
     mask = skimage.morphology.ball(21, dtype=np.bool)
-    mask = skimage.transform.resize(
-        mask, np.asarray(shape).astype(np.int), order=1,
-        mode="constant", cval=0, clip=True, preserve_range=True
-        ).astype(np.bool)
+    mask = resizeSkimage(mask, shape, order=1, mode="constant", cval=0)
+    return mask
+
+def getDiskMask(size=5, spacing=[1,1,1]):
+    """ Size is in mm """
+    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
+    shape[shape < 1] = 1; shape[0] = 1
+    mask = np.expand_dims(skimage.morphology.disk(21, dtype=np.bool), axis=0)
+    mask = resizeSkimage(mask, shape, order=1, mode="constant", cval=0)
     return mask
 
 def binaryClosing(data, structure, cval=0):
@@ -193,32 +199,32 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
-def resizeScipy(data, toshape, order=1, mode="reflect"):
+def resizeScipy(data, toshape, order=1, mode="reflect", cval=0):
     """
     Resize array to shape with scipy.ndimage.zoom
 
-    Using this because skimage.transform.resize consumes absurd amount of RAM memory
+    Use this on big data, because skimage.transform.resize consumes absurd amount of RAM memory
     (many times size of input array), while scipy.ndimage.zoom consumes none.
     scipy.ndimage.zoom also keeps correct dtype of output array.
 
-    Has slightly different output from skimage version, and a lot of minor bugs:
+    Output is a bit wrong, and a lot of minor bugs:
     https://github.com/scipy/scipy/issues/7324
     https://github.com/scipy/scipy/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3Ascipy.ndimage%20zoom
     """
     zoom = np.asarray(toshape, dtype=np.float) / np.asarray(data.shape, dtype=np.float)
-    data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode)
+    data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode, cval=cval)
     if np.any(data.shape != toshape):
         logger.error("Wrong output shape of zoom: %s != %s" % (str(data.shape), str(toshape)))
     return data
 
-def resizeSkimage(data, toshape, order=1, mode="reflect"):
+def resizeSkimage(data, toshape, order=1, mode="reflect", cval=0):
     """
     Resize array to shape with skimage.transform.resize
-    Eats memory like crazy. (many times size of input array)
+    Eats memory like crazy (many times size of input array), but very good results.
     """
     dtype = data.dtype # remember correct dtype
 
-    data = skimage.transform.resize(data, toshape, order=order, mode=mode, clip=True, \
+    data = skimage.transform.resize(data, toshape, order=order, mode=mode, cval=cval, clip=True, \
         preserve_range=True)
 
     # fix dtype after skimage.transform.resize
@@ -233,10 +239,10 @@ def resizeSkimage(data, toshape, order=1, mode="reflect"):
 # https://scipy.github.io/devdocs/generated/scipy.interpolate.RegularGridInterpolator.html
 # https://stackoverflow.com/questions/30056577/correct-usage-of-scipy-interpolate-regulargridinterpolator
 
-def resize(data, toshape, order=1, mode="reflect"):
-    return resizeScipy(data, toshape, order=order, mode=mode)
+def resize(data, toshape, order=1, mode="reflect", cval=0):
+    return resizeScipy(data, toshape, order=order, mode=mode, cval=cval)
 
-def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect"):
+def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", cval=0):
     """
     All upscaling is done with 0 order interpolation (Nearest-neighbor) to prevent ghosting effect.
         (Examples of ghosting effect can be seen for example in 3Dircadb1.19)
@@ -254,11 +260,11 @@ def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect"):
     upscale_shape = np.asarray(toshape, dtype=np.int).copy()
 
     # downscale with given interpolation order
-    data = resize(data, downscale_shape, order=order, mode=mode)
+    data = resize(data, downscale_shape, order=order, mode=mode, cval=cval)
 
     # upscale with 0 order interpolation
     if not np.all(downscale_shape == upscale_shape):
-        data = resize(data, upscale_shape, order=0, mode=mode)
+        data = resize(data, upscale_shape, order=0, mode=mode, cval=cval)
 
     return data
 

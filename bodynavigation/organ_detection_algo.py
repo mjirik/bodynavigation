@@ -26,7 +26,7 @@ import skimage.feature
 import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
-from .tools import getSphericalMask, binaryClosing, binaryFillHoles, getDataPadding, \
+from .tools import getSphericalMask, getDiskMask, binaryClosing, binaryFillHoles, getDataPadding, \
     cropArray, padArray, polyfit3D, growRegion
 
 class OrganDetectionAlgo(object):
@@ -34,12 +34,15 @@ class OrganDetectionAlgo(object):
     """
     All tresholds are in HU
     All sizes are in mm
+    All volumes are in mm3
     """
 
     BODY_THRESHOLD = -300
 
     FATLESSBODY_THRESHOLD = 20
+    FATLESSBODY_AIR_THRESHOLD = -300
 
+    LUNGS_THRESHOLD = -300
     LUNGS_TRACHEA_MAXWIDTH = 40 # from side to side
 
     KIDNEYS_THRESHOLD_1 = 180 #150 # 180
@@ -67,12 +70,12 @@ class OrganDetectionAlgo(object):
         logger.debug("Setting 'padding' value")
         data3d[ data3d == data3d[0,0,0] ] = -1024
 
-        # limit value range to <-1024;32000> so it can fit into int16
+        # limit value range to <-1024;int16_max> so it can fit into int16
         # [ data3d < -1024 ] => less dense then air - padding values
-        # [ data3d > 32000  ] => near limit of int16
+        # [ data3d > int16_max  ] => int16_max
         logger.debug("Converting to int16")
         data3d[ data3d < -1024 ] = -1024
-        data3d[ data3d > 32000 ] = 32000
+        data3d[ data3d > np.iinfo(np.int16).max ] = np.iinfo(np.int16).max
         data3d = data3d.astype(np.int16)
 
         # filter out noise - median filter with radius 1 (kernel 3x3x3)
@@ -134,7 +137,7 @@ class OrganDetectionAlgo(object):
         body = binaryFillHoles(body, z_axis=True)
 
         # binary opening
-        body = scipy.ndimage.morphology.binary_opening(body, structure=getSphericalMask([5,]*3, spacing=spacing))
+        body = scipy.ndimage.morphology.binary_opening(body, structure=getSphericalMask(5, spacing=spacing))
 
         # leave only biggest object in data
         body_label = skimage.measure.label(body, background=0)
@@ -158,13 +161,13 @@ class OrganDetectionAlgo(object):
         # remove fat
         fatless = (data3d > cls.FATLESSBODY_THRESHOLD)
         fatless = scipy.ndimage.morphology.binary_opening(fatless, \
-            structure=getSphericalMask([5,]*3, spacing=spacing)) # remove small segmentation errors
+            structure=getSphericalMask(5, spacing=spacing)) # remove small segmentation errors
         # fill body cavities, but ignore air near borders of body
         body_border = body & ( scipy.ndimage.morphology.binary_erosion(body, \
-            structure=np.expand_dims(skimage.morphology.disk(9, dtype=np.bool), axis=0)) == 0)
-        fatless[ (data3d < cls.BODY_THRESHOLD) & (body_border == 0) & (body == 1) ] = 1
+            structure=getDiskMask(10, spacing=spacing)) == 0)
+        fatless[ (data3d < cls.FATLESSBODY_AIR_THRESHOLD) & (body_border == 0) & (body == 1) ] = 1
         # remove skin
-        tmp = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask([7,7,7], spacing=spacing))
+        tmp = scipy.ndimage.morphology.binary_opening(fatless, structure=getSphericalMask(7, spacing=spacing))
         fatless[ body_border ] = tmp[ body_border ]
         #ed = sed3.sed3(data3d, contour=fatless, seeds=body_border); ed.show()
         # save convex hull along z-axis
@@ -181,7 +184,7 @@ class OrganDetectionAlgo(object):
     def getLungs(cls, data3d, spacing, fatlessbody):
         """ Expects lungs to actually be in data """
         logger.info("getLungs()")
-        lungs = data3d < -300
+        lungs = data3d < cls.LUNGS_THRESHOLD
         lungs[ fatlessbody == 0 ] = 0
         lungs = binaryFillHoles(lungs, z_axis=True)
 
@@ -365,7 +368,7 @@ class OrganDetectionAlgo(object):
         #threshold tisue (without ribs)
         fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing) # for ignoring ribs
         kidneys = (fatless_dst > 15) & (data3d > cls.KIDNEYS_THRESHOLD_1); del(fatless_dst) # includes bones
-        kidneys = binaryClosing(kidneys, structure=getSphericalMask([5,]*3, spacing=spacing))
+        kidneys = binaryClosing(kidneys, structure=getSphericalMask(5, spacing=spacing))
         kidneys = binaryFillHoles(kidneys, z_axis=True)
         #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
 
@@ -387,7 +390,7 @@ class OrganDetectionAlgo(object):
         # TODO - remove connected vessels
 
         # try to add kidney stones + middle part of kidneys #TODO
-        kidneys = scipy.ndimage.binary_dilation(kidneys, structure=getSphericalMask([10,]*3, spacing=spacing))
+        kidneys = scipy.ndimage.binary_dilation(kidneys, structure=getSphericalMask(10, spacing=spacing))
         kidneys[(data3d > 150) == 0] = 0
         kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
 
@@ -454,7 +457,7 @@ class OrganDetectionAlgo(object):
             b200 = (b200 == -1); del(seeds_l)
 
         bones = b200; del(b200)
-        bones = binaryClosing(bones, structure=getSphericalMask([5,]*3, spacing=spacing))
+        bones = binaryClosing(bones, structure=getSphericalMask(5, spacing=spacing))
         bones = binaryFillHoles(bones, z_axis=True)
 
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
@@ -689,7 +692,7 @@ class OrganDetectionAlgo(object):
 
         # merge near "bones" into big blobs
         bones[lungs_start:,:,:] = binaryClosing(bones[lungs_start:,:,:], \
-            structure=getSphericalMask([20,]*3, spacing=spacing)) # takes around 1m
+            structure=getSphericalMask(20, spacing=spacing)) # takes around 1m
 
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
 

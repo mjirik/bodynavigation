@@ -17,8 +17,7 @@ import numpy as np
 import skimage.measure
 
 # run with: "python -m bodynavigation.organ_detection -h"
-from .tools import getSphericalMask, binaryClosing, binaryFillHoles, resizeWithUpscaleNN, \
-    compressArray, decompressArray, getDataPadding, cropArray, padArray, polyfit3D, growRegion
+from .tools import resizeWithUpscaleNN, getDataPadding, cropArray, padArray
 from .organ_detection_algo import OrganDetectionAlgo
 
 class TransformationInf(object):
