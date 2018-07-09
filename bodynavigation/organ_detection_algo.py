@@ -27,40 +27,25 @@ import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import getSphericalMask, getDiskMask, binaryClosing, binaryFillHoles, getDataPadding, \
-    cropArray, padArray, polyfit3D, growRegion
+    cropArray, padArray, polyfit3D, growRegion, regionGrowing, getDataFractions
 
 class OrganDetectionAlgo(object):
-
     """
-    All tresholds are in HU
-    All sizes are in mm
-    All volumes are in mm3
+    Container for segmentation and analysis algorithms used by OrganDetection class.
+
+    For constants in class: (placed just before function defs)
+        tresholds are in HU
+        sizes are in mm
+        areas are in mm2
+        volumes are in mm3
     """
-
-    BODY_THRESHOLD = -300
-
-    FATLESSBODY_THRESHOLD = 20
-    FATLESSBODY_AIR_THRESHOLD = -300
-
-    LUNGS_THRESHOLD = -300
-    LUNGS_TRACHEA_MAXWIDTH = 40 # from side to side
-
-    KIDNEYS_THRESHOLD_1 = 180 #150 # 180
-    KIDNEYS_THRESHOLD_2 = 180 #250 # 180
-    KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
-
-    VESSELS_THRESHOLD = 110 # 145
-    VESSELS_SPINE_WIDTH = 22 # from center (radius)
-    VESSELS_SPINE_HEIGHT = 30 # from center (radius)
-
-    VESSELS_AORTA_RADIUS = 12
-    VESSELS_VENACAVA_RADIUS = 12
 
     @classmethod
     def cleanData(cls, data3d, spacing, body=None):
         """
         Filters out noise, removes some errors in data, sets undefined voxel value to -1024, etc ...
         """
+        logger.info("cleanData()")
         # fix for io3d <-512;511> value range bug, that is caused by hardcoded slope 0.5 in dcmreader
         if np.min(data3d) >= -512:
             logger.debug("Fixing io3d <-512;511> value range bug")
@@ -119,9 +104,60 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(data3d); ed.show()
         return data3d, body
 
+    # @classmethod
+    # def getDataRegistrationInfo(cls, data3d, spacing, body=None, fatlessbody=None, lungs=None, bones=None): # TODO - use this
+
+
+    #     if body is None: body = OrganDetectionAlgo.getBody(data3d, spacing)
+    #     padding = getDataPadding(body)
+    #     data3d = cropArray(data3d, padding)
+    #     body = cropArray(body, padding)
+
+
+
+    #     # Fatless body segmentation
+    #     fatlessbody = OrganDetectionAlgo.getFatlessBody(data3d, spacing, body)
+    #     del(body)
+
+    #     # get lungs end # TODO - this kills RAM on full body shots
+    #     logger.debug("Detecting end of lungs")
+    #     lungs = OrganDetectionAlgo.getLungs(data3d, spacing, fatlessbody)
+    #     if np.sum(lungs) == 0:
+    #         lungs_end = 0
+    #     else:
+    #         lungs_end = data3d.shape[0] - getDataPadding(lungs)[0][1]
+    #     del(lungs)
+
+    #     logger.debug("Calculating size normalization scale")
+    #     # get median body widths and heights
+    #     # from just [lungs_end:(lungs_end+self.NORMED_FATLESS_BODY_SIZE_Z_RANGE/spacing[0]),:,:]
+    #     widths = []; heights = []
+    #     for z in range(lungs_end, min(int(lungs_end+self.NORMED_FATLESS_BODY_SIZE_Z_RANGE/spacing[0]), fatlessbody.shape[0])):
+    #         if np.sum(fatlessbody[z,:,:]) == 0: continue
+    #         spads = getDataPadding(fatlessbody[z,:,:])
+    #         heights.append( fatlessbody[z,:,:].shape[0]-np.sum(spads[0]) )
+    #         widths.append( fatlessbody[z,:,:].shape[1]-np.sum(spads[1]) )
+
+    #     if len(widths) != 0:
+    #         size_v = [ np.median(heights), np.median(widths) ]
+    #     else:
+    #         logger.warning("Could not detect median body (abdomen) width and height! Using size of middle slice for normalization.")
+    #         size_v = []
+    #         for dim, pad in enumerate(getDataPadding(fatlessbody[int(fatlessbody.shape[0]/2),:,:])):
+    #             size_v.append( fatlessbody.shape[dim+1]-np.sum(pad) )
+    #     del(fatlessbody)
+
+    #     # Calculate NORMALIZATION SCALE
+    #     size_mm = [ size_v[0]*spacing[1], size_v[1]*spacing[2] ] # fatlessbody size in mm on X and Y axis
+    #     norm_scale = [ None, self.NORMED_FATLESS_BODY_SIZE[0]/size_mm[0], self.NORMED_FATLESS_BODY_SIZE[1]/size_mm[1] ]
+    #     norm_scale[0] = (norm_scale[1]+norm_scale[2])/2 # scaling on z-axis is average of scaling on x,y-axis
+    #     self.trans["norm_scale"] = np.asarray(norm_scale, dtype=np.float) # not used outside of init
+
     ####################
     ### Segmentation ###
     ####################
+
+    BODY_THRESHOLD = -300
 
     @classmethod
     def getBody(cls, data3d, spacing):
@@ -152,8 +188,11 @@ class OrganDetectionAlgo(object):
 
         return body
 
+    FATLESSBODY_THRESHOLD = 20
+    FATLESSBODY_AIR_THRESHOLD = -300
+
     @classmethod
-    def getFatlessBody(cls, data3d, spacing, body): # TODO - ignore nipples when creating convex hull
+    def getFatlessBody(cls, data3d, spacing, body): # TODO - ignore nipples (and maybe belly button) when creating convex hull
         """
         Returns convex hull of body without fat and skin
         """
@@ -180,6 +219,10 @@ class OrganDetectionAlgo(object):
                 fatless[z,:,:][ body[z,:,:] == 0 ] = 0
         return fatless
 
+    LUNGS_THRESHOLD = -300
+    LUNGS_INTESTINE_SEGMENTATION_OFFSET = 20 # in mm
+    LUNGS_TRACHEA_MAXWIDTH = 40 # from side to side
+
     @classmethod
     def getLungs(cls, data3d, spacing, fatlessbody):
         """ Expects lungs to actually be in data """
@@ -194,10 +237,9 @@ class OrganDetectionAlgo(object):
         valid_labels = []
         for z in range(data3d.shape[0]):
             if np.sum(lungs[z,:,:]) == 0: continue
-            pads = getDataPadding(fatlessbody[z,:,:])
-            height = lungs[z,:,:].shape[0]-pads[0][1]-pads[0][0]
-            if height == 0: continue
-            unique = np.unique(lungs[z,int(pads[0][0]+height*(3/4)):,:])[1:]
+            lower1_4 = getDataFractions(lungs[z,:,:], \
+                fraction_defs=[{"h":(3/4,1),"w":(0,1)},], mask=fatlessbody[z,:,:])
+            unique = np.unique(lower1_4)[1:]
             for u in unique:
                 if u not in valid_labels:
                     valid_labels.append(u)
@@ -206,80 +248,65 @@ class OrganDetectionAlgo(object):
         lungs = lungs == -1
         #ed = sed3.sed3(data3d, contour=lungs); ed.show()
 
+        # centroid of lungs, useful later.
+        # (Anything up cant be intestines, calculated only from largest blob)
+        logger.debug("get rough lungs centroid")
+        lungs = skimage.measure.label(lungs, background=0)
+        if np.sum(lungs[0,:,:])!=0: # if first slice has lungs (high chance of abdomen only data)
+            # 'connect' lungs blobs that are on first slice
+            # (this should fix any problems with only small sections of lungs in data)
+            unique = np.unique(lungs)[1:]
+            for u in unique:
+                lungs[lungs == u] = unique[0]
+        unique, counts = np.unique(lungs, return_counts=True)
+        unique = unique[1:]; counts = counts[1:]
+        largest_id = unique[list(counts).index(max(counts))]
+        centroid_z = scipy.ndimage.measurements.center_of_mass(lungs == largest_id)[0]
+        lungs = lungs != 0
+
         # try to separate connected intestines
         logger.debug("try to separate connected intestines")
-        wseeds = np.zeros(data3d.shape, dtype=np.uint8)
+        seeds = np.zeros(data3d.shape, dtype=np.int8)
+        intestine_offset = int(cls.LUNGS_INTESTINE_SEGMENTATION_OFFSET/spacing[0])
         for z in range(data3d.shape[0]):
             if np.sum(lungs[z,:,:]) == 0: continue
-            pads = getDataPadding(fatlessbody[z,:,:])
-            height = lungs[z,:,:].shape[0]-pads[0][1]-pads[0][0]
-            # cavities that are in lower 1/3 of slice are lungs
-            wseeds[z,int(pads[0][0]+height*(2/3)):,:] = 1
-            wseeds[z, lungs[z,:,:] == 0 ] = 0
-            # slices that have cavities only in upper 2/3 of slice are intestines
-            # - to ignore trachea slices, use only lower half of z-axis
-            # - do not put any seeds in slices transitioning from lungs to intestines
-            if (z > data3d.shape[0]/2) and (np.sum(wseeds[max(0,z-5):(z+1),:,:] == 1) == 0) and \
-                (np.sum(lungs[z,int(pads[0][0]+height*(2/3)):,:]) == 0):
-                    wseeds[z,:int(pads[0][0]+height*(2/3)),:] = 2
-                    wseeds[z, lungs[z,:,:] == 0 ] = 0
-            # grow seeds into segmented objects in this slice
-            if np.sum(wseeds[z,:,:]) == 0: continue
-            slbl = skimage.measure.label(lungs[z,:,:], background=0)
-            unique = np.unique(slbl)[1:]
-            for u in unique:
-                s = np.unique(wseeds[z, slbl == u ])[1:]
-                if len(s) == 1:
-                    wseeds[z, slbl == u ] = s[0]
-        #ed = sed3.sed3(data3d, contour=lungs, seeds=wseeds); ed.show()
-        lungs = skimage.morphology.watershed(lungs, wseeds, mask=lungs)
-        #ed = sed3.sed3(data3d, contour=lungs, seeds=wseeds); ed.show()
-        lungs = lungs == 1
-        del(wseeds)
 
-        # leave only lungs in data (1st and 2nd biggest objects, with similar centroids)
-        logger.debug("leave only lungs in data")
-        lungs = skimage.measure.label(lungs, background=0)
-        #ed = sed3.sed3(lungs); ed.show()
-        unique, counts = np.unique(lungs, return_counts=True)
-        unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
-        centroids = scipy.ndimage.measurements.center_of_mass(lungs, lungs, unique)
-        if len(unique) == 0:
+            frac = [{"h":(2/3,1),"w":(0,1)},{"h":(0,2/3),"w":(0,1)}]
+            lower1_3, upper2_3 = getDataFractions(lungs[z,:,:], fraction_defs=frac, \
+                mask=fatlessbody[z,:,:]) # views of lungs array
+            lower1_3_s, upper2_3_s = getDataFractions(seeds[z,:,:], fraction_defs=frac, \
+                mask=fatlessbody[z,:,:]) # views of seed array
+            lower1_3_sum = np.sum(lower1_3); upper2_3_sum = np.sum(upper2_3)
+
+            if (lower1_3_sum != 0) and (np.sum(seeds == 2) == 0):
+                # lungs
+                # IF: in lower 1/3 of body AND not after intestines
+                lower1_3_s[lower1_3 != 0] = 1
+
+            elif (z > centroid_z) and (np.sum(seeds[max(0,z-intestine_offset):(z+1),:,:] == 1) == 0) \
+                and (lower1_3_sum == 0) and (upper2_3_sum != 0):
+                # intestines or other non-lungs cavities
+                # IF: slice is under centroid of lungs, has minimal offset from any detected lungs,
+                #     stuff only in upper 2/3 of body
+                upper2_3_s[upper2_3 != 0] = 2
+        #ed = sed3.sed3(data3d, contour=lungs, seeds=seeds); ed.show()
+        # using watershed region growing mode, because the thin tissue wall separating lungs and
+        # intestines is enough to stop algorithm going to wrong side. "random_walker" would
+        # work more reliable, but is more momory heavy.
+        seeds = regionGrowing(data3d, seeds, lungs, mode="watershed")
+        #ed = sed3.sed3(data3d, contour=lungs, seeds=seeds); ed.show()
+        lungs = seeds == 1
+        del(seeds)
+
+        if np.sum(lungs) == 0:
             logger.warning("Couldn't find lungs!")
-            return np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
-
-        idx_1st = list(counts).index(max(counts))
-        count_1st = counts[idx_1st]
-        centroid_1st = centroids[idx_1st]
-
-        idx_2nd = None
-        count_2nd = 0
-        centroid_2nd = None
-        if len(unique) >= 2:
-            counts[idx_1st] = 0
-            idx_2nd = list(counts).index(max(counts))
-            count_2nd = counts[idx_2nd]
-            counts[idx_1st] = count_1st
-            centroid_2nd = centroids[idx_2nd]
-
-        #print(count_1st, count_2nd)
-        lungs[ lungs == unique[idx_1st] ] = -1
-        if len(unique) >= 2:
-            ok = True
-            # if second biggest is not at least 40% as big as first -> bad
-            if count_2nd/count_1st < 0.4: ok = False
-            # if centroids are too distant at z and y axis -> bad
-            if (centroid_1st[0]-centroid_2nd[0])*spacing[0] > 50: ok = False
-            if (centroid_1st[1]-centroid_2nd[1])*spacing[1] > 50: ok = False
-
-            if ok: lungs[ lungs == unique[idx_2nd] ] = -1
-        lungs = lungs == -1
+            return lungs
 
         # remove trachea (only the part sticking out)
         logger.debug("remove trachea")
         pads = getDataPadding(lungs)
         lungs_depth_mm = (lungs.shape[0]-pads[0][1]-pads[0][0])*spacing[0]
-        # remove only if lungs are longer then 200 mm on z-axis (not abdomen-only data)
+        # try to remove only if lungs are longer then 200 mm on z-axis (not abdomen-only data)
         if lungs_depth_mm > 200:
             trachea_start_z = None; max_width = 0
             for z in range(lungs.shape[0]-1, 0, -1):
@@ -298,60 +325,64 @@ class OrganDetectionAlgo(object):
 
         return lungs
 
-    @classmethod
-    def getDiaphragm(cls, data3d, spacing, lungs):
-        """ Returns interpolated shape of Thoracic diaphragm (continues outsize of body) """
-        logger.info("getDiaphragm()")
-        diaphragm = scipy.ndimage.filters.sobel(lungs.astype(np.int16), axis=0) < -10
+    # @classmethod
+    # def getDiaphragm(cls, data3d, spacing, lungs):
+    #     """ Returns interpolated shape of Thoracic diaphragm (continues outsize of body) """
+    #     logger.info("getDiaphragm()")
+    #     diaphragm = scipy.ndimage.filters.sobel(lungs.astype(np.int16), axis=0) < -10
 
-        # create diaphragm heightmap
-        heightmap = np.zeros((diaphragm.shape[1], diaphragm.shape[2]), dtype=np.float)
-        lungs_stop = lungs.shape[0]-getDataPadding(lungs)[0][1]
-        diaphragm_start = max(0, lungs_stop - int(100/spacing[0]))
-        for y in range(diaphragm.shape[1]):
-            for x in range(diaphragm.shape[2]):
-                if np.sum(diaphragm[:,y,x]) == 0:
-                    heightmap[y,x] = np.nan
-                else:
-                    tmp = diaphragm[:,y,x][::-1]
-                    z = len(tmp) - np.argmax(tmp) - 1
-                    if z < diaphragm_start:
-                        # make sure that diaphragm is not higher then lowest lungs point -100mm
-                        heightmap[y,x] = np.nan
-                    else:
-                        heightmap[y,x] = z
+    #     # create diaphragm heightmap
+    #     heightmap = np.zeros((diaphragm.shape[1], diaphragm.shape[2]), dtype=np.float)
+    #     lungs_stop = lungs.shape[0]-getDataPadding(lungs)[0][1]
+    #     diaphragm_start = max(0, lungs_stop - int(100/spacing[0]))
+    #     for y in range(diaphragm.shape[1]):
+    #         for x in range(diaphragm.shape[2]):
+    #             if np.sum(diaphragm[:,y,x]) == 0:
+    #                 heightmap[y,x] = np.nan
+    #             else:
+    #                 tmp = diaphragm[:,y,x][::-1]
+    #                 z = len(tmp) - np.argmax(tmp) - 1
+    #                 if z < diaphragm_start:
+    #                     # make sure that diaphragm is not higher then lowest lungs point -100mm
+    #                     heightmap[y,x] = np.nan
+    #                 else:
+    #                     heightmap[y,x] = z
 
-        # interpolate missing values
-        height_median = np.nanmedian(heightmap)
-        x = np.arange(0, heightmap.shape[1])
-        y = np.arange(0, heightmap.shape[0])
-        heightmap = np.ma.masked_invalid(heightmap)
-        xx, yy = np.meshgrid(x, y)
-        x1 = xx[~heightmap.mask]
-        y1 = yy[~heightmap.mask]
-        newarr = heightmap[~heightmap.mask]
-        heightmap = scipy.interpolate.griddata((x1, y1), newarr.ravel(), (xx, yy), \
-            method='linear', fill_value=height_median)
-        #ed = sed3.sed3(np.expand_dims(heightmap, axis=0)); ed.show()
+    #     # interpolate missing values
+    #     height_median = np.nanmedian(heightmap)
+    #     x = np.arange(0, heightmap.shape[1])
+    #     y = np.arange(0, heightmap.shape[0])
+    #     heightmap = np.ma.masked_invalid(heightmap)
+    #     xx, yy = np.meshgrid(x, y)
+    #     x1 = xx[~heightmap.mask]
+    #     y1 = yy[~heightmap.mask]
+    #     newarr = heightmap[~heightmap.mask]
+    #     heightmap = scipy.interpolate.griddata((x1, y1), newarr.ravel(), (xx, yy), \
+    #         method='linear', fill_value=height_median)
+    #     #ed = sed3.sed3(np.expand_dims(heightmap, axis=0)); ed.show()
 
-        # 2D heightmap -> 3D diaphragm
-        diaphragm = np.zeros(diaphragm.shape, dtype=np.bool).astype(np.bool)
-        for y in range(diaphragm.shape[1]):
-            for x in range(diaphragm.shape[2]):
-                z = int(heightmap[y,x])
-                diaphragm[z,y,x] = 1
+    #     # 2D heightmap -> 3D diaphragm
+    #     diaphragm = np.zeros(diaphragm.shape, dtype=np.bool).astype(np.bool)
+    #     for y in range(diaphragm.shape[1]):
+    #         for x in range(diaphragm.shape[2]):
+    #             z = int(heightmap[y,x])
+    #             diaphragm[z,y,x] = 1
 
-        # make sure that diaphragm is lower then lungs volume
-        diaphragm[ lungs == 1 ] = 1
-        for y in range(diaphragm.shape[1]):
-            for x in range(diaphragm.shape[2]):
-                tmp = diaphragm[:,y,x][::-1]
-                z = len(tmp) - np.argmax(tmp) - 1
-                diaphragm[:,y,x] = 0
-                diaphragm[z,y,x] = 1
+    #     # make sure that diaphragm is lower then lungs volume
+    #     diaphragm[ lungs == 1 ] = 1
+    #     for y in range(diaphragm.shape[1]):
+    #         for x in range(diaphragm.shape[2]):
+    #             tmp = diaphragm[:,y,x][::-1]
+    #             z = len(tmp) - np.argmax(tmp) - 1
+    #             diaphragm[:,y,x] = 0
+    #             diaphragm[z,y,x] = 1
 
-        #ed = sed3.sed3(data3d, seeds=diaphragm); ed.show()
-        return diaphragm
+    #     #ed = sed3.sed3(data3d, seeds=diaphragm); ed.show()
+    #     return diaphragm
+
+    KIDNEYS_THRESHOLD_1 = 180 #150 # 180
+    KIDNEYS_THRESHOLD_2 = 180 #250 # 180
+    KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
 
     @classmethod
     def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats): # TODO - fix this; dont segment bones
@@ -441,13 +472,13 @@ class OrganDetectionAlgo(object):
 
         # remove stuff connected to heart and kidneys
         if np.sum(lungs) != 0:
-            wseeds = ( bones == 1 ).astype(np.int8) # = 1
-            wseeds[ (fatless_dst < 15) & (fatless == 1) & (b200 == 1) ] = 1 # ribs readded
-            wseeds[s][:,:int(lungs_hull.shape[1]/2),:][ lungs_hull[:,:int(lungs_hull.shape[1]/2),:] == 1 ] = 2
-            wseeds[kidneys == 1] = 2
-            b200 = skimage.morphology.watershed(b200, wseeds, mask=b200) == 1
+            seeds = ( bones == 1 ).astype(np.int8) # = 1
+            seeds[ (fatless_dst < 15) & (fatless == 1) & (b200 == 1) ] = 1 # ribs readded
+            seeds[s][:,:int(lungs_hull.shape[1]/2),:][ lungs_hull[:,:int(lungs_hull.shape[1]/2),:] == 1 ] = 2
+            seeds[kidneys == 1] = 2
+            b200 = skimage.morphology.watershed(b200, seeds, mask=b200) == 1 # TODO replace with regionGrowing()
 
-            #ed = sed3.sed3(data3d, seeds=wseeds, contour=r); ed.show()
+            #ed = sed3.sed3(data3d, seeds=seeds, contour=r); ed.show()
 
             # again remove all not connected to > 300
             b200 = skimage.measure.label(b200, background=0)
@@ -484,6 +515,10 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(data3d, contour=abdomen); ed.show()
         return abdomen
 
+    VESSELS_THRESHOLD = 110 # 145
+    VESSELS_SPINE_WIDTH = 22 # from center (radius)
+    VESSELS_SPINE_HEIGHT = 30 # from center (radius)
+
     @classmethod
     def getVessels(cls, data3d, spacing, bones, bones_stats, contrast_agent=True): # TODO - fix this; doesnt work for voxelsize only resize
         """
@@ -507,17 +542,17 @@ class OrganDetectionAlgo(object):
         if contrast_agent:
             vessels = data3d > cls.VESSELS_THRESHOLD
 
-            wseeds = bones.astype(np.uint8) # = 1
+            seeds = bones.astype(np.uint8) # = 1
             for z in range(spine_zmin,spine_zmax+1): # draw seeds elipse at spine center
                 sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
                 rr, cc = skimage.draw.ellipse(sc[0], sc[1], SPINE_HEIGHT, SPINE_WIDTH, \
-                    shape=wseeds[z,:,:].shape)
-                wseeds[z,rr,cc] = 1
-            wseeds[ scipy.ndimage.morphology.distance_transform_edt(wseeds == 0, sampling=spacing) > 15 ] = 2
-            wseeds[ vessels == 0 ] = 0 # seeds only where there are vessels
+                    shape=seeds[z,:,:].shape)
+                seeds[z,rr,cc] = 1
+            seeds[ scipy.ndimage.morphology.distance_transform_edt(seeds == 0, sampling=spacing) > 15 ] = 2
+            seeds[ vessels == 0 ] = 0 # seeds only where there are vessels
 
-            vessels = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
-            #ed = sed3.sed3(data3d, seeds=wseeds, contour=vessels); ed.show()
+            vessels = skimage.morphology.watershed(vessels, seeds, mask=vessels) # TODO replace with regionGrowing()
+            #ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
             vessels = vessels == 2 # even smallest vessels and kidneys
 
             vessels = scipy.ndimage.morphology.binary_fill_holes(vessels)
@@ -530,29 +565,29 @@ class OrganDetectionAlgo(object):
 
             # remove liver and similar half-segmented organs
             cut_rad = (150, 70); cut_rad = (cut_rad[0]/spacing[1], cut_rad[1]/spacing[2])
-            wseeds = np.zeros(vessels.shape, dtype=np.int8)
+            seeds = np.zeros(vessels.shape, dtype=np.int8)
             for z in range(spine_zmin,spine_zmax+1):
                 vs = vessels[z,:,:]; sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
 
                 rr, cc = skimage.draw.ellipse(sc[0]-cut_rad[0]-SPINE_HEIGHT, sc[1], \
-                    cut_rad[0], cut_rad[1], shape=wseeds[z,:,:].shape)
-                wseeds[z,rr,cc] = 1
+                    cut_rad[0], cut_rad[1], shape=seeds[z,:,:].shape)
+                seeds[z,rr,cc] = 1
 
                 rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], \
-                    shape=wseeds[z,:,:].shape)
-                mask = np.zeros(wseeds[z,:,:].shape); mask[rr, cc] = 1
+                    shape=seeds[z,:,:].shape)
+                mask = np.zeros(seeds[z,:,:].shape); mask[rr, cc] = 1
                 mask[int(sc[0]):,:] = 0
-                wseeds[z, mask != 1] = 2
-            # ed = sed3.sed3(data3d, seeds=wseeds, contour=vessels); ed.show()
+                seeds[z, mask != 1] = 2
+            # ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
 
-            r = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
+            r = skimage.morphology.watershed(vessels, seeds, mask=vessels) # TODO replace with regionGrowing()
             vessels = r == 1
             #ed = sed3.sed3(data3d, contour=vessels); ed.show()
 
             # find circles near spine
             rad = np.asarray(list(range(9,12)), dtype=np.float32)
             rad = list( rad / float((spacing[1]+spacing[2])/2.0) )
-            wseeds = np.zeros(vessels.shape, dtype=np.int8)
+            seeds = np.zeros(vessels.shape, dtype=np.int8)
             for z in range(spine_zmin,spine_zmax+1):
                 vs = vessels[z,:,:]; sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
                 SPINE_HEIGHT = sc[0]-SPINE_HEIGHT
@@ -580,40 +615,40 @@ class OrganDetectionAlgo(object):
                     if vs[int(c[0]),int(c[1])] == 0: continue # must be inside segmented vessels
                     elif dst2 > 70**2: continue # max dist from spine
                     elif c[0] > SPINE_HEIGHT: continue # no lower then spine height
-                    else: wseeds[z,int(c[0]),int(c[1])] = 1
+                    else: seeds[z,int(c[0]),int(c[1])] = 1
 
             # convolution with vertical kernel to remove seeds in vessels not going up-down
             kernel = np.ones((15,1,1))
             r = scipy.ndimage.convolve(vessels.astype(np.uint32), kernel)
             #ed = sed3.sed3(r, contour=vessels); ed.show()
-            wseeds[ r < np.sum(kernel) ] = 0
+            seeds[ r < np.sum(kernel) ] = 0
 
             # remove everything thats not connected to at least one seed
             vessels = skimage.measure.label(vessels, background=0)
-            tmp = vessels.copy(); tmp[ wseeds == 0 ] = 0
+            tmp = vessels.copy(); tmp[ seeds == 0 ] = 0
             for l in np.unique(tmp)[1:]:
                 vessels[ vessels == l ] = -1
             vessels = (vessels == -1); del(tmp)
 
             # watershed
-            wseeds_base = wseeds.copy() # only circle centers
-            wseeds = scipy.ndimage.binary_dilation(wseeds.astype(np.bool), structure=np.ones((1,3,3))).astype(np.int8)
+            seeds_base = seeds.copy() # only circle centers
+            seeds = scipy.ndimage.binary_dilation(seeds.astype(np.bool), structure=np.ones((1,3,3))).astype(np.int8)
             cut_rad = (90, 70); cut_rad = (cut_rad[0]/spacing[1], cut_rad[1]/spacing[2])
             for z in range(spine_zmin,spine_zmax+1):
                 sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
-                rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], shape=wseeds[z,:,:].shape)
-                mask = np.zeros(wseeds[z,:,:].shape); mask[rr, cc] = 1
+                rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], shape=seeds[z,:,:].shape)
+                mask = np.zeros(seeds[z,:,:].shape); mask[rr, cc] = 1
                 mask[int(sc[0]):,:] = 0
-                wseeds[z, mask != 1] = 2
-            #ed = sed3.sed3(data3d, seeds=wseeds, contour=vessels); ed.show()
+                seeds[z, mask != 1] = 2
+            #ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
 
-            r = skimage.morphology.watershed(vessels, wseeds, mask=vessels)
-            #ed = sed3.sed3(data3d, seeds=wseeds, contour=r); ed.show()
+            r = skimage.morphology.watershed(vessels, seeds, mask=vessels) # TODO replace with regionGrowing()
+            #ed = sed3.sed3(data3d, seeds=seeds, contour=r); ed.show()
             vessels = r == 1
 
             # remove everything thats not connected to at least one seed, again (just to be safe)
             vessels = skimage.measure.label(vessels, background=0)
-            tmp = vessels.copy(); tmp[ wseeds_base == 0 ] = 0
+            tmp = vessels.copy(); tmp[ seeds_base == 0 ] = 0
             for l in np.unique(tmp)[1:]:
                 vessels[ vessels == l ] = -1
             vessels = (vessels == -1); del(tmp)
@@ -631,6 +666,8 @@ class OrganDetectionAlgo(object):
             # - combine last two steps
             # - points_spine - select close circles to spine
 
+    VESSELS_AORTA_RADIUS = 12
+
     @classmethod
     def getAorta(cls, data3d, spacing, vessels, vessels_stats):
         logger.info("getAorta()")
@@ -642,9 +679,12 @@ class OrganDetectionAlgo(object):
         aorta = np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
         for p in points:
             aorta[p[0],p[1],p[2]] = 1
-        aorta = growRegion(aorta, vessels, iterations=cls.VESSELS_AORTA_RADIUS)
+        aorta = growRegion(aorta, vessels, iterations=cls.VESSELS_AORTA_RADIUS) # TODO - replace with regionGrowing
+        # aorta = regionGrowing(vessels, aorta, vessels, max_dist=cls.VESSELS_AORTA_RADIUS, mode="watershed")
 
         return aorta
+
+    VESSELS_VENACAVA_RADIUS = 12
 
     @classmethod
     def getVenaCava(cls, data3d, spacing, vessels, vessels_stats):
@@ -657,7 +697,8 @@ class OrganDetectionAlgo(object):
         venacava = np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
         for p in points:
             venacava[p[0],p[1],p[2]] = 1
-        venacava = growRegion(venacava, vessels, iterations=cls.VESSELS_VENACAVA_RADIUS)
+        venacava = growRegion(venacava, vessels, iterations=cls.VESSELS_VENACAVA_RADIUS) # TODO - replace with regionGrowing
+        # venacava = regionGrowing(vessels, venacava, vessels, max_dist=cls.VESSELS_AORTA_RADIUS, mode="watershed")
 
         return venacava
 
@@ -684,7 +725,8 @@ class OrganDetectionAlgo(object):
         lungs_start = lungs_stats["start"] # start of lungs on z-axis
         lungs_end = lungs_stats["end"] # end of lungs on z-axis
         bones[:lungs_start,:,:] = 0 # definitely not spine or hips
-        for z in range(0, lungs_end): # remove front parts of ribs (to get correct spine center)
+        # remove front parts of ribs (to get correct spine center)
+        for z in range(0, lungs_end): # TODO - use getDataFractions
             bs = fatlessbody[z,:,:]; pad = getDataPadding(bs)
             height = int(bones.shape[1]-(pad[1][0]+pad[1][1]))
             top_sep = pad[1][0]+int(height*0.3)
@@ -699,7 +741,8 @@ class OrganDetectionAlgo(object):
         points_spine = []
         points_hip_joints_l = []; points_hip_joints_r = []
         points_hip_start_l = {}; points_hip_start_r = {}
-        for z in range(lungs_start, bones.shape[0]): # TODO - separate into more sections (spine should be only in middle-lower)
+        for z in range(lungs_start, bones.shape[0]): # TODO - use getDataFractions
+            # TODO - separate into more sections (spine should be only in middle-lower)
             bs = fatlessbody[z,:,:]
             # separate body/bones into 3 sections (on x-axis)
             pad = getDataPadding(bs)
@@ -835,7 +878,7 @@ class OrganDetectionAlgo(object):
             cseeds[p[0],p[1],p[2]] = 1
         for p in points_vena_cava:
             cseeds[p[0],p[1],p[2]] = 2
-        r = skimage.morphology.watershed(vessels, cseeds, mask=vessels)
+        r = skimage.morphology.watershed(vessels, cseeds, mask=vessels) # TODO replace with regionGrowing()
         #ed = sed3.sed3(data3d, contour=r, seeds=cseeds); ed.show()
 
         for p in points_unknown:

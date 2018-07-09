@@ -29,8 +29,8 @@ def getSphericalMask(size=5, spacing=[1,1,1]):
     """ Size is in mm """
     shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
     shape[shape < 1] = 1
-    mask = skimage.morphology.ball(21, dtype=np.bool)
-    mask = resizeSkimage(mask, shape, order=1, mode="constant", cval=0)
+    mask = skimage.morphology.ball(21, dtype=np.float)
+    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
     return mask
 
 def getDiskMask(size=5, spacing=[1,1,1]):
@@ -38,7 +38,7 @@ def getDiskMask(size=5, spacing=[1,1,1]):
     shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
     shape[shape < 1] = 1; shape[0] = 1
     mask = np.expand_dims(skimage.morphology.disk(21, dtype=np.bool), axis=0)
-    mask = resizeSkimage(mask, shape, order=1, mode="constant", cval=0)
+    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
     return mask
 
 def binaryClosing(data, structure, cval=0):
@@ -155,6 +155,39 @@ def padArray(data, pads, padding_value=0):
     out[tuple(s)] = data
     return out
 
+def getDataFractions(data2d, fraction_defs=[], mask=None):
+    """
+    Returns views (in tuple) on 2D array defined by percentages of width and height
+    fraction_defs - [{"h":(3/4,1),"w":(0,1)},...]
+    mask - used for calculation of width and height based on segmented data
+    """
+    if mask is None:
+        height = data2d.shape[0]; height_offset = 0
+        width = data2d.shape[1]; width_offset = 0
+    elif np.sum(mask) == 0:
+        height = 0; height_offset = 0
+        width = 0; width_offset = 0
+    else:
+        pads = getDataPadding(mask)
+        height = data2d.shape[0]-pads[0][1]-pads[0][0]; height_offset = pads[0][0]
+        width = data2d.shape[1]-pads[1][1]-pads[1][0]; width_offset = pads[1][0]
+
+    def get_index(length, offset, percent):
+        return offset + int(np.round(length*percent))
+
+    fractions = []
+    for fd in fraction_defs:
+        h_s = slice(get_index(height, height_offset, fd["h"][0]), \
+            get_index(height, height_offset, fd["h"][1])+1)
+        w_s = slice(get_index(width, width_offset, fd["w"][0]), \
+            get_index(width, width_offset, fd["w"][1])+1)
+        fractions.append(data2d[(h_s,w_s)])
+
+    if len(fractions)==1:
+        return fractions[0]
+    else:
+        return tuple(fractions)
+
 def polyfit3D(points, dtype=np.int, deg=3):
     z, y, x = zip(*points)
     z_new = list(range(z[0], z[-1]+1))
@@ -170,9 +203,88 @@ def polyfit3D(points, dtype=np.int, deg=3):
     points = [ tuple(np.asarray([z_new[i], y_new[i], x_new[i]]).astype(dtype)) for i in range(len(z_new)) ]
     return points
 
-def growRegion(region, mask, iterations=1): # TODO - redo this, based on custom distance transform ???
-    # TODO - remove parts of mask that are not connected to region
+def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershed"):
+    """
+    Does not ignore 'geography' of data when calculating 'distances' growing regions.
+    Has 2 modes, 'random_walker' and 'watershed'.
 
+    data3d - data3d or binary mask to be segmented
+    seeds - seeds, are converted to np.int8
+    mask - extremely important for 'random_walker', accidentally processing whole data eats 10s of GB.
+    spacing - voxel spacing, if None cube spacing is assumed.
+    max_dist - tries to limit maximal growth distance from seeds (ignores 'geography of data')
+    mode - 'random_walker'/'watershed'
+
+    'random_walker' mode is based on diffusion of probability.
+    Should not ignore brightness of pixels (I think?) - different brightness == harder diffusion
+    A lot more memory required then 'watershed'. (1.7GB vs 4.2GB MAXMEM used)
+
+    'watershed' mode based on filling hypothetical basins in data with liquid.
+    In problem of segmentation in CT data, is only useful in very specific situations.
+    (grayscale data3d doesnt work in very useful way with this).
+    If used together with spacing parameter, a lot more memory is required (1.7GB vs 4.3GB MAXMEM used).
+
+    Lowest possible used memory is when mode='watershed' and spacing=None
+    """
+    # note - large areas that are covered by seeds do not increase memory requirements
+    #        (works almost as if they had mask == 0)
+    seeds = seeds.astype(np.int8)
+
+    # limit max segmentation distance
+    if max_dist > 0:
+        mask[scipy.ndimage.morphology.distance_transform_edt(seeds==0, sampling=spacing) > max_dist] = 0
+
+    # remove sections in mask that are not connected to any seeds # TODO - test if this lowers memory requirements
+    mask = skimage.measure.label(mask, background=0)
+    tmp = mask.copy(); tmp[ seeds == 0 ] = 0
+    for l in np.unique(tmp)[1:]:
+        mask[ mask == l ] = -1
+    mask = (mask == -1); del(tmp)
+
+    # if only one seed, return everythin connected to it (done in last step).
+    unique = np.unique(seeds)[1:]
+    if len(unique) == 1:
+        return mask.astype(np.int8)*unique[0]
+
+    # segmentation
+    if mode not in ["random_walker", "watershed"]:
+        logger.warning("Invalid region growing mode '%s', defaulting to 'random_walker'" % str(mode))
+        mode = "random_walker"
+
+    if mode == "random_walker":
+        seeds[mask == 0] = -1
+        seeds = skimage.segmentation.random_walker(data3d, seeds, mode='cg_mg', copy=False, spacing=spacing)
+        seeds[seeds == -1] = 0
+
+    elif mode == "watershed": # TODO - maybe more useful if edge filter is done first, when using grayscale data??
+        # resize data to cube spacing
+        if spacing is not None:
+            shape_orig = data3d.shape
+            shape_cube = np.asarray(data3d.shape, dtype=np.float)*np.asarray(spacing, dtype=np.float) # 1x1x1
+            shape_cube = (shape_cube/np.min(spacing)).astype(np.int) # upscale target size, so there is no loss in quality
+
+            order = 0 if (data3d.dtype == np.bool) else 1 # for masks
+            data3d = resize(data3d, shape_cube, order=order, mode="reflect")
+            mask = resize(mask, shape_cube, order=0, mode="reflect")
+            tmp = seeds
+            seeds = np.zeros(shape_cube, dtype=seeds.dtype)
+            for s in np.unique(tmp)[1:]:
+                seeds[resize(tmp == s, shape_cube, order=0, mode="reflect")] = s
+            del(tmp)
+
+        seeds = skimage.morphology.watershed(data3d, seeds, mask=mask)
+
+        # resize back to original spacing/shape
+        if spacing is not None:
+            tmp = seeds
+            seeds = np.zeros(shape_orig, dtype=seeds.dtype)
+            for s in np.unique(tmp)[1:]:
+                seeds[resize(tmp == s, shape_orig, order=0, mode="reflect")] = s
+
+    return seeds
+
+def growRegion(region, mask, iterations=1): # TODO - DEPRACED BY regionGrowing()!!!
+    # TODO - remove parts of mask that are not connected to region
     region[ mask == 0 ] = 0
 
     kernel1 = np.zeros((3,3,3), dtype=np.bool).astype(np.bool)
@@ -207,10 +319,11 @@ def resizeScipy(data, toshape, order=1, mode="reflect", cval=0):
     (many times size of input array), while scipy.ndimage.zoom consumes none.
     scipy.ndimage.zoom also keeps correct dtype of output array.
 
-    Output is a bit wrong, and a lot of minor bugs:
+    Output is a bit (or VERY) wrong, and a lot of minor bugs:
     https://github.com/scipy/scipy/issues/7324
     https://github.com/scipy/scipy/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3Ascipy.ndimage%20zoom
     """
+    order = 0 if (data.dtype == np.bool) else order # for masks
     zoom = np.asarray(toshape, dtype=np.float) / np.asarray(data.shape, dtype=np.float)
     data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode, cval=cval)
     if np.any(data.shape != toshape):
@@ -249,8 +362,6 @@ def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", cval=0):
     Any downscaling is done with given interpolation order.
     If input is binary mask (np.bool) order=0 is forced.
     """
-    if data.dtype == np.bool: order = 0 # for masks
-
     # calc both resize shapes
     scale = np.asarray(data.shape, dtype=np.float) / np.asarray(toshape, dtype=np.float)
     downscale_shape = np.asarray(toshape, dtype=np.int).copy()
