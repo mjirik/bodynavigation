@@ -241,7 +241,7 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
         mask[ mask == l ] = -1
     mask = (mask == -1); del(tmp)
 
-    # if only one seed, return everythin connected to it (done in last step).
+    # if only one seed, return everything connected to it (done in last step).
     unique = np.unique(seeds)[1:]
     if len(unique) == 1:
         return mask.astype(np.int8)*unique[0]
@@ -260,7 +260,7 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
         # resize data to cube spacing
         if spacing is not None:
             shape_orig = data3d.shape
-            shape_cube = np.asarray(data3d.shape, dtype=np.float)*np.asarray(spacing, dtype=np.float) # 1x1x1
+            shape_cube = np.asarray(data3d.shape, dtype=np.float)*np.asarray(spacing, dtype=np.float) # 1x1x1mm
             shape_cube = (shape_cube/np.min(spacing)).astype(np.int) # upscale target size, so there is no loss in quality
 
             order = 0 if (data3d.dtype == np.bool) else 1 # for masks

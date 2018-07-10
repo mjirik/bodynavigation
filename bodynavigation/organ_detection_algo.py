@@ -231,23 +231,6 @@ class OrganDetectionAlgo(object):
         lungs[ fatlessbody == 0 ] = 0
         lungs = binaryFillHoles(lungs, z_axis=True)
 
-        # remove all blobs that don't go through lower 1/4 of body
-        logger.debug("remove all blobs that don't go through lower 1/4 of body")
-        lungs = skimage.measure.label(lungs, background=0)
-        valid_labels = []
-        for z in range(data3d.shape[0]):
-            if np.sum(lungs[z,:,:]) == 0: continue
-            lower1_4 = getDataFractions(lungs[z,:,:], \
-                fraction_defs=[{"h":(3/4,1),"w":(0,1)},], mask=fatlessbody[z,:,:])
-            unique = np.unique(lower1_4)[1:]
-            for u in unique:
-                if u not in valid_labels:
-                    valid_labels.append(u)
-        for u in valid_labels:
-            lungs[ lungs == u ] = -1
-        lungs = lungs == -1
-        #ed = sed3.sed3(data3d, contour=lungs); ed.show()
-
         # centroid of lungs, useful later.
         # (Anything up cant be intestines, calculated only from largest blob)
         logger.debug("get rough lungs centroid")
