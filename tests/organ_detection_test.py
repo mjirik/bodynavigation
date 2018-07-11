@@ -86,7 +86,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # Test requires at least ??% of correct segmentation
         dice = diceCoeff(test_body, body)
-        print("Dice coeff: %s" % str(dice))
+        print("getBody(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_BODY_DICE)
 
     def getLungs_test(self):
@@ -107,7 +107,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # Test requires at least ??% of correct segmentation
         dice = diceCoeff(test_lungs, lungs)
-        print("Dice coeff: %s" % str(dice))
+        print("getLungs(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_LUNGS_DICE)
 
     def getAorta_test(self):
@@ -123,7 +123,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # Test requires at least ??% of correct segmentation
         dice = diceCoeff(test_aorta, aorta)
-        print("Dice coeff: %s" % str(dice))
+        print("getAorta(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_AORTA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
 
@@ -140,7 +140,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # Test requires at least ??% of correct segmentation
         dice = diceCoeff(test_venacava, venacava)
-        print("Dice coeff: %s" % str(dice))
+        print("getVenaCava(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_VENACAVA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
 
@@ -157,7 +157,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # Test requires at least ??% of correct segmentation
         dice = diceCoeff(test_bones, bones)
-        print("Dice coeff: %s" % str(dice))
+        print("getBones(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_BONES_DICE)
 
     def getKidneys_test(self):
@@ -178,7 +178,7 @@ class OrganDetectionTest(unittest.TestCase):
 
         # Test requires at least ??% of correct segmentation
         dice = diceCoeff(test_kidneys, kidneys)
-        print("Dice coeff: %s" % str(dice))
+        print("getKidneys(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_KIDNEYS_DICE)
 
 

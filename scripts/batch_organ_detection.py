@@ -111,8 +111,8 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
 
             if ps == "bones_stats":
                 point_sets.append([interpolatePointsZ(stats["spine"], step=0.1), {"color":rd.getRGBA(2), "border":(0,0,0), "size":1}])
-                point_sets.append([stats["hip_joints"], {"color":(0,255,0), "border":(0,0,0), "size":7}])
-                point_sets.append([stats["hip_start"], {"color":(0,0,255), "border":(0,0,0), "size":7}])
+                point_sets.append([stats["hips_joints"], {"color":(0,255,0), "border":(0,0,0), "size":7}])
+                point_sets.append([stats["hips_start"], {"color":(0,0,255), "border":(0,0,0), "size":7}])
 
             elif ps == "vessels_stats":
                 point_sets.append([interpolatePointsZ(stats["aorta"], step=0.1), {"color":rd.getRGBA(3), "border":(0,0,0), "size":1}])

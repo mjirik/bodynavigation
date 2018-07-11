@@ -42,7 +42,8 @@ class OrganDetection(object):
         - saves (compressed) output in RAM for future calls
     """
 
-    def __init__(self, data3d=None, voxelsize=[1,1,1], low_mem=True):
+    def __init__(self, data3d=None, voxelsize=[1,1,1], low_mem=True, clean_data=True,
+        transformation_mode="spacing", crop_z=False, data_registration=False):
         """
         * Values of input data should be in HU units (or relatively close). [air -1000, water 0]
             https://en.wikipedia.org/wiki/Hounsfield_scale
@@ -52,13 +53,17 @@ class OrganDetection(object):
 
         low_mem - tries to lower memory usage by saving data3d and masks to temporary files
             on filesystem. Uses np.memmap which might not work with some functions.
+        clean_data - if to run data3d through OrganDetectionAlgo.cleanData()
+        transformation_mode - ["none","spacing","resize"]
+        crop_z - If transformation is alowed to crop z-axis (to only abdomen area)
+        data_registration - forces transformation_mode="resize" and crop_z=True
         """
 
         # empty undefined values
         self.data3d = np.zeros((1,1,1), dtype=np.int16)
         self.spacing = np.asarray([1,1,1], dtype=np.float) # internal self.data3d spacing
         self.spacing_source = np.asarray([1,1,1], dtype=np.float) # original data3d spacing
-        self.transformation = TransformationNone(self.data3d, self.spacing)
+        self.transformation = TransformationNone(self.data3d.shape, self.spacing)
 
         # compressed masks - example: compression lowered memory usage to 0.042% for bones
         self.masks_comp = {
@@ -84,30 +89,69 @@ class OrganDetection(object):
         if low_mem:
             self.tempdir = tempfile.mkdtemp(prefix="organ_detection_")
 
+        # transformation params
+        transformation_mode = "resize" if data_registration else transformation_mode
+        crop_z = True if data_registration else crop_z
+
         # init with data3d
         if data3d is not None:
-            logger.info("Preparing input data...")
-
             # remove noise and errors in data
-            data3d, body = OrganDetectionAlgo.cleanData(data3d, voxelsize)
+            if clean_data:
+                logger.info("Preparing input data...")
+                data3d, body = OrganDetectionAlgo.cleanData(data3d, voxelsize)
+            else:
+                body = None
 
             # dump/read cleaned data3d from file
             if self.tempdir is not None:
                 data3d = toMemMap(data3d, os.path.join(self.tempdir, "data3d_clean.dat"))
 
-            # Data Registration and Transformation
-            self.transformation = Transformation(data3d, voxelsize, body=body, voxelsize_resize_only=True)
-            self.setData3D(data3d, raw=False) # sets self.data3d
+            # calculate transformation
+            if transformation_mode == "none":
+                self.transformation = TransformationNone(data3d.shape, voxelsize)
+                self.setData3D(data3d, raw=False) # set self.data3d
+            else:
+                # calc registration points
+                logger.info("Preparing for calculation of registration points...")
+                obj = OrganDetection(data3d, voxelsize, low_mem=low_mem, clean_data=False,
+                    transformation_mode="none", crop_z=False, data_registration=False)
+                if body is not None:
+                    obj.setPart("body", body, raw=False)
+                obj._preloadParts(["body","fatlessbody",]); obj._preloadStats(["lungs","bones"])
+                reg_points = OrganDetectionAlgo.dataRegistrationPoints(obj.spacing, \
+                    obj.getPart("body", raw=True), obj.getPart("fatlessbody", raw=True), \
+                    obj.analyzePart("lungs", raw=True), obj.analyzePart("bones", raw=True))
+
+                # init transformation from registration points
+                logger.info("Init of transformation...")
+                if transformation_mode == "spacing":
+                    self.transformation = Transformation(reg_points, resize=False, crop_z=crop_z)
+                elif transformation_mode == "resize":
+                    self.transformation = Transformation(reg_points, resize=True, crop_z=crop_z)
+                else:
+                    logger.error("Invalid 'transformation_mode'! '%s'" % str(transformation_mode))
+                    sys.exit(2)
+
+                # set self.data3d
+                self.setData3D(data3d, raw=False)
+
+                # recycle some processed masks
+                logger.info("Recycling processed masks...")
+                for part in ["body", "fatlessbody", "lungs"]:
+                    self.setPart(part, obj.getPart(part, raw=False), raw=False)
+
+                # cleanup
+                del(obj, body)
 
             # remove dumped cleaned data3d
             if self.tempdir is not None:
                 delMemMap(data3d)
 
-            #ed = sed3.sed3(self.data3d); ed.show()
-
             # remember spacing
             self.spacing = self.transformation.getTargetSpacing()
             self.spacing_source = self.transformation.getSourceSpacing()
+
+            #ed = sed3.sed3(self.data3d); ed.show()
 
     def __del__(self):
         """ Decontructor """
@@ -215,7 +259,7 @@ class OrganDetection(object):
                 json.dump(self.analyzePart(part, raw=True), fp, sort_keys=True, cls=NumpyEncoder)
 
     def toOutputCoordinates(self, vector):
-        return self.transformation.transCoordinatesInv(vector)
+        return np.asarray(self.transformation.transCoordinatesInv(vector))
 
     def getData3D(self, raw=False):
         if raw:
@@ -289,7 +333,7 @@ class OrganDetection(object):
             data = self.transformation.transDataInv(data, cval=0)
         return data
 
-    def setPart(self, partname, data, raw=False): # TODO - test this, use this (in patlas?)
+    def setPart(self, partname, data, raw=False):
         if not raw:
             data = self.transformation.transData(data, cval=0)
         if not np.all(self.data3d.shape == data.shape):
@@ -380,10 +424,10 @@ class OrganDetection(object):
                     ).astype(np.int)[0]
             if part == "bones":
                 data["spine"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["spine"] ]
-                data["hip_joints"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["hip_joints"] ]
-                for i, p in enumerate(data["hip_start"]):
+                data["hips_joints"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["hips_joints"] ]
+                for i, p in enumerate(data["hips_start"]):
                     if p is None: continue
-                    data["hip_start"][i] = tuple(self.toOutputCoordinates(p).astype(np.int))
+                    data["hips_start"][i] = tuple(self.toOutputCoordinates(p).astype(np.int))
             elif part == "vessels":
                 data["aorta"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["aorta"] ]
                 data["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["vena_cava"] ]
@@ -503,10 +547,10 @@ if __name__ == "__main__":
     # venacava = obj.getVenaCava()
 
     # bones_stats = obj.analyzeBones()
-    # points_spine = bones_stats["spine"];  points_hip_joints = bones_stats["hip_joints"]
+    # points_spine = bones_stats["spine"];  points_hips_joints = bones_stats["hips_joints"]
     # seeds = np.zeros(bones.shape)
     # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
-    # for p in points_hip_joints: seeds[p[0], p[1], p[2]] = 2
+    # for p in points_hips_joints: seeds[p[0], p[1], p[2]] = 2
     # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
     # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 

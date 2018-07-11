@@ -129,30 +129,42 @@ def getDataPadding(data):
         widths = np.asarray(widths).astype(np.bool)
         pad = [np.argmax(widths), np.argmax(widths[::-1])] # [pad_before, pad_after]
         ret_l.append(pad)
-    return tuple(ret_l)
+    return ret_l
 
-def cropArray(data, pads):
+def cropArray(data, pads, padding_value=0):
     """
-    Removes specified number of values at start and end of every axis from N-dim array
-    Pads for 3D data: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
-    Does not create copy of input, but creates view on section of input!
+    Removes/Adds specified number of values at start and end of every axis of N-dim array
+
+    Input: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
+    Positive values crop, Negative values pad.
     """
-    s = []
-    for dim in range(len(data.shape)):
-        s.append( slice(pads[dim][0],data.shape[dim]-pads[dim][1]) )
-    return data[tuple(s)]
+    pads = [ [-p[0],-p[1]] for p in pads ]
+    return padArray(data, pads, padding_value=padding_value)
 
 def padArray(data, pads, padding_value=0):
     """
-    Pads N-dim array with specified value
-    Pads for 3D data: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
+    Removes/Adds specified number of values at start and end of every axis of N-dim array
+
+    Input: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
+    Positive values pad, Negative values crop.
     """
+    crops = [ [-min(0,p[0]),-min(0,p[1])] for p in pads ]
+    pads = [ [max(0,p[0]),max(0,p[1])] for p in pads ]
+
+    # cropping
+    s = []
+    for dim in range(len(data.shape)):
+        s.append( slice(crops[dim][0],data.shape[dim]-crops[dim][1]) )
+    data = data[tuple(s)]
+
+    # padding
     full_shape = np.asarray(data.shape) + np.asarray([ np.sum(pads[dim]) for dim in range(len(pads))])
     out = (np.zeros(full_shape, dtype=data.dtype) + padding_value).astype(data.dtype)
     s = []
     for dim in range(len(data.shape)):
         s.append( slice( pads[dim][0], out.shape[dim]-pads[dim][1] ) )
     out[tuple(s)] = data
+
     return out
 
 def getDataFractions(data2d, fraction_defs=[], mask=None):

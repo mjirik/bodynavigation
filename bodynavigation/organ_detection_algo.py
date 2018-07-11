@@ -41,7 +41,7 @@ class OrganDetectionAlgo(object):
     """
 
     @classmethod
-    def cleanData(cls, data3d, spacing, body=None):
+    def cleanData(cls, data3d, spacing):
         """
         Filters out noise, removes some errors in data, sets undefined voxel value to -1024, etc ...
         """
@@ -97,61 +97,73 @@ class OrganDetectionAlgo(object):
 
         # remove anything that is not in body volume
         logger.debug("Removing all data outside of segmented body")
-        if body is None:
-            body = cls.getBody(data3d, spacing)
+        body = cls.getBody(data3d, spacing)
         data3d[ body == 0 ] = -1024
 
         #ed = sed3.sed3(data3d); ed.show()
         return data3d, body
 
-    # @classmethod
-    # def getDataRegistrationInfo(cls, data3d, spacing, body=None, fatlessbody=None, lungs=None, bones=None): # TODO - use this
+    REGISTRATION_BODYSIZE_ZRANGE = 200 # range where is size of body calculated; lungs_end:lungs_end+THIS; in mm
 
+    @classmethod
+    def dataRegistrationPoints(cls, spacing, body, fatlessbody, lungs_stats, bones_stats):
+        """
+        How to use:
+            1. Create OrganDetection object with notransformation mode
+            2. use this function to get reg_points
+            3. Create new OrganDetection with transformation and reg_points as input
+            4. transform masks and data from old OrganDetection to new one
+            -. Only reuse body,fatless,lungs masks; Rest might need to be recalculated on registred data3d
+        """
+        logger.info("dataRegistrationPoints()")
+        reg_points = {}
 
-    #     if body is None: body = OrganDetectionAlgo.getBody(data3d, spacing)
-    #     padding = getDataPadding(body)
-    #     data3d = cropArray(data3d, padding)
-    #     body = cropArray(body, padding)
+        # body shape, spacing and padding
+        reg_points["shape"] = body.shape
+        reg_points["spacing"] = spacing # so we can recalculate to mm later
+        reg_points["padding"] = getDataPadding(body)
 
+        # scaling on z axis
+        reg_points["lungs_end"] = lungs_stats["end"]
+        if len(bones_stats["hips_start"]) == 0:
+            logger.warning("Since no 'hips_start' points were found, using shape[0] as registration point.")
+            reg_points["hips_start"] = fatlessbody.shape[0]
+        else:
+            reg_points["hips_start"] = int(np.average([ p[0] for p in bones_stats["hips_start"] ]))
 
+        # precalculate sizes and centroids at lungs_end:lungs_end+REGISTRATION_BODYSIZE_ZRANGE
+        widths = []; heights = []; centroids = []
+        range_from = reg_points["lungs_end"]
+        range_to = min(int(reg_points["lungs_end"]+(cls.REGISTRATION_BODYSIZE_ZRANGE/spacing[0])), fatlessbody.shape[0])
+        for z in range(range_from, range_to):
+            if np.sum(fatlessbody[z,:,:]) == 0: continue
+            spads = getDataPadding(fatlessbody[z,:,:])
+            heights.append( fatlessbody[z,:,:].shape[0]-np.sum(spads[0]) )
+            widths.append( fatlessbody[z,:,:].shape[1]-np.sum(spads[1]) )
+            centroids.append( scipy.ndimage.measurements.center_of_mass(fatlessbody[z,:,:]) )
 
-    #     # Fatless body segmentation
-    #     fatlessbody = OrganDetectionAlgo.getFatlessBody(data3d, spacing, body)
-    #     del(body)
+        # scaling on x,y axes
+        if len(widths) != 0:
+            reg_points["fatlessbody_height"] = np.median(heights)
+            reg_points["fatlessbody_width"] = np.median(widths)
+        else:
+            logger.warning("Could not detect median body (in abdomen) width and height! Using size of middle slice.")
+            z = int(fatlessbody.shape[0]/2)
+            if np.sum(fatlessbody[z,:,:]) == 0:
+                raise Exception("Failed! Something very wrong must have happened with data!")
+            spads = getDataPadding(fatlessbody[z,:,:])
+            reg_points["fatlessbody_height"] = fatlessbody[z,:,:].shape[0]-np.sum(spads[0])
+            reg_points["fatlessbody_width"] = fatlessbody[z,:,:].shape[1]-np.sum(spads[1])
 
-    #     # get lungs end # TODO - this kills RAM on full body shots
-    #     logger.debug("Detecting end of lungs")
-    #     lungs = OrganDetectionAlgo.getLungs(data3d, spacing, fatlessbody)
-    #     if np.sum(lungs) == 0:
-    #         lungs_end = 0
-    #     else:
-    #         lungs_end = data3d.shape[0] - getDataPadding(lungs)[0][1]
-    #     del(lungs)
+        # relative centroid (to array shape)
+        centroids_arr = np.zeros((len(centroids), 2), dtype=np.float)
+        for i in range(len(centroids)):
+            centroids_arr[i,:] = np.asarray(centroids[i], dtype=np.float)
+        centroid = np.median(centroids_arr, axis=0) # TODO - test this
+        reg_points["fatlessbody_centroid"] = tuple(centroid/np.array(fatlessbody[z,:,:].shape, dtype=np.float))
 
-    #     logger.debug("Calculating size normalization scale")
-    #     # get median body widths and heights
-    #     # from just [lungs_end:(lungs_end+self.NORMED_FATLESS_BODY_SIZE_Z_RANGE/spacing[0]),:,:]
-    #     widths = []; heights = []
-    #     for z in range(lungs_end, min(int(lungs_end+self.NORMED_FATLESS_BODY_SIZE_Z_RANGE/spacing[0]), fatlessbody.shape[0])):
-    #         if np.sum(fatlessbody[z,:,:]) == 0: continue
-    #         spads = getDataPadding(fatlessbody[z,:,:])
-    #         heights.append( fatlessbody[z,:,:].shape[0]-np.sum(spads[0]) )
-    #         widths.append( fatlessbody[z,:,:].shape[1]-np.sum(spads[1]) )
-
-    #     if len(widths) != 0:
-    #         size_v = [ np.median(heights), np.median(widths) ]
-    #     else:
-    #         logger.warning("Could not detect median body (abdomen) width and height! Using size of middle slice for normalization.")
-    #         size_v = []
-    #         for dim, pad in enumerate(getDataPadding(fatlessbody[int(fatlessbody.shape[0]/2),:,:])):
-    #             size_v.append( fatlessbody.shape[dim+1]-np.sum(pad) )
-    #     del(fatlessbody)
-
-    #     # Calculate NORMALIZATION SCALE
-    #     size_mm = [ size_v[0]*spacing[1], size_v[1]*spacing[2] ] # fatlessbody size in mm on X and Y axis
-    #     norm_scale = [ None, self.NORMED_FATLESS_BODY_SIZE[0]/size_mm[0], self.NORMED_FATLESS_BODY_SIZE[1]/size_mm[1] ]
-    #     norm_scale[0] = (norm_scale[1]+norm_scale[2])/2 # scaling on z-axis is average of scaling on x,y-axis
-    #     self.trans["norm_scale"] = np.asarray(norm_scale, dtype=np.float) # not used outside of init
+        logger.debug(reg_points)
+        return reg_points
 
     ####################
     ### Segmentation ###
@@ -491,8 +503,8 @@ class OrganDetectionAlgo(object):
                 abdomen[:z+1,y,x] = 0
 
         # remove everything under hip joints
-        if len(bones_stats["hip_joints"]) != 0:
-            hips_start = bones_stats["hip_joints"][0][0]
+        if len(bones_stats["hips_joints"]) != 0:
+            hips_start = bones_stats["hips_joints"][0][0]
             abdomen[hips_start:,:,:] = 0
 
         #ed = sed3.sed3(data3d, contour=abdomen); ed.show()
@@ -693,15 +705,20 @@ class OrganDetectionAlgo(object):
     def analyzeLungs(cls, data3d, spacing, lungs):
         logger.info("analyzeLungs()")
 
-        lungs_pad = getDataPadding(lungs)
-        lungs_start = lungs_pad[0][0] # start of lungs on z-axis
-        lungs_end = lungs.shape[0]-lungs_pad[0][1] # end of lungs on z-axis
+        if np.sum(lungs) == 0:
+            logger.warning("Since no lungs were found, defaulting start and end of lungs to 0.")
+            lungs_start = 0 # start of lungs on z-axis
+            lungs_end = 0 # end of lungs on z-axis
+        else:
+            lungs_pad = getDataPadding(lungs)
+            lungs_start = lungs_pad[0][0]
+            lungs_end = lungs.shape[0]-lungs_pad[0][1]
 
         return {"start":lungs_start, "end":lungs_end}
 
     @classmethod
     def analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs_stats):
-        """ Returns: {"spine":points_spine, "hip_joints":points_hip_joints, "hip_start":[]} """
+        """ Returns: {"spine":points_spine, "hips_joints":points_hips_joints, "hips_start":[]} """
         logger.info("analyzeBones()")
 
         # remove every bone higher then lungs
@@ -722,8 +739,8 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
 
         points_spine = []
-        points_hip_joints_l = []; points_hip_joints_r = []
-        points_hip_start_l = {}; points_hip_start_r = {}
+        points_hips_joints_l = []; points_hips_joints_r = []
+        points_hips_start_l = {}; points_hips_start_r = {}
         for z in range(lungs_start, bones.shape[0]): # TODO - use getDataFractions
             # TODO - separate into more sections (spine should be only in middle-lower)
             bs = fatlessbody[z,:,:]
@@ -761,29 +778,29 @@ class OrganDetectionAlgo(object):
                 #print(z, abs(left_c[1]-right_c[1]))
                 if abs(left_c[1]-right_c[1]) < (180.0/spacing[2]): # max hip dist. 180mm
                     # anything futher out should be only leg bones
-                    points_hip_joints_l.append( (z, int(left_c[0]), int(left_c[1])) )
-                    points_hip_joints_r.append( (z, int(right_c[0]), int(right_c[1])) )
+                    points_hips_joints_l.append( (z, int(left_c[0]), int(left_c[1])) )
+                    points_hips_joints_r.append( (z, int(right_c[0]), int(right_c[1])) )
 
             # try to detect hip bones start on z axis
             if (z >= lungs_end) and (left_v/total_v > 0.1):
-                points_hip_start_l[z] = (z, int(left_c[0]), int(left_c[1]))
+                points_hips_start_l[z] = (z, int(left_c[0]), int(left_c[1]))
             if (z >= lungs_end) and (right_v/total_v > 0.1):
-                points_hip_start_r[z] = (z, int(right_c[0]), int(right_c[1]))
+                points_hips_start_r[z] = (z, int(right_c[0]), int(right_c[1]))
 
         # calculate centroid of hip points
-        points_hip_joints = []
-        if len(points_hip_joints_l) != 0:
-            z, y, x = zip(*points_hip_joints_l); l = len(z)
+        points_hips_joints = []
+        if len(points_hips_joints_l) != 0:
+            z, y, x = zip(*points_hips_joints_l); l = len(z)
             cl = (int(sum(z)/l), int(sum(y)/l), int(sum(x)/l))
-            z, y, x = zip(*points_hip_joints_r); l = len(z)
+            z, y, x = zip(*points_hips_joints_r); l = len(z)
             cr = (int(sum(z)/l), int(sum(y)/l), int(sum(x)/l))
-            points_hip_joints = [cl, cr]
+            points_hips_joints = [cl, cr]
 
         # remove any spine points under detected hips
-        if len(points_hip_joints) != 0:
+        if len(points_hips_joints) != 0:
             newp = []
             for p in points_spine:
-                if p[0] < points_hip_joints[0][0]:
+                if p[0] < points_hips_joints[0][0]:
                     newp.append(p)
             points_spine = newp
 
@@ -792,30 +809,30 @@ class OrganDetectionAlgo(object):
             points_spine = polyfit3D(points_spine)
 
         # try to detect start of hip bones
-        points_hip_start = [None, None]
-        end_z = bones.shape[0]-1 if len(points_hip_joints)==0 else points_hip_joints[0][0]
+        points_hips_start = [None, None]
+        end_z = bones.shape[0]-1 if len(points_hips_joints)==0 else points_hips_joints[0][0]
         for z in range(end_z, lungs_start, -1):
-            if z not in points_hip_start_l:
-                if (z+1) in points_hip_start_l:
-                    points_hip_start[0] = points_hip_start_l[z+1]
+            if z not in points_hips_start_l:
+                if (z+1) in points_hips_start_l:
+                    points_hips_start[0] = points_hips_start_l[z+1]
                 break
         for z in range(end_z, lungs_start, -1):
-            if z not in points_hip_start_r:
-                if (z+1) in points_hip_start_r:
-                    points_hip_start[1] = points_hip_start_r[z+1]
+            if z not in points_hips_start_r:
+                if (z+1) in points_hips_start_r:
+                    points_hips_start[1] = points_hips_start_r[z+1]
                 break
-        while None in points_hip_start: points_hip_start.remove(None)
+        while None in points_hips_start: points_hips_start.remove(None)
 
         # seeds = np.zeros(bones.shape)
         # for p in points_spine_c: seeds[p[0], p[1], p[2]] = 2
         # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
-        # for p in points_hip_joints_l: seeds[p[0], p[1], p[2]] = 2
-        # for p in points_hip_joints_r: seeds[p[0], p[1], p[2]] = 2
-        # for p in points_hip_joints: seeds[p[0], p[1], p[2]] = 3
+        # for p in points_hips_joints_l: seeds[p[0], p[1], p[2]] = 2
+        # for p in points_hips_joints_r: seeds[p[0], p[1], p[2]] = 2
+        # for p in points_hips_joints: seeds[p[0], p[1], p[2]] = 3
         # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
         # ed = sed3.sed3(data3d, contour=bones, seeds=seeds); ed.show()
 
-        return {"spine":points_spine, "hip_joints":points_hip_joints, "hip_start":points_hip_start}
+        return {"spine":points_spine, "hips_joints":points_hips_joints, "hips_start":points_hips_start}
 
     @classmethod
     def analyzeVessels(cls, data3d, spacing, vessels, bones_stats):

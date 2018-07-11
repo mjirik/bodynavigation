@@ -93,11 +93,11 @@ class TransformationNone(TransformationInf):
     Useful in __init__ functions as default value.
     """
 
-    def __init__(self, data3d=None, spacing=None):
+    def __init__(self, shape=None, spacing=None):
         super(TransformationNone, self).__init__()
-        if data3d is not None:
-            self.source["shape"] = data3d.shape
-            self.target["shape"] = data3d.shape
+        if shape is not None:
+            self.source["shape"] = shape
+            self.target["shape"] = shape
         if spacing is not None:
             self.source["spacing"] = np.asarray(spacing, dtype=np.float)
             self.target["spacing"] = np.asarray(spacing, dtype=np.float)
@@ -117,143 +117,140 @@ class TransformationNone(TransformationInf):
 
 class Transformation(TransformationInf):
 
-    # normalized size of fatless body on [Y,X] in mm
-    NORMED_FATLESS_BODY_SIZE = [200,300]
-    # [186.9, 247.4]mm - 3Dircadb1.1
-    # [180.6, 256.4]mm - 3Dircadb1.2
-    # [139.2, 253.1]mm - 3Dircadb1.19
-    # [157.2, 298.8]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.332134560740628899985464129848
-    # [192.2, 321.4]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.117528645891554472837507616577
-    # [153.3, 276.3]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.164951610473301901732855875499
-    # [190.4, 304.6]mm - imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.252450948398764180723210762820
+    # compare this data with output of OrganDetectionAlgo.dataRegistrationPoints()
+    REGISTRATION_TARGET = {
+        # this will make all following values in mm; DON'T CHANGE!!
+        "spacing":np.asarray([1,1,1], dtype=np.float),
+        "data_shape":(128,512,512), # not used
+        "data_padding":[[0,0],[0,0],[0,0]], # not used
+        "lungs_end":75,
+        "hips_start":190,
+        "fatlessbody_height":200,
+        "fatlessbody_width":300,
+        "fatlessbody_centroid":(0.5,0.5)
+        }
+    # offset of start and end of abdomen from lungs_end and hips_start; in mm
+    REGISTRATION_ABDOMEN_OFFSET = 75
 
-    # calculating median widths and sizes from slices in lungs_end:lungs_end+THIS, in mm
-    NORMED_FATLESS_BODY_SIZE_Z_RANGE = 200
-
-    def __init__(self, data3d=None, spacing=None, norm_scale_enable=True, voxel_scale_enable=True, \
-        z_scale_enable=True, voxelsize_resize_only=False, body=None):
+    def __init__(self, registration_points=None, resize=False, crop_z=False):
         """
-        data3d, spacing - 3D CT data and voxelsize
-        norm_scale_enable - try to normalize width and height of body (default True)
-        voxel_scale_enable - scale voxels to 1x1x1mm (default True)
-        z_scale_enable - enables scaling of data on z-axis, roughly 2x memory size.
-            If disabled, target spacing will be changed so that no rescaling will happen \
-            on z-axis when calling transData(). (default False)
-        voxel_resize - if True, only voxelsize is changed without resizing actual data at all.
-            (roughly 2x memory size of scaled [no z axis])
+        registration_points - output from OrganDetectionAlgo.dataRegistrationPoints()
+        resize - if False only recalculates target spacing, If True resizes actual data.
+        crop_z - crop on z-axis, so unly registred abdomen is in data
         """
         super(Transformation, self).__init__()
 
-        # init transformation variables
-        self.trans["cut_shape"] = (0,0,0)
+        # init some transformation variables
         self.trans["padding"] = [[0,0],[0,0],[0,0]]
+        self.trans["cut_shape"] = (1,1,1)
         self.trans["coord_scale"] = np.asarray([1,1,1], dtype=np.float)
         self.trans["coord_intercept"] = np.asarray([0,0,0], dtype=np.float)
 
         # if missing input return undefined transformation
-        if data3d is None or spacing is None:
+        if registration_points is None:
             return
 
-        # save source data3d info
-        self.source["shape"] = data3d.shape
-        self.source["spacing"] = spacing
+        # define source variables
+        self.source["spacing"] = np.asarray(registration_points["spacing"], dtype=np.float)
+        self.source["shape"] = np.asarray(registration_points["shape"], dtype=np.int)
 
-        # Detect data padding and crop work data3d
-        logger.debug("Detecting array padding")
-        if body is None: body = OrganDetectionAlgo.getBody(data3d, spacing)
-        padding = getDataPadding(body)
-        data3d = cropArray(data3d, padding)
-        body = cropArray(body, padding)
-        self.trans["padding"] = padding
-        self.trans["cut_shape"] = body.shape
+        # get registration parameters
+        param = self._calcRegistrationParams(registration_points)
 
-        # Get NORMALIZATION SCALE
-        self.trans["norm_scale"] = np.asarray([1,1,1], dtype=np.float)
-        if norm_scale_enable:
-            # Fatless body segmentation
-            fatlessbody = OrganDetectionAlgo.getFatlessBody(data3d, spacing, body)
-            del(body)
+        # define crop/pad variables
+        self.trans["padding"] = param["padding"]
+        self.trans["cut_shape"] = np.asarray([
+            registration_points["shape"][0]-np.sum(param["padding"][0]),
+            registration_points["shape"][1]-np.sum(param["padding"][1]),
+            registration_points["shape"][2]-np.sum(param["padding"][2])
+            ], dtype=np.int)
+        if not crop_z:
+            self.trans["cut_shape"][0] = registration_points["shape"][0]
 
-            # get lungs end # TODO - this kills RAM on full body shots
-            logger.debug("Detecting end of lungs")
-            lungs = OrganDetectionAlgo.getLungs(data3d, spacing, fatlessbody)
-            if np.sum(lungs) == 0:
-                lungs_end = 0
-            else:
-                lungs_end = data3d.shape[0] - getDataPadding(lungs)[0][1]
-            del(lungs)
-
-            logger.debug("Calculating size normalization scale")
-            # get median body widths and heights
-            # from just [lungs_end:(lungs_end+self.NORMED_FATLESS_BODY_SIZE_Z_RANGE/spacing[0]),:,:]
-            widths = []; heights = []
-            for z in range(lungs_end, min(int(lungs_end+self.NORMED_FATLESS_BODY_SIZE_Z_RANGE/spacing[0]), fatlessbody.shape[0])):
-                if np.sum(fatlessbody[z,:,:]) == 0: continue
-                spads = getDataPadding(fatlessbody[z,:,:])
-                heights.append( fatlessbody[z,:,:].shape[0]-np.sum(spads[0]) )
-                widths.append( fatlessbody[z,:,:].shape[1]-np.sum(spads[1]) )
-
-            if len(widths) != 0:
-                size_v = [ np.median(heights), np.median(widths) ]
-            else:
-                logger.warning("Could not detect median body (abdomen) width and height! Using size of middle slice for normalization.")
-                size_v = []
-                for dim, pad in enumerate(getDataPadding(fatlessbody[int(fatlessbody.shape[0]/2),:,:])):
-                    size_v.append( fatlessbody.shape[dim+1]-np.sum(pad) )
-            del(fatlessbody)
-
-            # Calculate NORMALIZATION SCALE
-            size_mm = [ size_v[0]*spacing[1], size_v[1]*spacing[2] ] # fatlessbody size in mm on X and Y axis
-            norm_scale = [ None, self.NORMED_FATLESS_BODY_SIZE[0]/size_mm[0], self.NORMED_FATLESS_BODY_SIZE[1]/size_mm[1] ]
-            norm_scale[0] = (norm_scale[1]+norm_scale[2])/2 # scaling on z-axis is average of scaling on x,y-axis
-            self.trans["norm_scale"] = np.asarray(norm_scale, dtype=np.float) # not used outside of init
-        else:
-            del(body)
-
-        # Get VOXEL SCALE, scaling so that data has voxelsize 1x1x1mm
+        # define scaling variables
+        self.trans["reg_scale"] = np.asarray(param["scale"], dtype=np.float)
         self.trans["voxel_scale"] = np.asarray([1,1,1], dtype=np.float)
-        if voxel_scale_enable:
-            logger.debug("Calculating voxelsize 1x1x1mm scale")
-            self.target["spacing"] = np.asarray([1,1,1], dtype=np.float)
-            voxel_scale = np.asarray([ \
-                self.source["spacing"][0] / self.target["spacing"][0], \
-                self.source["spacing"][1] / self.target["spacing"][1], \
-                self.source["spacing"][2] / self.target["spacing"][2] \
+        self.trans["scale"] = np.asarray([1,1,1], dtype=np.float)
+        if resize:
+            self.target["spacing"] = self.REGISTRATION_TARGET["spacing"]
+            self.trans["voxel_scale"] = np.asarray([
+                self.source["spacing"][0] / self.target["spacing"][0],
+                self.source["spacing"][1] / self.target["spacing"][1],
+                self.source["spacing"][2] / self.target["spacing"][2]
                 ], dtype=np.float)
-            self.trans["voxel_scale"] = voxel_scale # not used outside of init
+            self.trans["scale"] = self.trans["reg_scale"]*self.trans["voxel_scale"]
+        else:
+            self.target["spacing"] = self.source["spacing"]*self.trans["reg_scale"]
 
-        # Get FINAL SCALE
-        if voxelsize_resize_only: # only voxelsize is changed, without scaling data
-            self.trans["scale"] = np.asarray([1,1,1], dtype=np.float)
-            self.target["spacing"] = self.source["spacing"] * self.trans["norm_scale"]
-            self.target["shape"] = self.trans["cut_shape"]
-        else: # scaling so that final data is normalized and has voxelsize 1x1x1/??x1x1mm
-            self.trans["scale"] = self.trans["norm_scale"]*self.trans["voxel_scale"]
-            if not z_scale_enable:
-                self.target["spacing"][0] = self.source["spacing"][0] * self.trans["norm_scale"][0] # TODO - test if is correct
-                self.trans["scale"][0] = 1.0
-            logger.debug("Final scale: %s" % str(self.trans["scale"]))
-
-            # Calculate transformed shape and spacing
-            logger.debug("Calculating transformed shape and help variables")
-            self.target["shape"] = np.asarray(np.round([ \
-                self.trans["cut_shape"][0] * self.trans["scale"][0], \
-                self.trans["cut_shape"][1] * self.trans["scale"][1], \
-                self.trans["cut_shape"][2] * self.trans["scale"][2] \
-                ]), dtype=np.int)
+        self.target["shape"] = np.asarray(np.round([
+            self.trans["cut_shape"][0] * self.trans["scale"][0],
+            self.trans["cut_shape"][1] * self.trans["scale"][1],
+            self.trans["cut_shape"][2] * self.trans["scale"][2]
+            ]), dtype=np.int)
 
         # for recalculating coordinates to output format ( vec*scale + intercept )
-        self.trans["coord_scale"] = np.asarray([ \
-            self.trans["cut_shape"][0] / self.target["shape"][0], \
-            self.trans["cut_shape"][1] / self.target["shape"][1], \
-            self.trans["cut_shape"][2] / self.target["shape"][2] ], dtype=np.float) # [z,y,x] - scale coords of cut and resized data
-        self.trans["coord_intercept"] = np.asarray([ \
-            self.trans["padding"][0][0], \
-            self.trans["padding"][1][0], \
-            self.trans["padding"][2][0] ], dtype=np.float) # [z,y,x] - move coords of just cut data
+        self.trans["coord_scale"] = np.asarray([
+            self.trans["cut_shape"][0] / self.target["shape"][0],
+            self.trans["cut_shape"][1] / self.target["shape"][1],
+            self.trans["cut_shape"][2] / self.target["shape"][2]
+            ], dtype=np.float) # [z,y,x] - scale coords of cut and resized data
+        self.trans["coord_intercept"] = np.asarray([
+            self.trans["padding"][0][0],
+            self.trans["padding"][1][0],
+            self.trans["padding"][2][0]
+            ], dtype=np.float) # [z,y,x] - move coords of just cut data
+
+        # print debug
+        logger.debug(self.toDict())
+
+    def _calcRegistrationParams(self, reg_points):
+        """
+        How this works:
+            1. get body padding
+            2. recalc body y,x padding/crop based on desired centroid position (translation)
+            3. calc body z padding/crop based on lungs_end, hips_start and desired offset
+            4. calc data scaling
+
+        How to use output:
+            1. crop/pad array based on "padding" output
+            2. scale spacing/data based on "scale"
+        """
+        ret = {}
+        rp_s = copy.deepcopy(reg_points)
+        rp_t = copy.deepcopy(self.REGISTRATION_TARGET)
+
+        # get base data padding; negative needs to add padding, positive needs to crop
+        ret["padding"] = copy.deepcopy(rp_s["padding"])
+
+        # relative y,x centroid translation required
+        centroid_trans = np.asarray(rp_t["fatlessbody_centroid"])-np.asarray(rp_s["fatlessbody_centroid"])
+        # relative y,x centroid translation in voxels
+        centroid_trans_voxel = [int(np.round(centroid_trans[0]*rp_s["shape"][1])), \
+            int(np.round(centroid_trans[1]*rp_s["shape"][2]))]
+        # calculate new data padding for y,x axis
+        ret["padding"][1] = [ret["padding"][1][0]+centroid_trans_voxel[0], ret["padding"][1][1]]
+        ret["padding"][2] = [ret["padding"][2][0]+centroid_trans_voxel[1], ret["padding"][2][1]]
+
+        # calculate z-axis padding/offset/crop
+        ret["padding"][0][0] = rp_s["lungs_end"]-int(self.REGISTRATION_ABDOMEN_OFFSET/rp_s["spacing"][0])
+        ret["padding"][0][1] = (rp_s["shape"][0]-rp_s["hips_start"])-int(self.REGISTRATION_ABDOMEN_OFFSET/rp_s["spacing"][0])
+
+        # calculate scale
+        source_size_z = (rp_s["hips_start"]-rp_s["lungs_end"])*rp_s["spacing"][0]
+        source_size_y = rp_s["fatlessbody_height"]*rp_s["spacing"][1]
+        source_size_x = rp_s["fatlessbody_width"]*rp_s["spacing"][2]
+        target_size_z = (rp_t["hips_start"]-rp_t["lungs_end"])*rp_t["spacing"][0]
+        target_size_y = rp_t["fatlessbody_height"]*rp_t["spacing"][1]
+        target_size_x = rp_t["fatlessbody_width"]*rp_t["spacing"][2]
+        ret["scale"] = np.asarray([\
+            target_size_z/source_size_z, target_size_y/source_size_y, target_size_x/source_size_x
+            ], dtype=np.float)
+
+        logger.debug(ret)
+        return ret
 
     def transData(self, data3d, cval=0):
-        data3d = cropArray(data3d, self.trans["padding"])
+        data3d = cropArray(data3d, self.trans["padding"], padding_value=cval)
         data3d = resizeWithUpscaleNN(data3d, np.asarray(self.target["shape"]))
         return data3d
 
