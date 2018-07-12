@@ -159,13 +159,13 @@ class Transformation(TransformationInf):
 
         # define crop/pad variables
         self.trans["padding"] = param["padding"]
-        self.trans["cut_shape"] = np.asarray([
-            registration_points["shape"][0]-np.sum(param["padding"][0]),
-            registration_points["shape"][1]-np.sum(param["padding"][1]),
-            registration_points["shape"][2]-np.sum(param["padding"][2])
-            ], dtype=np.int)
         if not crop_z:
-            self.trans["cut_shape"][0] = registration_points["shape"][0]
+            self.trans["padding"][0] = [0,0]
+        self.trans["cut_shape"] = np.asarray([
+            registration_points["shape"][0]-np.sum(self.trans["padding"][0]),
+            registration_points["shape"][1]-np.sum(self.trans["padding"][1]),
+            registration_points["shape"][2]-np.sum(self.trans["padding"][2])
+            ], dtype=np.int)
 
         # define scaling variables
         self.trans["reg_scale"] = np.asarray(param["scale"], dtype=np.float)

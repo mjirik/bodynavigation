@@ -537,14 +537,18 @@ if __name__ == "__main__":
         seg = obj.getPart(args.show)
         ed = sed3.sed3(data3d, contour=seg); ed.show()
 
-
-
-    #########
+    ####################################################################
     print("-----------------------------------------------------------")
-    # bones = obj.getBones()
+    # data3d = obj.getData3D(raw=True)
+    # lungs = obj.getLungs(raw=True)
+    # bones = obj.getBones(raw=True)
     # vessels = obj.getVessels()
     # aorta = obj.getAorta()
     # venacava = obj.getVenaCava()
+
+    # print(data3d.shape)
+    # ed = sed3.sed3(data3d, contour=lungs); ed.show()
+    # ed = sed3.sed3(data3d, contour=bones); ed.show()
 
     # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hips_joints = bones_stats["hips_joints"]
