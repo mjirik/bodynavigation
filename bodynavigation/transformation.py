@@ -121,7 +121,7 @@ class Transformation(TransformationInf):
     REGISTRATION_TARGET = {
         # this will make all following values in mm; DON'T CHANGE!!
         "spacing":np.asarray([1,1,1], dtype=np.float),
-        "data_shape":(128,512,512), # not used
+        "data_shape":(165,250,350), # not used
         "data_padding":[[0,0],[0,0],[0,0]], # not used
         "lungs_end":75,
         "hips_start":190,
@@ -245,6 +245,10 @@ class Transformation(TransformationInf):
         ret["scale"] = np.asarray([\
             target_size_z/source_size_z, target_size_y/source_size_y, target_size_x/source_size_x
             ], dtype=np.float)
+        for i in range(3):
+            if np.isinf(ret["scale"][i]):
+                logger.warning("Scale at axis %i is inf! Setting it to 1.0" % i)
+                ret["scale"][0] = 1.0
 
         logger.debug(ret)
         return ret

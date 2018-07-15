@@ -29,7 +29,7 @@ def getSphericalMask(size=5, spacing=[1,1,1]):
     """ Size is in mm """
     shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
     shape[shape < 1] = 1
-    mask = skimage.morphology.ball(21, dtype=np.float)
+    mask = skimage.morphology.ball(51, dtype=np.float)
     mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
     return mask
 
@@ -37,7 +37,7 @@ def getDiskMask(size=5, spacing=[1,1,1]):
     """ Size is in mm """
     shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
     shape[shape < 1] = 1; shape[0] = 1
-    mask = np.expand_dims(skimage.morphology.disk(21, dtype=np.bool), axis=0)
+    mask = np.expand_dims(skimage.morphology.disk(51, dtype=np.bool), axis=0)
     mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
     return mask
 
@@ -131,7 +131,7 @@ def getDataPadding(data):
         ret_l.append(pad)
     return ret_l
 
-def cropArray(data, pads, padding_value=0):
+def cropArray(data, pads, padding_value=0): # TODO - skimage.util.crop; convergent programming is funny
     """
     Removes/Adds specified number of values at start and end of every axis of N-dim array
 
@@ -141,7 +141,7 @@ def cropArray(data, pads, padding_value=0):
     pads = [ [-p[0],-p[1]] for p in pads ]
     return padArray(data, pads, padding_value=padding_value)
 
-def padArray(data, pads, padding_value=0):
+def padArray(data, pads, padding_value=0): # TODO - skimage.util.pad
     """
     Removes/Adds specified number of values at start and end of every axis of N-dim array
 

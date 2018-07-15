@@ -70,10 +70,10 @@ class OrganDetection(object):
             "body":None,
             "fatlessbody":None,
             "lungs":None,
+            "bones":None,
             # "diaphragm":None,
             "kidneys":None,
-            "bones":None,
-            "abdomen":None,
+            # "abdomen":None,
             "vessels":None,
             "aorta":None,
             "venacava":None,
@@ -299,6 +299,10 @@ class OrganDetection(object):
             elif part == "lungs":
                 self._preloadParts(["fatlessbody",])
                 data = OrganDetectionAlgo.getLungs(self.data3d, self.spacing, self.getFatlessBody(raw=True))
+            elif part == "bones":
+                self._preloadParts(["fatlessbody","lungs"]); self._preloadStats(["lungs",])
+                data = OrganDetectionAlgo.getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
+                    self.getLungs(raw=True), self.analyzeLungs(raw=True) )
             # elif part == "diaphragm":
             #     self._preloadParts(["lungs",])
             #     data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
@@ -306,14 +310,10 @@ class OrganDetection(object):
                 self._preloadParts(["fatlessbody",]); self._preloadStats(["lungs",])
                 data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.analyzeLungs(raw=True) )
-            elif part == "bones":
-                self._preloadParts(["fatlessbody","lungs", "kidneys"])
-                data = OrganDetectionAlgo.getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
-                    self.getLungs(raw=True), self.getKidneys(raw=True) )
-            elif part == "abdomen":
-                self._preloadParts(["fatlessbody","diaphragm"]); self._preloadStats(["bones",])
-                data = OrganDetectionAlgo.getAbdomen(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
-                    self.getDiaphragm(raw=True), self.analyzeBones(raw=True))
+            # elif part == "abdomen":
+            #     self._preloadParts(["fatlessbody","diaphragm"]); self._preloadStats(["bones",])
+            #     data = OrganDetectionAlgo.getAbdomen(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
+            #         self.getDiaphragm(raw=True), self.analyzeBones(raw=True))
             elif part == "vessels":
                 self._preloadParts(["bones",]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.getVessels(self.data3d, self.spacing, \
@@ -361,17 +361,17 @@ class OrganDetection(object):
     def getLungs(self, raw=False):
         return self.getPart("lungs", raw=raw)
 
+    def getBones(self, raw=False):
+        return self.getPart("bones", raw=raw)
+
     # def getDiaphragm(self, raw=False):
     #     return self.getPart("diaphragm", raw=raw)
 
     def getKidneys(self, raw=False):
         return self.getPart("kidneys", raw=raw)
 
-    def getBones(self, raw=False):
-        return self.getPart("bones", raw=raw)
-
-    def getAbdomen(self, raw=False):
-        return self.getPart("abdomen", raw=raw)
+    # def getAbdomen(self, raw=False):
+    #     return self.getPart("abdomen", raw=raw)
 
     def getVessels(self, raw=False):
         return self.getPart("vessels", raw=raw)
@@ -398,9 +398,9 @@ class OrganDetection(object):
 
         else:
             if part == "lungs":
-                self._preloadParts(["lungs",])
-                data =  OrganDetectionAlgo.analyzeLungs(self.data3d, self.spacing, \
-                    lungs=self.getLungs(raw=True))
+                self._preloadParts(["lungs","fatlessbody"])
+                data =  OrganDetectionAlgo.analyzeLungs(self.getLungs(raw=True), self.spacing, \
+                    fatlessbody=self.getFatlessBody(raw=True))
             if part == "bones":
                 self._preloadParts(["fatlessbody", "bones"]); self._preloadStats(["lungs",])
                 data = OrganDetectionAlgo.analyzeBones( \

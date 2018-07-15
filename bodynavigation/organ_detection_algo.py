@@ -159,7 +159,7 @@ class OrganDetectionAlgo(object):
         centroids_arr = np.zeros((len(centroids), 2), dtype=np.float)
         for i in range(len(centroids)):
             centroids_arr[i,:] = np.asarray(centroids[i], dtype=np.float)
-        centroid = np.median(centroids_arr, axis=0) # TODO - test this
+        centroid = np.median(centroids_arr, axis=0)
         reg_points["fatlessbody_centroid"] = tuple(centroid/np.array(fatlessbody[z,:,:].shape, dtype=np.float))
 
         logger.debug(reg_points)
@@ -176,6 +176,8 @@ class OrganDetectionAlgo(object):
         """
         Input: noiseless data3d
         Returns binary mask representing body volume (including most cavities)
+
+        Needs to work on raw cleaned data!
         """
         logger.info("getBody()")
         # segmentation of body volume
@@ -207,6 +209,8 @@ class OrganDetectionAlgo(object):
     def getFatlessBody(cls, data3d, spacing, body): # TODO - ignore nipples (and maybe belly button) when creating convex hull
         """
         Returns convex hull of body without fat and skin
+
+        Needs to work on raw cleaned data!
         """
         logger.info("getFatlessBody()")
         # remove fat
@@ -237,7 +241,11 @@ class OrganDetectionAlgo(object):
 
     @classmethod
     def getLungs(cls, data3d, spacing, fatlessbody):
-        """ Expects lungs to actually be in data """
+        """
+        Expects lungs to actually be in data
+
+        Needs to work on raw cleaned data!
+        """
         logger.info("getLungs()")
         lungs = data3d < cls.LUNGS_THRESHOLD
         lungs[ fatlessbody == 0 ] = 0
@@ -256,7 +264,7 @@ class OrganDetectionAlgo(object):
         unique, counts = np.unique(lungs, return_counts=True)
         unique = unique[1:]; counts = counts[1:]
         largest_id = unique[list(counts).index(max(counts))]
-        centroid_z = scipy.ndimage.measurements.center_of_mass(lungs == largest_id)[0]
+        centroid_z = int(scipy.ndimage.measurements.center_of_mass(lungs == largest_id)[0])
         lungs = lungs != 0
 
         # try to separate connected intestines
@@ -316,9 +324,140 @@ class OrganDetectionAlgo(object):
                     trachea_start_z = z
 
             if trachea_start_z is not None:
-                lungs[:trachea_start_z,:,:] = 0
+                lungs[:min(lungs.shape[0],trachea_start_z+1),:,:] = 0
+
+        # return only blobs that have volume at centroid slice
+        lungs = skimage.measure.label(lungs, background=0)
+        unique = np.unique(lungs[centroid_z,:,:])[1:]
+        for u in unique:
+            lungs[lungs == u] = -1
+        lungs = lungs == -1
 
         return lungs
+
+    BONES_THRESHOLD_LOW = 200
+    BONES_THRESHOLD_HIGH = 300
+    BONES_RIBS_MAX_DEPTH = 15 # mm; max depth of ribs from surface of fatless body
+    BONES_SHALLOW_BONES_MAX_DEPTH = 20 # mm; bones that are in shallow depth (of fatless body), used for detection of end of ribs and start of hips
+    BONES_LOW_MAX_DST = 15 # mm; max distance of low thresholded bones from high thresholded parts
+
+    @classmethod
+    def getBones(cls, data3d, spacing, fatlessbody, lungs, lungs_stats): # TODO - pull more constants outside of function
+        """
+        Needs to work on raw cleaned data!
+
+        Algorithm aims at not segmenting wrong parts over complete segmentation.
+        """
+        logger.info("getBones()")
+        spacing_vol = spacing[0]*spacing[1]*spacing[2]
+        fatlessbody_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing)
+
+        #create convex hull of lungs
+        lungs_hull = np.zeros(lungs.shape, dtype=np.bool).astype(np.bool)
+        for z in range(lungs_stats["start_sym"],lungs_stats["end_sym"]):
+            if np.sum(lungs[z,:,:]) == 0: continue
+            lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs[z,:,:])
+
+        ### Basic high segmentation
+        logger.debug("Basic high threshold segmentation")
+        bones = data3d > cls.BONES_THRESHOLD_HIGH
+        bones = binaryFillHoles(bones, z_axis=True)
+        bones = skimage.morphology.remove_small_objects(bones.astype(np.bool), min_size=int((10**3)/spacing_vol))
+        # readd segmented points that are in expected ribs volume
+        bones[ (fatlessbody_dst < cls.BONES_RIBS_MAX_DEPTH) & (data3d > cls.BONES_THRESHOLD_HIGH) ] = 1
+
+        ### Remove errors of basic segmentation / create seeds
+        logger.debug("Remove errors of basic segmentation / create seeds")
+        bones = bones.astype(np.int8) # use for seeds
+
+        # remove possible segmented heart parts (remove upper half of convex hull of lungs)
+        #ed = sed3.sed3(data3d, contour=lungs); ed.show()
+        if np.sum(lungs_hull) != 0:
+            # sometimes parts of ribs are slightly inside of lungs hull -> (making hull a bit smaller)
+            lungs_hull_eroded = scipy.ndimage.binary_erosion(lungs_hull, structure=getDiskMask(10, spacing=spacing))
+            # get lungs height
+            pads = getDataPadding(lungs_hull_eroded)
+            lungs_hull_height = data3d.shape[1]-pads[1][0]-pads[1][1]
+            # remove anything in top half of lungs hull
+            remove_height = pads[1][0]+int(lungs_hull_height*0.5)
+            view_lungs_hull_top = lungs_hull_eroded[:,:remove_height,:]
+            view_bones_top = bones[:,:remove_height,:]
+            view_bones_top[ (view_bones_top == 1) & view_lungs_hull_top ] = 2
+
+        # define sizes of spine and hip sections
+        frac_left = {"h":(0,1),"w":(0,0.40)}
+        frac_spine = {"h":(0.25,1),"w":(0.40,0.60)}
+        frac_front = {"h":(0,0.25),"w":(0.40,0.60)}
+        frac_right = {"h":(0,1),"w":(0.60,1)}
+
+        # get ribs and and hips start index
+        b_surface = (bones == 1) & (fatlessbody_dst < cls.BONES_SHALLOW_BONES_MAX_DEPTH)
+        for z in range(data3d.shape[0]): # only left and right sections for ribs and hips detection
+            view_spine, view_front = getDataFractions(b_surface[z,:,:], \
+                fraction_defs=[frac_spine,frac_front], mask=fatlessbody[z,:,:])
+            view_spine[:,:] = 0; view_front[:,:] = 0
+        b_surface_sums = np.sum(np.sum(b_surface,axis=1),axis=1)
+
+        if np.sum(b_surface_sums[lungs_stats["end_sym"]:] == 0) == 0:
+            logger.warning("End of ribs not found in data! Using data3d.shape[0]")
+            ribs_end = data3d.shape[0]
+        else:
+            ribs_end = lungs_stats["end_sym"]+np.argmax( b_surface_sums[lungs_stats["end_sym"]:] == 0 )
+
+        if (ribs_end == data3d.shape[0]) or (np.sum(b_surface_sums[min(data3d.shape[0],ribs_end+1):]) == 0):
+            logger.warning("Start of hips not found in data! Using data3d.shape[0]")
+            hips_start = data3d.shape[0]
+        else:
+            rough_hips_start = (ribs_end+1)+np.argmax( b_surface_sums[ribs_end+1:] )
+            # go backwards by slices, until there is no voxels with high threshold in left or right sections
+            hips_start = rough_hips_start
+            for z in range(rough_hips_start,ribs_end,-1):
+                view_l, view_r = getDataFractions(bones[z,:,:], fraction_defs=[frac_left,frac_right], mask=fatlessbody[z,:,:])
+                if np.sum(view_l == 1) == 0 or np.sum(view_r == 1) == 0:
+                    hips_start = z
+                    break
+
+        # remove anything thats between end of lungs and start of hip bones, is not spine, is not directly under surface (ribs).
+        # - this should remove kidney stones, derbis in intestines and any high HU "sediments"
+        for z in range(lungs_stats["max_area_z"],hips_start):
+            view_spine = getDataFractions(bones[z,:,:], fraction_defs=[frac_spine,], mask=fatlessbody[z,:,:])
+            tmp = view_spine.copy()
+            bones[z,:,:][(bones[z,:,:] != 0) & (b_surface[z,:,:] == 0)] = 2
+            view_spine[:,:] = tmp[:,:]
+        # readd seed blobs that are connected to good seeds (half removed ribs in lower part of body)
+        # as maybe bones (remove seeds)
+        bones[ (regionGrowing(bones != 0, bones == 1, bones != 0, mode="watershed") == 1) & (bones == 2) ] = 0
+
+        ### Region growing - from seeds gained from high threshold, to mask gained by low threshold
+        logger.debug("Region growing")
+        bones_low = data3d > cls.BONES_THRESHOLD_LOW
+
+        # parts that have both types of seeds should be removed for safety, if they have more bad seeds
+        bones_low_label = skimage.measure.label(bones_low, background=0)
+        for u in np.unique(bones_low_label)[1:]:
+            good = np.sum(bones[bones_low_label == u] == 1)
+            bad = np.sum(bones[bones_low_label == u] == 2)
+            if bad > good:
+                bones[(bones_low_label == u) & (bones != 0)] = 2
+
+        # anything that is futher from seeds then BONES_LOW_MAX_DST is not bone
+        bones_dst = scipy.ndimage.morphology.distance_transform_edt(bones != 1, sampling=spacing)
+        bones[(bones_dst > cls.BONES_LOW_MAX_DST) & bones_low] = 2
+
+        # use inverted data3d, so we can use 'watershed' as more then just basic region growing algorithm.
+        # - bones become dark -> basins; tissues become lighter -> hills
+        # ed = sed3.sed3(data3d, contour=bones_low, seeds=bones); ed.show()
+        bones = regionGrowing(skimage.util.invert(data3d), bones, bones_low, mode="watershed") == 1
+
+        ### closing holes in segmented bones
+        logger.debug("closing holes in segmented bones")
+        bones = binaryClosing(bones, structure=getSphericalMask(5, spacing=spacing))
+        bones = binaryFillHoles(bones, z_axis=True)
+
+        #ed = sed3.sed3(data3d, contour=bones); ed.show()
+        return bones
+
+    ################################################################################################
 
     # @classmethod
     # def getDiaphragm(cls, data3d, spacing, lungs):
@@ -427,88 +566,25 @@ class OrganDetectionAlgo(object):
 
         return kidneys
 
-    @classmethod
-    def getBones(cls, data3d, spacing, fatless, lungs, kidneys): # TODO - fix this; sometimes segments kidneys
-        """
-        Good enough sgementation of all bones
-        * data3d - everything, but body must be removed
-        """
-        logger.info("getBones()")
-        spacing_vol = spacing[0]*spacing[1]*spacing[2]
-        fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatless, sampling=spacing)
+    # @classmethod
+    # def getAbdomen(cls, data3d, spacing, fatlessbody, diaphragm, bones_stats):
+    #     """ Helpful for segmentation of organs in abdomen """
+    #     logger.info("getAbdomen()")
+    #     # define abdomen as fatless volume under diaphragm
+    #     abdomen = fatlessbody.copy()
+    #     for y in range(diaphragm.shape[1]):
+    #         for x in range(diaphragm.shape[2]):
+    #             tmp = diaphragm[:,y,x][::-1]
+    #             z = len(tmp) - np.argmax(tmp) - 1
+    #             abdomen[:z+1,y,x] = 0
 
-        # get voxels that are mostly bones
-        bones = (data3d > 300).astype(np.bool)
-        bones = binaryFillHoles(bones, z_axis=True)
-        bones = skimage.morphology.remove_small_objects(bones.astype(np.bool), min_size=int((10**3)/spacing_vol))
-        # readd segmented points that are in expected ribs volume
-        bones[ (fatless_dst < 15) & (fatless == 1) & (data3d > 300) ] = 1
+    #     # remove everything under hip joints
+    #     if len(bones_stats["hips_joints"]) != 0:
+    #         hips_start = bones_stats["hips_joints"][0][0]
+    #         abdomen[hips_start:,:,:] = 0
 
-        # remove possible segmented heart parts (remove upper half of convex hull of lungs)
-        #ed = sed3.sed3(data3d, contour=lungs); ed.show()
-        if np.sum(lungs) != 0:
-            pads = getDataPadding(lungs)
-            s = ( slice(pads[0][0],data3d.shape[0]-pads[0][1]), \
-                slice(pads[1][0],data3d.shape[1]-pads[1][1]), \
-                slice(pads[2][0],data3d.shape[2]-pads[2][1]) )
-            lungs_hull = lungs[s]
-            for z in range(lungs_hull.shape[0]):
-                lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs_hull[z,:,:])
-            bones[s][:,:int(lungs_hull.shape[1]/2),:][ lungs_hull[:,:int(lungs_hull.shape[1]/2),:] == 1 ] = 0
-
-        #ed = sed3.sed3(data3d, contour=bones); ed.show()
-
-        # segmentation > 200, save only objects that are connected from > 300
-        b200 = skimage.measure.label((data3d > 200), background=0)
-        seeds_l = b200.copy(); seeds_l[ bones == 0 ] = 0
-        for l in np.unique(seeds_l)[1:]:
-            b200[ b200 == l ] = -1
-        b200 = (b200 == -1); del(seeds_l)
-
-        # remove stuff connected to heart and kidneys
-        if np.sum(lungs) != 0:
-            seeds = ( bones == 1 ).astype(np.int8) # = 1
-            seeds[ (fatless_dst < 15) & (fatless == 1) & (b200 == 1) ] = 1 # ribs readded
-            seeds[s][:,:int(lungs_hull.shape[1]/2),:][ lungs_hull[:,:int(lungs_hull.shape[1]/2),:] == 1 ] = 2
-            seeds[kidneys == 1] = 2
-            b200 = skimage.morphology.watershed(b200, seeds, mask=b200) == 1 # TODO replace with regionGrowing()
-
-            #ed = sed3.sed3(data3d, seeds=seeds, contour=r); ed.show()
-
-            # again remove all not connected to > 300
-            b200 = skimage.measure.label(b200, background=0)
-            seeds_l = b200.copy(); seeds_l[ bones == 0 ] = 0
-            for l in np.unique(seeds_l)[1:]:
-                b200[ b200 == l ] = -1
-            b200 = (b200 == -1); del(seeds_l)
-
-        bones = b200; del(b200)
-        bones = binaryClosing(bones, structure=getSphericalMask(5, spacing=spacing))
-        bones = binaryFillHoles(bones, z_axis=True)
-
-        #ed = sed3.sed3(data3d, contour=bones); ed.show()
-
-        return bones
-
-    @classmethod
-    def getAbdomen(cls, data3d, spacing, fatlessbody, diaphragm, bones_stats):
-        """ Helpful for segmentation of organs in abdomen """
-        logger.info("getAbdomen()")
-        # define abdomen as fatless volume under diaphragm
-        abdomen = fatlessbody.copy()
-        for y in range(diaphragm.shape[1]):
-            for x in range(diaphragm.shape[2]):
-                tmp = diaphragm[:,y,x][::-1]
-                z = len(tmp) - np.argmax(tmp) - 1
-                abdomen[:z+1,y,x] = 0
-
-        # remove everything under hip joints
-        if len(bones_stats["hips_joints"]) != 0:
-            hips_start = bones_stats["hips_joints"][0][0]
-            abdomen[hips_start:,:,:] = 0
-
-        #ed = sed3.sed3(data3d, contour=abdomen); ed.show()
-        return abdomen
+    #     #ed = sed3.sed3(data3d, contour=abdomen); ed.show()
+    #     return abdomen
 
     VESSELS_THRESHOLD = 110 # 145
     VESSELS_SPINE_WIDTH = 22 # from center (radius)
@@ -701,23 +777,51 @@ class OrganDetectionAlgo(object):
     ### Statistics ###
     ##################
 
+    LUNGS_HULL_SYM_LIMIT = 0.1 # percent
+
     @classmethod
-    def analyzeLungs(cls, data3d, spacing, lungs):
+    def analyzeLungs(cls, lungs, spacing, fatlessbody):
         logger.info("analyzeLungs()")
 
+        out = {
+            "start":0, "end":0, # start and end of lungs on z-axis
+            "start_sym":0, "end_sym":0, # start and end of lungs_hull on z-axis cropped until all slices are roughly symetrical
+            "max_area_z":0  # idx of slice with biggest lungs area
+            }
         if np.sum(lungs) == 0:
-            logger.warning("Since no lungs were found, defaulting start and end of lungs to 0.")
-            lungs_start = 0 # start of lungs on z-axis
-            lungs_end = 0 # end of lungs on z-axis
-        else:
-            lungs_pad = getDataPadding(lungs)
-            lungs_start = lungs_pad[0][0]
-            lungs_end = lungs.shape[0]-lungs_pad[0][1]
+            logger.warning("Since no lungs were found, defaulting start and end of lungs to 0, etc..")
+            return out
 
-        return {"start":lungs_start, "end":lungs_end}
+        lungs_pad = getDataPadding(lungs)
+        out["start"] = lungs_pad[0][0]
+        out["end"] = lungs.shape[0]-lungs_pad[0][1]
+        out["max_area_z"] = np.argmax(np.sum(np.sum(lungs,axis=1),axis=1))
+
+        #create convex hull of lungs
+        lungs_hull = lungs.copy()
+        for z in range(out["start"],out["end"]):
+            if np.sum(lungs_hull[z,:,:]) == 0: continue
+            lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs_hull[z,:,:])
+        # crop hull in places it is not symetrical in (start and end of lungs), and save start/end.
+        out["start_sym"] = out["start"]
+        out["end_sym"] = out["end"]
+        for z in range(out["start"],out["end"]):
+            if np.sum(lungs_hull[z,:,:]) == 0: continue
+            left = getDataFractions(lungs_hull[z,:,:], fraction_defs=[{"h":(0,1),"w":(0,0.5)},], mask=fatlessbody[z,:,:])
+            left_sum_frac = np.sum(left)/np.sum(lungs_hull[z,:,:])
+            if not ( abs(left_sum_frac-0.5) < cls.LUNGS_HULL_SYM_LIMIT ):
+                out["start_sym"] = z; break
+        for z in range(out["end"]-1,out["start"],-1):
+            if np.sum(lungs_hull[z,:,:]) == 0: continue
+            left = getDataFractions(lungs_hull[z,:,:], fraction_defs=[{"h":(0,1),"w":(0,0.5)},], mask=fatlessbody[z,:,:])
+            left_sum_frac = np.sum(left)/np.sum(lungs_hull[z,:,:])
+            if not ( abs(left_sum_frac-0.5) < cls.LUNGS_HULL_SYM_LIMIT ):
+                out["end_sym"] = z; break
+
+        return out
 
     @classmethod
-    def analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs_stats):
+    def analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs_stats): # TODO - clean, add ribs start/end (maybe)
         """ Returns: {"spine":points_spine, "hips_joints":points_hips_joints, "hips_start":[]} """
         logger.info("analyzeBones()")
 
