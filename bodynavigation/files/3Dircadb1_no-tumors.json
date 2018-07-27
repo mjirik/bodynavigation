@@ -1,150 +1,201 @@
 {
-    "1":{
+    "3Dircadb1.1":{
         "ROOT_PATH":"3Dircadb1.1/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "lungs":["MASKS_DICOM/leftlung/","MASKS_DICOM/rightlung/"],
-        "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"],
-        "spleen":["MASKS_DICOM/spleen/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "lungs":["MASKS_DICOM/leftlung/","MASKS_DICOM/rightlung/"],
+            "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"],
+            "spleen":["MASKS_DICOM/spleen/"]
+        }
     },
-    "2":{
+    "3Dircadb1.2":{
         "ROOT_PATH":"3Dircadb1.2/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venacava/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "4":{
+    "3Dircadb1.4":{
         "ROOT_PATH":"3Dircadb1.4/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "5":{
+    "3Dircadb1.5":{
         "ROOT_PATH":"3Dircadb1.5/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "lungs":["MASKS_DICOM/lungs/"],
-        "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"],
-        "spleen":["MASKS_DICOM/spleen/"],
-        "pancreas":["MASKS_DICOM/pancreas/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "lungs":["MASKS_DICOM/lungs/"],
+            "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"],
+            "spleen":["MASKS_DICOM/spleen/"],
+            "pancreas":["MASKS_DICOM/pancreas/"]
+        }
     },
-    "6":{
+    "3Dircadb1.6":{
         "ROOT_PATH":"3Dircadb1.6/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "7":{
+    "3Dircadb1.7":{
         "ROOT_PATH":"3Dircadb1.7/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "lungs":["MASKS_DICOM/leftlung/","MASKS_DICOM/rightlung/"],
-        "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"],
-        "spleen":["MASKS_DICOM/spleen/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "lungs":["MASKS_DICOM/leftlung/","MASKS_DICOM/rightlung/"],
+            "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"],
+            "spleen":["MASKS_DICOM/spleen/"]
+        }
     },
-    "8":{
+    "3Dircadb1.8":{
         "ROOT_PATH":"3Dircadb1.8/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "9":{
+    "3Dircadb1.9":{
         "ROOT_PATH":"3Dircadb1.9/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "10":{
+    "3Dircadb1.10":{
         "ROOT_PATH":"3Dircadb1.10/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein1/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein1/","MASKS_DICOM/venacava/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "11":{
+    "3Dircadb1.11":{
         "ROOT_PATH":"3Dircadb1.11/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venacava/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "13":{
+    "3Dircadb1.13":{
         "ROOT_PATH":"3Dircadb1.13/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venacava/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "14":{
+    "3Dircadb1.14":{
         "ROOT_PATH":"3Dircadb1.14/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "15":{
+    "3Dircadb1.15":{
         "ROOT_PATH":"3Dircadb1.15/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "16":{
+    "3Dircadb1.16":{
         "ROOT_PATH":"3Dircadb1.16/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "17":{
+    "3Dircadb1.17":{
         "ROOT_PATH":"3Dircadb1.17/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "18":{
+    "3Dircadb1.18":{
         "ROOT_PATH":"3Dircadb1.18/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venacava/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     },
-    "19":{
+    "3Dircadb1.19":{
         "ROOT_PATH":"3Dircadb1.19/",
         "CT_DATA_PATH":"PATIENT_DICOM/",
-        "body":["MASKS_DICOM/skin/"],
-        "bones":["MASKS_DICOM/bone/"],
-        "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/"]
+        "MISC":{ },
+        "MASKS":{
+            "body":["MASKS_DICOM/skin/"],
+            "bones":["MASKS_DICOM/bone/"],
+            "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
+            "liver":["MASKS_DICOM/liver/"]
+        }
     }
 }

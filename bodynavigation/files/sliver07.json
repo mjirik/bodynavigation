@@ -1,117 +1,155 @@
 {
-    "1":{
+    "silver07-orig001":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig001.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg001.mhd"]
+        "MASKS":{
+            "liver":["liver-seg001.mhd"]
+        }
     },
-    "2":{
+    "silver07-orig002":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig002.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg002.mhd"]
+        "MASKS":{
+            "liver":["liver-seg002.mhd"]
+        }
     },
-    "3":{
+    "silver07-orig003":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig003.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg003.mhd"]
+        "MASKS":{
+            "liver":["liver-seg003.mhd"]
+        }
     },
-    "4":{
+    "silver07-orig004":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig004.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg004.mhd"]
+        "MASKS":{
+            "liver":["liver-seg004.mhd"]
+        }
     },
-    "6":{
+    "silver07-orig006":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig006.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg006.mhd"]
+        "MASKS":{
+            "liver":["liver-seg006.mhd"]
+        }
     },
-    "7":{
+    "silver07-orig007":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig007.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg007.mhd"]
+        "MASKS":{
+            "liver":["liver-seg007.mhd"]
+        }
     },
-    "8":{
+    "silver07-orig008":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig008.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg008.mhd"]
+        "MASKS":{
+            "liver":["liver-seg008.mhd"]
+        }
     },
-    "9":{
+    "silver07-orig009":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig009.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg009.mhd"]
+        "MASKS":{
+            "liver":["liver-seg009.mhd"]
+        }
     },
-    "10":{
+    "silver07-orig010":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig010.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg010.mhd"]
+        "MASKS":{
+            "liver":["liver-seg010.mhd"]
+        }
     },
-    "11":{
+    "silver07-orig011":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig011.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg011.mhd"]
+        "MASKS":{
+            "liver":["liver-seg011.mhd"]
+        }
     },
-    "12":{
+    "silver07-orig012":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig012.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg012.mhd"]
+        "MASKS":{
+            "liver":["liver-seg012.mhd"]
+        }
     },
-    "13":{
+    "silver07-orig013":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig013.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg013.mhd"]
+        "MASKS":{
+            "liver":["liver-seg013.mhd"]
+        }
     },
-    "14":{
+    "silver07-orig014":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig014.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg014.mhd"]
+        "MASKS":{
+            "liver":["liver-seg014.mhd"]
+        }
     },
-    "15":{
+    "silver07-orig015":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig015.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg015.mhd"]
+        "MASKS":{
+            "liver":["liver-seg015.mhd"]
+        }
     },
-    "16":{
+    "silver07-orig016":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig016.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg016.mhd"]
+        "MASKS":{
+            "liver":["liver-seg016.mhd"]
+        }
     },
-    "17":{
+    "silver07-orig017":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig017.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg017.mhd"]
+        "MASKS":{
+            "liver":["liver-seg017.mhd"]
+        }
     },
-    "18":{
+    "silver07-orig018":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig018.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg018.mhd"]
+        "MASKS":{
+            "liver":["liver-seg018.mhd"]
+        }
     },
-    "19":{
+    "silver07-orig019":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig019.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg019.mhd"]
+        "MASKS":{
+            "liver":["liver-seg019.mhd"]
+        }
     },
-    "20":{
+    "silver07-orig020":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig020.mhd",
         "MISC":{ "flip_z":true },
-        "liver":["liver-seg020.mhd"]
+        "MASKS":{
+            "liver":["liver-seg020.mhd"]
+        }
     }
 
 }
