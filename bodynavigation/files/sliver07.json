@@ -1,0 +1,117 @@
+{
+    "1":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig001.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg001.mhd"]
+    },
+    "2":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig002.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg002.mhd"]
+    },
+    "3":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig003.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg003.mhd"]
+    },
+    "4":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig004.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg004.mhd"]
+    },
+    "6":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig006.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg006.mhd"]
+    },
+    "7":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig007.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg007.mhd"]
+    },
+    "8":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig008.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg008.mhd"]
+    },
+    "9":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig009.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg009.mhd"]
+    },
+    "10":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig010.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg010.mhd"]
+    },
+    "11":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig011.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg011.mhd"]
+    },
+    "12":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig012.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg012.mhd"]
+    },
+    "13":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig013.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg013.mhd"]
+    },
+    "14":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig014.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg014.mhd"]
+    },
+    "15":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig015.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg015.mhd"]
+    },
+    "16":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig016.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg016.mhd"]
+    },
+    "17":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig017.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg017.mhd"]
+    },
+    "18":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig018.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg018.mhd"]
+    },
+    "19":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig019.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg019.mhd"]
+    },
+    "20":{
+        "ROOT_PATH":"./",
+        "CT_DATA_PATH":"liver-orig020.mhd",
+        "MISC":{ "flip_z":true },
+        "liver":["liver-seg020.mhd"]
+    }
+
+}

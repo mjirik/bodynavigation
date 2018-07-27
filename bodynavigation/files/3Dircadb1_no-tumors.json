@@ -7,7 +7,7 @@
         "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor01/","MASKS_DICOM/livertumor02/","MASKS_DICOM/livertumor03/","MASKS_DICOM/livertumor04/","MASKS_DICOM/livertumor05/","MASKS_DICOM/livertumor06/","MASKS_DICOM/livertumor07/","MASKS_DICOM/liverkyst/"],
+        "liver":["MASKS_DICOM/liver/"],
         "spleen":["MASKS_DICOM/spleen/"]
     },
     "2":{
@@ -16,7 +16,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "4":{
         "ROOT_PATH":"3Dircadb1.4/",
@@ -24,7 +24,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "5":{
         "ROOT_PATH":"3Dircadb1.5/",
@@ -45,7 +45,7 @@
         "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "7":{
         "ROOT_PATH":"3Dircadb1.7/",
@@ -55,7 +55,7 @@
         "kidneys":["MASKS_DICOM/leftkidney/","MASKS_DICOM/rightkidney/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/tumor/"],
+        "liver":["MASKS_DICOM/liver/"],
         "spleen":["MASKS_DICOM/spleen/"]
     },
     "8":{
@@ -64,7 +64,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor01/","MASKS_DICOM/livertumor02/","MASKS_DICOM/livertumor03/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "9":{
         "ROOT_PATH":"3Dircadb1.9/",
@@ -72,7 +72,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/liverkyste/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "10":{
         "ROOT_PATH":"3Dircadb1.10/",
@@ -80,7 +80,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein1/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "11":{
         "ROOT_PATH":"3Dircadb1.11/",
@@ -97,7 +97,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "14":{
         "ROOT_PATH":"3Dircadb1.14/",
@@ -105,7 +105,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/metastasectomie/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "15":{
         "ROOT_PATH":"3Dircadb1.15/",
@@ -113,7 +113,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "16":{
         "ROOT_PATH":"3Dircadb1.16/",
@@ -121,7 +121,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "17":{
         "ROOT_PATH":"3Dircadb1.17/",
@@ -129,7 +129,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/artery/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor1/","MASKS_DICOM/livertumor2/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "18":{
         "ROOT_PATH":"3Dircadb1.18/",
@@ -137,7 +137,7 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venacava/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumor/"]
+        "liver":["MASKS_DICOM/liver/"]
     },
     "19":{
         "ROOT_PATH":"3Dircadb1.19/",
@@ -145,6 +145,6 @@
         "body":["MASKS_DICOM/skin/"],
         "bones":["MASKS_DICOM/bone/"],
         "vessels":["MASKS_DICOM/portalvein/","MASKS_DICOM/venoussystem/"],
-        "liver":["MASKS_DICOM/liver/","MASKS_DICOM/livertumors/","MASKS_DICOM/livercyst/"]
+        "liver":["MASKS_DICOM/liver/"]
     }
 }
