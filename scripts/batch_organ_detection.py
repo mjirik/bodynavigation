@@ -70,6 +70,7 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
                     print("Detected *.mhd file! Changing datapath to: ", datapath)
                     break
 
+        data3d = None
         if readypath is None:
             data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
             voxelsize = metadata["voxelsize_mm"]
@@ -77,7 +78,15 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         else:
             print("Loading preprocessed data from readypath: ", readypath)
             obj = OrganDetection.fromDirectory(os.path.abspath(readypath))
-            data3d = obj.getData3D(); voxelsize = obj.spacing_source
+            voxelsize = obj.spacing_source
+
+        # always use original data3d if availible
+        if data3d is None:
+            try:
+                data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
+            except:
+                print("Failed to load data3d from datapath! Using obj.getData3D().")
+                data3d = obj.getData3D()
 
         point_sets = []; volume_sets = []
         if draw_depth:
