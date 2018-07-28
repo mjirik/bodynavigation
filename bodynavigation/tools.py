@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 import io, os
 import json
 import copy
+import re
 
 import numpy as np
 import scipy
@@ -26,95 +27,9 @@ import io3d
 import warnings
 warnings.filterwarnings('ignore', '.* scipy .* output shape of zoom.*')
 
-
-def getSphericalMask(size=5, spacing=[1,1,1]):
-    """ Size is in mm """
-    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
-    shape[shape < 1] = 1
-    mask = skimage.morphology.ball(51, dtype=np.float)
-    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
-    return mask
-
-def getDiskMask(size=5, spacing=[1,1,1]):
-    """ Size is in mm """
-    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
-    shape[shape < 1] = 1; shape[0] = 1
-    mask = np.expand_dims(skimage.morphology.disk(51, dtype=np.bool), axis=0)
-    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
-    return mask
-
-def binaryClosing(data, structure, cval=0):
-    """
-    Does scipy.ndimage.morphology.binary_closing() without losing data near borders
-    Big sized structures can make this take a long time
-    """
-    padding = np.max(structure.shape)
-    tmp = (np.zeros(np.asarray(data.shape)+padding*2, dtype=data.dtype) + cval).astype(np.bool)
-    tmp[padding:-padding,padding:-padding,padding:-padding] = data
-    tmp = scipy.ndimage.morphology.binary_closing(tmp, structure=structure)
-    return tmp[padding:-padding,padding:-padding,padding:-padding]
-
-def binaryFillHoles(data, z_axis=False, y_axis=False, x_axis=False):
-    """
-    Does scipy.ndimage.morphology.binary_fill_holes() as if at the start and end of [z/y/x]-axis is solid wall
-    """
-
-    if not (z_axis or x_axis or y_axis):
-        return scipy.ndimage.morphology.binary_fill_holes(data)
-
-    # fill holes on z-axis
-    if z_axis:
-        tmp = np.ones((data.shape[0]+2, data.shape[1], data.shape[2]))
-        tmp[1:-1,:,:] = data;
-        tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
-        data = tmp[1:-1,:,:]
-
-    # fill holes on y-axis
-    if y_axis:
-        tmp = np.ones((data.shape[0], data.shape[1]+2, data.shape[2]))
-        tmp[:,1:-1,:] = data;
-        tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
-        data = tmp[:,1:-1,:]
-
-    # fill holes on x-axis
-    if x_axis:
-        tmp = np.ones((data.shape[0], data.shape[1], data.shape[2]+2))
-        tmp[:,:,1:-1] = data;
-        tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
-        data = tmp[:,:,1:-1]
-
-    return data
-
-def compressArray(mask):
-    """ Compresses numpy array from RAM to RAM """
-    mask_comp = io.BytesIO()
-    np.savez_compressed(mask_comp, mask)
-    return mask_comp
-
-def decompressArray(mask_comp):
-    """ Decompresses numpy array from RAM to RAM """
-    mask_comp.seek(0)
-    return np.load(mask_comp)['arr_0']
-
-def toMemMap(data3d, filepath):
-    """
-    Move numpy array from RAM to file
-    np.memmap might not work with some functions that np.array would have worked with. Sometimes
-    can even crash without error.
-    """
-    data3d_tmp = data3d
-    data3d = np.memmap(filepath, dtype=data3d.dtype, mode='w+', shape=data3d.shape)
-    data3d[:] = data3d_tmp[:]; del(data3d_tmp)
-    data3d.flush()
-    return data3d
-
-def delMemMap(data3d):
-    """ Deletes file used for memmap. Trying to use array after this runs will crash Python """
-    filename = copy.deepcopy(data3d.filename)
-    data3d.flush()
-    data3d._mmap.close()
-    del(data3d)
-    os.remove(filename)
+###########################################
+# Crop/Pad/Fraction
+###########################################
 
 def getDataPadding(data):
     """
@@ -207,20 +122,139 @@ def getDataFractions(data2d, fraction_defs=[], mask=None, return_slices=False):
     else:
         return tuple(fractions)
 
-def polyfit3D(points, dtype=np.int, deg=3):
-    z, y, x = zip(*points)
-    z_new = list(range(z[0], z[-1]+1))
+###########################################
+# Resize
+###########################################
 
-    zz1 = np.polyfit(z, y, deg)
-    f1 = np.poly1d(zz1)
-    y_new = f1(z_new)
+def resizeScipy(data, toshape, order=1, mode="reflect", cval=0):
+    """
+    Resize array to shape with scipy.ndimage.zoom
 
-    zz2 = np.polyfit(z, x, deg)
-    f2 = np.poly1d(zz2)
-    x_new = f2(z_new)
+    Use this on big data, because skimage.transform.resize consumes absurd amount of RAM memory
+    (many times size of input array), while scipy.ndimage.zoom consumes none.
+    scipy.ndimage.zoom also keeps correct dtype of output array.
 
-    points = [ tuple(np.asarray([z_new[i], y_new[i], x_new[i]]).astype(dtype)) for i in range(len(z_new)) ]
-    return points
+    Output is a bit (or VERY) wrong, and a lot of minor bugs:
+    https://github.com/scipy/scipy/issues/7324
+    https://github.com/scipy/scipy/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3Ascipy.ndimage%20zoom
+    """
+    order = 0 if (data.dtype == np.bool) else order # for masks
+    zoom = np.asarray(toshape, dtype=np.float) / np.asarray(data.shape, dtype=np.float)
+    data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode, cval=cval)
+    if np.any(data.shape != toshape):
+        logger.error("Wrong output shape of zoom: %s != %s" % (str(data.shape), str(toshape)))
+    return data
+
+def resizeSkimage(data, toshape, order=1, mode="reflect", cval=0):
+    """
+    Resize array to shape with skimage.transform.resize
+    Eats memory like crazy (many times size of input array), but very good results.
+    """
+    dtype = data.dtype # remember correct dtype
+
+    data = skimage.transform.resize(data, toshape, order=order, mode=mode, cval=cval, clip=True, \
+        preserve_range=True)
+
+    # fix dtype after skimage.transform.resize
+    if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
+        data = np.round(data).astype(dtype)
+    elif (data.dtype != dtype):
+        data = data.astype(dtype)
+
+    return data
+
+# TODO - test resize version with RegularGridInterpolator, (only linear and nn order)
+# https://scipy.github.io/devdocs/generated/scipy.interpolate.RegularGridInterpolator.html
+# https://stackoverflow.com/questions/30056577/correct-usage-of-scipy-interpolate-regulargridinterpolator
+
+def resize(data, toshape, order=1, mode="reflect", cval=0):
+    return resizeScipy(data, toshape, order=order, mode=mode, cval=cval)
+
+def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", cval=0):
+    """
+    All upscaling is done with 0 order interpolation (Nearest-neighbor) to prevent ghosting effect.
+        (Examples of ghosting effect can be seen for example in 3Dircadb1.19)
+    Any downscaling is done with given interpolation order.
+    If input is binary mask (np.bool) order=0 is forced.
+    """
+    # calc both resize shapes
+    scale = np.asarray(data.shape, dtype=np.float) / np.asarray(toshape, dtype=np.float)
+    downscale_shape = np.asarray(toshape, dtype=np.int).copy()
+    if scale[0] > 1.0: downscale_shape[0] = data.shape[0]
+    if scale[1] > 1.0: downscale_shape[1] = data.shape[1]
+    if scale[2] > 1.0: downscale_shape[2] = data.shape[2]
+    upscale_shape = np.asarray(toshape, dtype=np.int).copy()
+
+    # downscale with given interpolation order
+    data = resize(data, downscale_shape, order=order, mode=mode, cval=cval)
+
+    # upscale with 0 order interpolation
+    if not np.all(downscale_shape == upscale_shape):
+        data = resize(data, upscale_shape, order=0, mode=mode, cval=cval)
+
+    return data
+
+###########################################
+# Segmentation
+###########################################
+
+def getSphericalMask(size=5, spacing=[1,1,1]):
+    """ Size is in mm """
+    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
+    shape[shape < 1] = 1
+    mask = skimage.morphology.ball(51, dtype=np.float)
+    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
+    return mask
+
+def getDiskMask(size=5, spacing=[1,1,1]):
+    """ Size is in mm """
+    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
+    shape[shape < 1] = 1; shape[0] = 1
+    mask = np.expand_dims(skimage.morphology.disk(51, dtype=np.bool), axis=0)
+    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
+    return mask
+
+def binaryClosing(data, structure, cval=0):
+    """
+    Does scipy.ndimage.morphology.binary_closing() without losing data near borders
+    Big sized structures can make this take a long time
+    """
+    padding = np.max(structure.shape)
+    tmp = (np.zeros(np.asarray(data.shape)+padding*2, dtype=data.dtype) + cval).astype(np.bool)
+    tmp[padding:-padding,padding:-padding,padding:-padding] = data
+    tmp = scipy.ndimage.morphology.binary_closing(tmp, structure=structure)
+    return tmp[padding:-padding,padding:-padding,padding:-padding]
+
+def binaryFillHoles(data, z_axis=False, y_axis=False, x_axis=False):
+    """
+    Does scipy.ndimage.morphology.binary_fill_holes() as if at the start and end of [z/y/x]-axis is solid wall
+    """
+
+    if not (z_axis or x_axis or y_axis):
+        return scipy.ndimage.morphology.binary_fill_holes(data)
+
+    # fill holes on z-axis
+    if z_axis:
+        tmp = np.ones((data.shape[0]+2, data.shape[1], data.shape[2]))
+        tmp[1:-1,:,:] = data;
+        tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
+        data = tmp[1:-1,:,:]
+
+    # fill holes on y-axis
+    if y_axis:
+        tmp = np.ones((data.shape[0], data.shape[1]+2, data.shape[2]))
+        tmp[:,1:-1,:] = data;
+        tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
+        data = tmp[:,1:-1,:]
+
+    # fill holes on x-axis
+    if x_axis:
+        tmp = np.ones((data.shape[0], data.shape[1], data.shape[2]+2))
+        tmp[:,:,1:-1] = data;
+        tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
+        data = tmp[:,:,1:-1]
+
+    return data
 
 def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershed"):
     """
@@ -318,6 +352,60 @@ def growRegion(region, mask, iterations=1): # TODO - DEPRACED BY regionGrowing()
 
     return region
 
+###################
+# Memory saving
+###################
+
+def compressArray(mask):
+    """ Compresses numpy array from RAM to RAM """
+    mask_comp = io.BytesIO()
+    np.savez_compressed(mask_comp, mask)
+    return mask_comp
+
+def decompressArray(mask_comp):
+    """ Decompresses numpy array from RAM to RAM """
+    mask_comp.seek(0)
+    return np.load(mask_comp)['arr_0']
+
+def toMemMap(data3d, filepath):
+    """
+    Move numpy array from RAM to file
+    np.memmap might not work with some functions that np.array would have worked with. Sometimes
+    can even crash without error.
+    """
+    data3d_tmp = data3d
+    data3d = np.memmap(filepath, dtype=data3d.dtype, mode='w+', shape=data3d.shape)
+    data3d[:] = data3d_tmp[:]; del(data3d_tmp)
+    data3d.flush()
+    return data3d
+
+def delMemMap(data3d):
+    """ Deletes file used for memmap. Trying to use array after this runs will crash Python """
+    filename = copy.deepcopy(data3d.filename)
+    data3d.flush()
+    data3d._mmap.close()
+    del(data3d)
+    os.remove(filename)
+
+###################
+# Misc
+###################
+
+def polyfit3D(points, dtype=np.int, deg=3):
+    z, y, x = zip(*points)
+    z_new = list(range(z[0], z[-1]+1))
+
+    zz1 = np.polyfit(z, y, deg)
+    f1 = np.poly1d(zz1)
+    y_new = f1(z_new)
+
+    zz2 = np.polyfit(z, x, deg)
+    f2 = np.poly1d(zz2)
+    x_new = f2(z_new)
+
+    points = [ tuple(np.asarray([z_new[i], y_new[i], x_new[i]]).astype(dtype)) for i in range(len(z_new)) ]
+    return points
+
 class NumpyEncoder(json.JSONEncoder):
     """
     Fixes saving numpy arrays into json
@@ -330,74 +418,6 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
-
-def resizeScipy(data, toshape, order=1, mode="reflect", cval=0):
-    """
-    Resize array to shape with scipy.ndimage.zoom
-
-    Use this on big data, because skimage.transform.resize consumes absurd amount of RAM memory
-    (many times size of input array), while scipy.ndimage.zoom consumes none.
-    scipy.ndimage.zoom also keeps correct dtype of output array.
-
-    Output is a bit (or VERY) wrong, and a lot of minor bugs:
-    https://github.com/scipy/scipy/issues/7324
-    https://github.com/scipy/scipy/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3Ascipy.ndimage%20zoom
-    """
-    order = 0 if (data.dtype == np.bool) else order # for masks
-    zoom = np.asarray(toshape, dtype=np.float) / np.asarray(data.shape, dtype=np.float)
-    data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode, cval=cval)
-    if np.any(data.shape != toshape):
-        logger.error("Wrong output shape of zoom: %s != %s" % (str(data.shape), str(toshape)))
-    return data
-
-def resizeSkimage(data, toshape, order=1, mode="reflect", cval=0):
-    """
-    Resize array to shape with skimage.transform.resize
-    Eats memory like crazy (many times size of input array), but very good results.
-    """
-    dtype = data.dtype # remember correct dtype
-
-    data = skimage.transform.resize(data, toshape, order=order, mode=mode, cval=cval, clip=True, \
-        preserve_range=True)
-
-    # fix dtype after skimage.transform.resize
-    if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
-        data = np.round(data).astype(dtype)
-    elif (data.dtype != dtype):
-        data = data.astype(dtype)
-
-    return data
-
-# TODO - test resize version with RegularGridInterpolator, (only linear and nn order)
-# https://scipy.github.io/devdocs/generated/scipy.interpolate.RegularGridInterpolator.html
-# https://stackoverflow.com/questions/30056577/correct-usage-of-scipy-interpolate-regulargridinterpolator
-
-def resize(data, toshape, order=1, mode="reflect", cval=0):
-    return resizeScipy(data, toshape, order=order, mode=mode, cval=cval)
-
-def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", cval=0):
-    """
-    All upscaling is done with 0 order interpolation (Nearest-neighbor) to prevent ghosting effect.
-        (Examples of ghosting effect can be seen for example in 3Dircadb1.19)
-    Any downscaling is done with given interpolation order.
-    If input is binary mask (np.bool) order=0 is forced.
-    """
-    # calc both resize shapes
-    scale = np.asarray(data.shape, dtype=np.float) / np.asarray(toshape, dtype=np.float)
-    downscale_shape = np.asarray(toshape, dtype=np.int).copy()
-    if scale[0] > 1.0: downscale_shape[0] = data.shape[0]
-    if scale[1] > 1.0: downscale_shape[1] = data.shape[1]
-    if scale[2] > 1.0: downscale_shape[2] = data.shape[2]
-    upscale_shape = np.asarray(toshape, dtype=np.int).copy()
-
-    # downscale with given interpolation order
-    data = resize(data, downscale_shape, order=order, mode=mode, cval=cval)
-
-    # upscale with 0 order interpolation
-    if not np.all(downscale_shape == upscale_shape):
-        data = resize(data, upscale_shape, order=0, mode=mode, cval=cval)
-
-    return data
 
 def firstNonzero(data3d, axis, invalid_val=-1):
     """
@@ -423,3 +443,8 @@ def readCompoundMask(path_list, misc={}):
         np.flip(mask, axis=0)
 
     return mask, mask_metadata
+
+def naturalSort(l):
+    convert = lambda text: int(text) if text.isdigit() else text.lower()
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
+    return sorted(l, key = alphanum_key)

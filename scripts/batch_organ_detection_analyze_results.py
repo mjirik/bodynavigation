@@ -17,7 +17,6 @@ import numpy as np
 import pkg_resources
 import json
 import pandas as pd
-import re
 
 import io3d
 import sed3
@@ -26,19 +25,12 @@ sys.path.append("..")
 import bodynavigation.organ_detection
 print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.organ_detection.__file__))
 from bodynavigation.organ_detection import OrganDetection
-from bodynavigation.tools import readCompoundMask, NumpyEncoder
+from bodynavigation.tools import readCompoundMask, NumpyEncoder, naturalSort
 from bodynavigation.metrics import compareVolumes
 
 """
 python batch_organ_detection_analyze_results.py -d -o ./batch_output/ -r ../READY_DIR/
 """
-
-
-
-def natural_sort(l):
-    convert = lambda text: int(text) if text.isdigit() else text.lower()
-    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
-    return sorted(l, key = alphanum_key)
 
 def main():
     logging.basicConfig(stream=sys.stdout)
@@ -88,19 +80,21 @@ def main():
         datasets.update( json.load(fp, encoding="utf-8") )
 
     # start comparing masks
+    forced_masks = args.masks.strip().lower().split(",") if (args.masks is not None) else args.masks
     output = {}; used_masks = []
     for dirname in sorted(next(os.walk(args.readydirs))[1]):
         if dirname not in datasets:
             continue
-
         print("Processing:", dirname)
-        output[dirname] = {}
 
-        # load organ detection
-        obj = OrganDetection.fromDirectory(os.path.join(args.readydirs, dirname))
-        voxelsize_mm = obj.spacing_source
-
+        obj = None; voxelsize_mm = None
         for mask in datasets[dirname]["MASKS"]:
+            # check if mask is allowed
+            if forced_masks is not None:
+                if mask not in forced_masks:
+                    continue
+
+            # create paths to masks
             mask_path_dataset = [ os.path.join(args.datasets, datasets[dirname]["ROOT_PATH"], \
                 part) for part in datasets[dirname]["MASKS"][mask] ]
             mask_path_ready = os.path.join(args.readydirs, dirname, str("%s.dcm" % mask))
@@ -112,11 +106,18 @@ def main():
                 used_masks.append(mask)
             print("-- comparing mask:", mask)
 
+            # load organ detection
+            if obj is None:
+                obj = OrganDetection.fromDirectory(os.path.join(args.readydirs, dirname))
+                voxelsize_mm = obj.spacing_source
+
             # read masks
             mask_ready = obj.getPart(mask)
             mask_dataset, _ = readCompoundMask(mask_path_dataset, datasets[dirname]["MISC"])
 
             # calculate metrics
+            if dirname not in output:
+                output[dirname] = {}
             output[dirname][mask] = compareVolumes(mask_dataset, mask_ready, voxelsize_mm)
 
     # save raw output
@@ -127,7 +128,6 @@ def main():
 
     ## Create pandas tables
     print("Create pandas tables...")
-    used_masks = used_masks if (args.masks is None) else args.masks.strip().lower().split(",")
     used_metrics = args.metrics.strip().lower().split(",")
 
     # init columns
@@ -140,7 +140,7 @@ def main():
     df = pd.DataFrame([], columns=columns)
 
     # write lines
-    for dataset in natural_sort(output.keys()):
+    for dataset in naturalSort(output.keys()):
         line = [dataset,]
         for mask in used_masks:
             # add undefined values
