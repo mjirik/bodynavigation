@@ -20,6 +20,8 @@ import scipy.ndimage
 import skimage.transform
 import skimage.morphology
 
+import io3d
+
 # dont display some anoying warnings
 import warnings
 warnings.filterwarnings('ignore', '.* scipy .* output shape of zoom.*')
@@ -167,11 +169,12 @@ def padArray(data, pads, padding_value=0): # TODO - skimage.util.pad
 
     return out
 
-def getDataFractions(data2d, fraction_defs=[], mask=None):
+def getDataFractions(data2d, fraction_defs=[], mask=None, return_slices=False):
     """
     Returns views (in tuple) on 2D array defined by percentages of width and height
     fraction_defs - [{"h":(3/4,1),"w":(0,1)},...]
     mask - used for calculation of width and height based on segmented data
+    return_slices - if True returns slice() tuples instead of views into array
     """
     if mask is None:
         height = data2d.shape[0]; height_offset = 0
@@ -187,13 +190,17 @@ def getDataFractions(data2d, fraction_defs=[], mask=None):
     def get_index(length, offset, percent):
         return offset + int(np.round(length*percent))
 
-    fractions = []
+    fractions = []; slices = [];
     for fd in fraction_defs:
         h_s = slice(get_index(height, height_offset, fd["h"][0]), \
             get_index(height, height_offset, fd["h"][1])+1)
         w_s = slice(get_index(width, width_offset, fd["w"][0]), \
             get_index(width, width_offset, fd["w"][1])+1)
+        slices.append((h_s,w_s))
         fractions.append(data2d[(h_s,w_s)])
+
+    if return_slices:
+        fractions = slices
 
     if len(fractions)==1:
         return fractions[0]
@@ -296,6 +303,7 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
     return seeds
 
 def growRegion(region, mask, iterations=1): # TODO - DEPRACED BY regionGrowing()!!!
+    logger.warning("growRegion() is DEPRACED BY regionGrowing()!!!")
     # TODO - remove parts of mask that are not connected to region
     region[ mask == 0 ] = 0
 
@@ -397,3 +405,21 @@ def firstNonzero(data3d, axis, invalid_val=-1):
     """
     mask = data3d != 0
     return np.where(mask.any(axis=axis), mask.argmax(axis=axis), invalid_val)
+
+def readCompoundMask(path_list, misc={}):
+    # def missing misc variables
+    misc["flip_z"] = False if ("flip_z" not in misc) else misc["flip_z"]
+
+    # load masks
+    mask, mask_metadata = io3d.datareader.read(path_list[0], dataplus_format=False)
+    mask = mask > 0 # to np.bool
+    for p in path_list[1:]:
+        tmp, _ = io3d.datareader.read(p, dataplus_format=False)
+        tmp = tmp > 0 # to np.bool
+        mask[tmp] = 1
+
+    # do misc
+    if misc["flip_z"]:
+        np.flip(mask, axis=0)
+
+    return mask, mask_metadata

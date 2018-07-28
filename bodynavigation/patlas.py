@@ -32,7 +32,7 @@ import io3d
 import sed3
 
 # run with: "python -m bodynavigation.patlas -h"
-from .tools import compressArray, decompressArray, NumpyEncoder
+from .tools import compressArray, decompressArray, NumpyEncoder, readCompoundMask
 from .transformation import TransformationNone, Transformation
 
 
@@ -111,15 +111,6 @@ def spatialDivision(M,N=1):
                     ])
 
     return subspaces
-
-def readCompoundMask(path_list):
-    mask, mask_metadata = io3d.datareader.read(path_list[0], dataplus_format=False)
-    mask = mask > 0 # to np.bool
-    for p in path_list[1:]:
-        tmp, _ = io3d.datareader.read(p, dataplus_format=False)
-        tmp = tmp > 0 # to np.bool
-        mask[tmp] = 1
-    return mask, mask_metadata
 
 def buildPAtlas(target_data, train_data, N=4**3):
     """

@@ -21,20 +21,12 @@ import skimage.measure
 import io3d
 import io3d.datasets
 from bodynavigation.organ_detection import OrganDetection
+from bodynavigation.metrics import compareDice
 
 import sed3 # for testing
 
 # http://www.ircad.fr/softwares/3Dircadb/3Dircadb1/3Dircadb1.1.zip
 TEST_DATA_DIR = "3Dircadb1.1"
-
-def diceCoeff(vol1, vol2):
-    """ Computes dice coefficient between two binary volumes """
-    if (vol1.dtype != np.bool) or (vol2.dtype != np.bool):
-        raise Exception("vol1 or vol2 is not np.bool dtype!")
-    a = np.sum( vol1[vol2] )
-    b = np.sum( vol1 )
-    c = np.sum( vol2 )
-    return (2*a)/(b+c)
 
 class OrganDetectionTest(unittest.TestCase):
     """
@@ -85,7 +77,7 @@ class OrganDetectionTest(unittest.TestCase):
         self.assertEqual(np.max(test_body_label), 1)
 
         # Test requires at least ??% of correct segmentation
-        dice = diceCoeff(test_body, body)
+        dice = compareDice(test_body, body)
         print("getBody(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_BODY_DICE)
 
@@ -106,7 +98,7 @@ class OrganDetectionTest(unittest.TestCase):
         # ed.show()
 
         # Test requires at least ??% of correct segmentation
-        dice = diceCoeff(test_lungs, lungs)
+        dice = compareDice(test_lungs, lungs)
         print("getLungs(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_LUNGS_DICE)
 
@@ -122,7 +114,7 @@ class OrganDetectionTest(unittest.TestCase):
         # ed.show()
 
         # Test requires at least ??% of correct segmentation
-        dice = diceCoeff(test_aorta, aorta)
+        dice = compareDice(test_aorta, aorta)
         print("getAorta(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_AORTA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
@@ -139,7 +131,7 @@ class OrganDetectionTest(unittest.TestCase):
         # ed.show()
 
         # Test requires at least ??% of correct segmentation
-        dice = diceCoeff(test_venacava, venacava)
+        dice = compareDice(test_venacava, venacava)
         print("getVenaCava(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_VENACAVA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
@@ -156,7 +148,7 @@ class OrganDetectionTest(unittest.TestCase):
         # ed.show()
 
         # Test requires at least ??% of correct segmentation
-        dice = diceCoeff(test_bones, bones)
+        dice = compareDice(test_bones, bones)
         print("getBones(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_BONES_DICE)
 
@@ -177,7 +169,7 @@ class OrganDetectionTest(unittest.TestCase):
         # ed.show()
 
         # Test requires at least ??% of correct segmentation
-        dice = diceCoeff(test_kidneys, kidneys)
+        dice = compareDice(test_kidneys, kidneys)
         print("getKidneys(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_KIDNEYS_DICE)
 

@@ -16,46 +16,22 @@ import traceback
 import pkg_resources
 import json
 
+import pandas as pd
 import numpy as np
+
+import io3d
+import sed3
 
 sys.path.append("..")
 import bodynavigation.organ_detection
 print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.organ_detection.__file__))
 from bodynavigation.organ_detection import OrganDetection
-
-import io3d
-import sed3
+from bodynavigation.tools import readCompoundMask, NumpyEncoder
+from bodynavigation.metrics import compareVolumes
 
 """
 python batch_organ_detection_analyze_results.py -d -o ./batch_output/ -r ../READY_DIR/
 """
-
-def diceCoeff(vol1, vol2):
-    """ Computes dice coefficient between two binary volumes """
-    if (vol1.dtype != np.bool) or (vol2.dtype != np.bool):
-        raise Exception("vol1 or vol2 is not np.bool dtype!")
-    a = np.sum( vol1[vol2] )
-    b = np.sum( vol1 )
-    c = np.sum( vol2 )
-    return (2*a)/(b+c)
-
-def readCompoundMask(path_list, misc={}):
-    # def missing misc variables
-    misc["flip_z"] = False if ("flip_z" not in misc) else misc["flip_z"]
-
-    # load masks
-    mask, mask_metadata = io3d.datareader.read(path_list[0], dataplus_format=False)
-    mask = mask > 0 # to np.bool
-    for p in path_list[1:]:
-        tmp, _ = io3d.datareader.read(p, dataplus_format=False)
-        tmp = tmp > 0 # to np.bool
-        mask[tmp] = 1
-
-    # do misc
-    if misc["flip_z"]:
-        np.flip(mask, axis=0)
-
-    return mask, mask_metadata
 
 def main():
     logging.basicConfig(stream=sys.stdout)
@@ -70,6 +46,10 @@ def main():
             help='path to output dir')
     parser.add_argument('-r','--readydirs', default=None,
             help='path to dir with dirs with processed data3d.dcm and masks')
+    parser.add_argument('--metrics', default="voe,vd,dice,avgd,rmsd,maxd",
+            help='Metrics to use. default: voe,vd,dice,avgd,rmsd,maxd')
+    parser.add_argument('--masks', default=None,
+            help='Masks to use. Uses all by default.')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -101,7 +81,7 @@ def main():
         datasets.update( json.load(fp, encoding="utf-8") )
 
     # start comparing masks
-    output = {}
+    output = {}; used_masks = []
     for dirname in sorted(next(os.walk(args.readydirs))[1]):
         if dirname not in datasets:
             continue
@@ -111,6 +91,7 @@ def main():
 
         # load organ detection
         obj = OrganDetection.fromDirectory(os.path.join(args.readydirs, dirname))
+        voxelsize_mm = obj.spacing_source
 
         for mask in datasets[dirname]["MASKS"]:
             mask_path_dataset = [ os.path.join(args.datasets, datasets[dirname]["ROOT_PATH"], \
@@ -120,23 +101,65 @@ def main():
             # check if required mask files exist
             if (not np.all([os.path.exists(p) for p in mask_path_dataset+[mask_path_ready,] ])):
                 continue
+            if mask not in used_masks:
+                used_masks.append(mask)
             print("-- comparing mask:", mask)
 
             # read masks
             mask_ready = obj.getPart(mask)
             mask_dataset, _ = readCompoundMask(mask_path_dataset, datasets[dirname]["MISC"])
 
-            # compare and calculate statistics
-            output[dirname][mask] = {}
-            output[dirname][mask]["dice"] = diceCoeff(mask_ready, mask_dataset)
+            # calculate metrics
+            output[dirname][mask] = compareVolumes(mask_dataset, mask_ready, voxelsize_mm)
 
     # save raw output
-    output_path = os.path.join(outputdir, "output.json")
+    output_path = os.path.join(outputdir, "output_raw.json")
     print("Saving output to:", output_path)
     with open(output_path, 'w') as fp:
-        json.dump(output, fp, encoding="utf-8")
+        json.dump(output, fp, encoding="utf-8", sort_keys=True, indent=4, cls=NumpyEncoder)
 
-    # TODO - compute statistics, save tables with pandas...
+    ## Create pandas tables
+    print("Create pandas tables...")
+    used_masks = used_masks if (args.masks is None) else args.masks.strip().lower().split(",")
+    used_metrics = args.metrics.strip().lower().split(",")
+
+    # init columns
+    columns = [("",""),]
+    for mask in used_masks:
+        for met in used_metrics:
+            columns.append((mask,met))
+
+    # init dataframe
+    df = pd.DataFrame([], columns=columns)
+
+    # write lines
+    for dataset in output:
+        line = [dataset,]
+        for mask in used_masks:
+            # add undefined values
+            if mask not in output[dataset]:
+                output[dataset][mask] = {}
+                for met in used_metrics:
+                    output[dataset][mask][met] = None
+            # round number
+            else:
+                for met in used_metrics:
+                    output[dataset][mask][met] = round(output[dataset][mask][met], 3)
+            # add data to line
+            for met in used_metrics:
+                line.append(output[dataset][mask][met])
+        # add line to table
+        tmp = pd.DataFrame([line,], columns=columns)
+        df = df.append(tmp)
+
+    # finish and print table
+    df.columns = pd.MultiIndex.from_tuples(df.columns, names=["",""])
+    df.fillna("-", inplace=True)
+    print(df) # index is ignored when saving with index=False
+
+    # write to csv and tex
+    df.to_csv(os.path.join(outputdir, "output.csv"), encoding='utf-8', index=False)
+    df.to_latex(os.path.join(outputdir, "output.tex"), encoding='utf-8', index=False)
 
 if __name__ == "__main__":
     main()
