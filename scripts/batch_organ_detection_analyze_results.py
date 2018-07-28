@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 import sys, os, argparse
 import traceback
 
+import numpy as np
 import pkg_resources
 import json
-
 import pandas as pd
-import numpy as np
+import re
 
 import io3d
 import sed3
@@ -32,6 +32,13 @@ from bodynavigation.metrics import compareVolumes
 """
 python batch_organ_detection_analyze_results.py -d -o ./batch_output/ -r ../READY_DIR/
 """
+
+
+
+def natural_sort(l):
+    convert = lambda text: int(text) if text.isdigit() else text.lower()
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
+    return sorted(l, key = alphanum_key)
 
 def main():
     logging.basicConfig(stream=sys.stdout)
@@ -133,7 +140,7 @@ def main():
     df = pd.DataFrame([], columns=columns)
 
     # write lines
-    for dataset in output:
+    for dataset in natural_sort(output.keys()):
         line = [dataset,]
         for mask in used_masks:
             # add undefined values
@@ -159,7 +166,12 @@ def main():
 
     # write to csv and tex
     df.to_csv(os.path.join(outputdir, "output.csv"), encoding='utf-8', index=False)
-    df.to_latex(os.path.join(outputdir, "output.tex"), encoding='utf-8', index=False)
+
+    column_format = "|c|"
+    for mask in used_masks:
+        column_format += ("c"*len(used_metrics))+"|"
+    df.to_latex(os.path.join(outputdir, "output.tex"), encoding='utf-8', index=False, \
+        column_format=column_format, multicolumn_format="c|", longtable=True)
 
 if __name__ == "__main__":
     main()
