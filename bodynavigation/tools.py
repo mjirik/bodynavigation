@@ -426,10 +426,21 @@ def firstNonzero(data3d, axis, invalid_val=-1):
     mask = data3d != 0
     return np.where(mask.any(axis=axis), mask.argmax(axis=axis), invalid_val)
 
-def readCompoundMask(path_list, misc={}):
+def useDatasetMod(data3d, misc):
+    """
+    This function should be used to fix loading of files from datasets with wierd format.
+    Example: sliver07 dataset has fliped z-axis
+    """
     # def missing misc variables
     misc["flip_z"] = False if ("flip_z" not in misc) else misc["flip_z"]
 
+    # do misc
+    if misc["flip_z"]:
+        data3d = np.flip(data3d, axis=0)
+
+    return data3d
+
+def readCompoundMask(path_list):
     # load masks
     mask, mask_metadata = io3d.datareader.read(path_list[0], dataplus_format=False)
     mask = mask > 0 # to np.bool
@@ -437,11 +448,6 @@ def readCompoundMask(path_list, misc={}):
         tmp, _ = io3d.datareader.read(p, dataplus_format=False)
         tmp = tmp > 0 # to np.bool
         mask[tmp] = 1
-
-    # do misc
-    if misc["flip_z"]:
-        np.flip(mask, axis=0)
-
     return mask, mask_metadata
 
 def naturalSort(l):

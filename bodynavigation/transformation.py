@@ -124,7 +124,7 @@ class Transformation(TransformationInf):
     DEFAULT_REGISTRATION_TARGET = { # losely based on 3Dircadb1.1
         # this will make all following values in mm; DON'T CHANGE!!
         "spacing":np.asarray([1,1,1], dtype=np.float), # used only in registration
-        "shape":(165,350,400), # used only in registration
+        "shape":(265,350,400), # used only in registration
         "padding":[[0,0],[0,0],[0,0]], # not used in target reg points
         "lungs_end":75,
         "hips_start":190,

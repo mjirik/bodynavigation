@@ -25,7 +25,7 @@ sys.path.append("..")
 import bodynavigation.organ_detection
 print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.organ_detection.__file__))
 from bodynavigation.organ_detection import OrganDetection
-from bodynavigation.tools import readCompoundMask, NumpyEncoder, naturalSort
+from bodynavigation.tools import readCompoundMask, useDatasetMod, NumpyEncoder, naturalSort
 from bodynavigation.metrics import compareVolumes
 
 """
@@ -113,7 +113,8 @@ def main():
 
             # read masks
             mask_ready = obj.getPart(mask)
-            mask_dataset, _ = readCompoundMask(mask_path_dataset, datasets[dirname]["MISC"])
+            mask_dataset, _ = readCompoundMask(mask_path_dataset)
+            mask_dataset = useDatasetMod(mask_dataset, datasets[dirname]["MISC"])
 
             # calculate metrics
             if dirname not in output:
