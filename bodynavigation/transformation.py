@@ -123,14 +123,14 @@ class Transformation(TransformationInf):
     # compare this data with output of OrganDetectionAlgo.dataRegistrationPoints()
     DEFAULT_REGISTRATION_TARGET = { # losely based on 3Dircadb1.1
         # this will make all following values in mm; DON'T CHANGE!!
-        "spacing":np.asarray([1,1,1], dtype=np.float),
-        "shape":(165,250,350),
+        "spacing":np.asarray([1,1,1], dtype=np.float), # used only in registration
+        "shape":(165,350,400), # used only in registration
         "padding":[[0,0],[0,0],[0,0]], # not used in target reg points
         "lungs_end":75,
         "hips_start":190,
         "fatlessbody_height":200,
         "fatlessbody_width":300,
-        "fatlessbody_centroid":(0.5,0.5)
+        "fatlessbody_centroid":(0.5,0.5) # used only in registration
         }
 
     def __init__(self, reg_points_source=None, reg_points_target=None, resize=False, crop=True, \
