@@ -17,18 +17,22 @@ import sed3
 
 from .tools import getDataPadding, cropArray
 
-def compareVOE(vol1, vol2):
+"""
+Big part of this file is refractored lisa.volumetry_evaluation
+"""
+
+def voe(vol1, vol2):
     """ VOE[0;1] - Volume Overlap Error """
     df = vol1 != vol2
     intersection = float(np.sum(df))
     union = float(np.sum(vol1) + np.sum(vol2))
     return (intersection / union)
 
-def compareVD(vol1, vol2):
+def vd(vol1, vol2):
     """ VD[-1;1] - Volume Difference """
     return float(np.sum(vol2) - np.sum(vol1)) / float(np.sum(vol1))
 
-def compareDice(vol1, vol2):
+def dice(vol1, vol2):
     """ Dice[0;1] - Dice coefficient """
     a = np.sum( vol1[vol2] )
     b = np.sum( vol1 )
@@ -45,7 +49,7 @@ def _get_border(vol):
     border = border[1:-1,1:-1,1:-1]
     return border
 
-def compareDistanceMatrics(vol1, vol2, voxelsize_mm):
+def distanceMetrics(vol1, vol2, voxelsize_mm):
     """
     avgd[mm] - Average symmetric surface distance
     rmsd[mm] - RMS symmetric surface distance
@@ -93,10 +97,10 @@ def compareVolumes(vol1, vol2, voxelsize_mm=np.asarray([1,1,1])):
 
     # compute metrics
     evaluation = {}
-    evaluation["vd"] = compareVD(vol1, vol2)
-    evaluation["voe"] = compareVOE(vol1, vol2)
-    evaluation["dice"] = compareDice(vol1, vol2)
-    avgd, rmsd, maxd = compareDistanceMatrics(vol1, vol2, voxelsize_mm)
+    evaluation["vd"] = vd(vol1, vol2)
+    evaluation["voe"] = voe(vol1, vol2)
+    evaluation["dice"] = dice(vol1, vol2)
+    avgd, rmsd, maxd = distanceMetrics(vol1, vol2, voxelsize_mm)
     evaluation["avgd"] = avgd
     evaluation["rmsd"] = rmsd
     evaluation["maxd"] = maxd
