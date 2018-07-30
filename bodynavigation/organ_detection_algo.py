@@ -103,8 +103,6 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(data3d); ed.show()
         return data3d, body
 
-    REGISTRATION_BODYSIZE_ZRANGE = 200 # range where is size of body calculated; lungs_end:lungs_end+THIS; in mm
-
     @classmethod
     def dataRegistrationPoints(cls, spacing, body, fatlessbody, lungs_stats, bones_stats):
         """
@@ -131,29 +129,21 @@ class OrganDetectionAlgo(object):
         else:
             reg_points["hips_start"] = int(np.average([ p[0] for p in bones_stats["hips_start"] ]))
 
-        # precalculate sizes and centroids at lungs_end:lungs_end+REGISTRATION_BODYSIZE_ZRANGE
+        # precalculate sizes and centroids at lungs_end:hips_start
         widths = []; heights = []; centroids = []
-        range_from = reg_points["lungs_end"]
-        range_to = min(int(reg_points["lungs_end"]+(cls.REGISTRATION_BODYSIZE_ZRANGE/spacing[0])), fatlessbody.shape[0])
-        for z in range(range_from, range_to):
+        for z in range(reg_points["lungs_end"], reg_points["hips_start"]):
             if np.sum(fatlessbody[z,:,:]) == 0: continue
             spads = getDataPadding(fatlessbody[z,:,:])
             heights.append( fatlessbody[z,:,:].shape[0]-np.sum(spads[0]) )
             widths.append( fatlessbody[z,:,:].shape[1]-np.sum(spads[1]) )
             centroids.append( scipy.ndimage.measurements.center_of_mass(fatlessbody[z,:,:]) )
 
-        # scaling on x,y axes
-        if len(widths) != 0:
+        # scaling on x,y axes # TODO - maybe save multiple values (at least 3) between lungs_end:hips_start -> warp transform
+        if len(widths) == 0:
+            raise Exception("Could not calculate abdomen sizes! No fatlessbody between lungs_end:hips_start!")
+        else:
             reg_points["fatlessbody_height"] = np.median(heights)
             reg_points["fatlessbody_width"] = np.median(widths)
-        else:
-            logger.warning("Could not detect median body (in abdomen) width and height! Using size of middle slice.")
-            z = int(fatlessbody.shape[0]/2)
-            if np.sum(fatlessbody[z,:,:]) == 0:
-                raise Exception("Failed! Something very wrong must have happened with data!")
-            spads = getDataPadding(fatlessbody[z,:,:])
-            reg_points["fatlessbody_height"] = fatlessbody[z,:,:].shape[0]-np.sum(spads[0])
-            reg_points["fatlessbody_width"] = fatlessbody[z,:,:].shape[1]-np.sum(spads[1])
 
         # relative centroid (to array shape)
         centroids_arr = np.zeros((len(centroids), 2), dtype=np.float)
@@ -821,8 +811,7 @@ class OrganDetectionAlgo(object):
         return out
 
     @classmethod
-    def analyzeBones(cls, data3d, spacing, fatlessbody, bones, lungs_stats): # TODO - clean, add ribs start/end (maybe)
-        """ Returns: {"spine":points_spine, "hips_joints":points_hips_joints, "hips_start":[]} """
+    def analyzeBones(cls, bones, spacing, fatlessbody, lungs_stats): # TODO - clean, add ribs start/end (maybe)
         logger.info("analyzeBones()")
 
         # remove every bone higher then lungs

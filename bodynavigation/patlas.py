@@ -31,10 +31,13 @@ import pkg_resources
 import io3d
 import sed3
 
-# run with: "python -m bodynavigation.patlas -h"
+from .organ_detection import OrganDetection
 from .tools import compressArray, decompressArray, NumpyEncoder, readCompoundMask
 from .transformation import TransformationNone, Transformation
 
+"""
+python -m bodynavigation.patlas -h
+"""
 
 # class ProbabilisticAtlas(object):
 #     pass

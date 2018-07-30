@@ -43,7 +43,7 @@ class OrganDetection(object):
     """
 
     def __init__(self, data3d=None, voxelsize=[1,1,1], low_mem=True, clean_data=True,
-        transformation_mode="spacing", crop_z=False, data_registration=False):
+        transformation_mode="spacing", crop=True):
         """
         * Values of input data should be in HU units (or relatively close). [air -1000, water 0]
             https://en.wikipedia.org/wiki/Hounsfield_scale
@@ -54,9 +54,8 @@ class OrganDetection(object):
         low_mem - tries to lower memory usage by saving data3d and masks to temporary files
             on filesystem. Uses np.memmap which might not work with some functions.
         clean_data - if to run data3d through OrganDetectionAlgo.cleanData()
-        transformation_mode - ["none","spacing","resize"]
-        crop_z - If transformation is alowed to crop z-axis (to only abdomen area)
-        data_registration - forces transformation_mode="resize" and crop_z=True
+        transformation_mode - ["none","spacing","resize","registration"]
+        crop - If transformation is alowed to crop/pad data
         """
 
         # empty undefined values
@@ -89,9 +88,8 @@ class OrganDetection(object):
         if low_mem:
             self.tempdir = tempfile.mkdtemp(prefix="organ_detection_")
 
-        # transformation params
-        transformation_mode = "resize" if data_registration else transformation_mode
-        crop_z = True if data_registration else crop_z
+        # fix transform mode string
+        transformation_mode = transformation_mode.strip().lower()
 
         # init with data3d
         if data3d is not None:
@@ -114,7 +112,7 @@ class OrganDetection(object):
                 # calc registration points
                 logger.info("Preparing for calculation of registration points...")
                 obj = OrganDetection(data3d, voxelsize, low_mem=low_mem, clean_data=False,
-                    transformation_mode="none", crop_z=False, data_registration=False)
+                    transformation_mode="none", crop=False)
                 if body is not None:
                     obj.setPart("body", body, raw=False)
                 obj._preloadParts(["body","fatlessbody",]); obj._preloadStats(["lungs","bones"])
@@ -125,9 +123,11 @@ class OrganDetection(object):
                 # init transformation from registration points
                 logger.info("Init of transformation...")
                 if transformation_mode == "spacing":
-                    self.transformation = Transformation(reg_points, resize=False, crop_z=crop_z)
+                    self.transformation = Transformation(reg_points, resize=False, crop=crop)
                 elif transformation_mode == "resize":
-                    self.transformation = Transformation(reg_points, resize=True, crop_z=crop_z)
+                    self.transformation = Transformation(reg_points, resize=True, crop=crop)
+                elif transformation_mode == "registration":
+                    self.transformation = Transformation(reg_points, registration=True)
                 else:
                     logger.error("Invalid 'transformation_mode'! '%s'" % str(transformation_mode))
                     sys.exit(2)
@@ -403,9 +403,8 @@ class OrganDetection(object):
                     fatlessbody=self.getFatlessBody(raw=True))
             if part == "bones":
                 self._preloadParts(["fatlessbody", "bones"]); self._preloadStats(["lungs",])
-                data = OrganDetectionAlgo.analyzeBones( \
-                data3d=self.data3d, spacing=self.spacing, fatlessbody=self.getFatlessBody(raw=True), \
-                bones=self.getBones(raw=True), lungs_stats=self.analyzeLungs(raw=True) )
+                data = OrganDetectionAlgo.analyzeBones(self.getBones(raw=True), self.spacing, \
+                    fatlessbody=self.getFatlessBody(raw=True), lungs_stats=self.analyzeLungs(raw=True) )
             elif part == "vessels":
                 self._preloadParts(["vessels", "bones"]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.analyzeVessels( \
@@ -550,7 +549,7 @@ if __name__ == "__main__":
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
 
-    # bones_stats = obj.analyzeBones()
+    bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hips_joints = bones_stats["hips_joints"]
     # seeds = np.zeros(bones.shape)
     # for p in points_spine: seeds[p[0], p[1], p[2]] = 1
