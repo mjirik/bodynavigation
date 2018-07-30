@@ -444,6 +444,9 @@ class OrganDetectionAlgo(object):
         bones = binaryClosing(bones, structure=getSphericalMask(5, spacing=spacing))
         bones = binaryFillHoles(bones, z_axis=True)
 
+        # remove anything outside of fatless body
+        bones[fatlessbody == 0] = 0
+
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
         return bones
 
