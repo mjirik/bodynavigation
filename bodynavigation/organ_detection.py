@@ -63,6 +63,7 @@ class OrganDetection(object):
         self.spacing = np.asarray([1,1,1], dtype=np.float) # internal self.data3d spacing
         self.spacing_source = np.asarray([1,1,1], dtype=np.float) # original data3d spacing
         self.transformation = TransformationNone(self.data3d.shape, self.spacing)
+        self.registration_points = None
 
         # compressed masks - example: compression lowered memory usage to 0.042% for bones
         self.masks_comp = {
@@ -116,18 +117,16 @@ class OrganDetection(object):
                 if body is not None:
                     obj.setPart("body", body, raw=False)
                 obj._preloadParts(["body","fatlessbody",]); obj._preloadStats(["lungs","bones"])
-                reg_points = OrganDetectionAlgo.dataRegistrationPoints(obj.spacing, \
-                    obj.getPart("body", raw=True), obj.getPart("fatlessbody", raw=True), \
-                    obj.analyzePart("lungs", raw=True), obj.analyzePart("bones", raw=True))
+                self.registration_points = obj.getRegistrationPoints()
 
                 # init transformation from registration points
                 logger.info("Init of transformation...")
                 if transformation_mode == "spacing":
-                    self.transformation = Transformation(reg_points, resize=False, crop=crop)
+                    self.transformation = Transformation(self.registration_points, resize=False, crop=crop)
                 elif transformation_mode == "resize":
-                    self.transformation = Transformation(reg_points, resize=True, crop=crop)
+                    self.transformation = Transformation(self.registration_points, resize=True, crop=crop)
                 elif transformation_mode == "registration":
-                    self.transformation = Transformation(reg_points, registration=True)
+                    self.transformation = Transformation(self.registration_points, registration=True)
                 else:
                     logger.error("Invalid 'transformation_mode'! '%s'" % str(transformation_mode))
                     sys.exit(2)
@@ -172,6 +171,7 @@ class OrganDetection(object):
         obj = cls()
 
         obj.transformation = Transformation.fromDict(data3d_info["transformation"])
+        obj.registration_points = data3d_info["registration_points"]
         obj.spacing = np.asarray(data3d_info["spacing"], dtype=np.float)
         obj.spacing_source = obj.transformation.getSourceSpacing()
         obj.setData3D(data3d, raw=True)
@@ -238,8 +238,9 @@ class OrganDetection(object):
 
         data3d_info_p = os.path.join(path, "data3d.json")
         data3d_info = {
-            "spacing":copy.deepcopy(self.spacing),
-            "transformation": copy.deepcopy(self.transformation.toDict())
+            "spacing": copy.deepcopy(self.spacing),
+            "transformation": copy.deepcopy(self.transformation.toDict()),
+            "registration_points": copy.deepcopy(self.registration_points)
             }
         with open(data3d_info_p, 'w') as fp:
             json.dump(data3d_info, fp, sort_keys=True, cls=NumpyEncoder)
@@ -385,6 +386,13 @@ class OrganDetection(object):
     ##################
     ### Statistics ###
     ##################
+
+    def getRegistrationPoints(self):
+        if self.registration_points is None:
+            self.registration_points = OrganDetectionAlgo.dataRegistrationPoints(self.spacing, \
+                self.getPart("body", raw=True), self.getPart("fatlessbody", raw=True), \
+                self.analyzePart("lungs", raw=True), self.analyzePart("bones", raw=True))
+        return copy.deepcopy(self.registration_points)
 
     def analyzePart(self, part, raw=False):
         part = part.strip().lower()
@@ -549,7 +557,7 @@ if __name__ == "__main__":
     # ed = sed3.sed3(data3d, contour=lungs); ed.show()
     # ed = sed3.sed3(data3d, contour=bones); ed.show()
 
-    bones_stats = obj.analyzeBones()
+    # bones_stats = obj.analyzeBones()
     # points_spine = bones_stats["spine"];  points_hips_joints = bones_stats["hips_joints"]
     # seeds = np.zeros(bones.shape)
     # for p in points_spine: seeds[p[0], p[1], p[2]] = 1

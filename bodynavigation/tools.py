@@ -426,6 +426,21 @@ def firstNonzero(data3d, axis, invalid_val=-1):
     mask = data3d != 0
     return np.where(mask.any(axis=axis), mask.argmax(axis=axis), invalid_val)
 
+def flip(m, axis): # TODO - replace with np.flip when there are no dependency problems with numpy>=1.12
+    """
+    Copy of numpy.flip, which was added in numpy 1.12.0
+    (Had to create copy of this, because I got problems with dependencies)
+    """
+    if not hasattr(m, 'ndim'):
+        m = np.asarray(m)
+    indexer = [slice(None)] * m.ndim
+    try:
+        indexer[axis] = slice(None, None, -1)
+    except IndexError:
+        raise ValueError("axis=%i is invalid for the %i-dimensional input array"
+                         % (axis, m.ndim))
+    return m[tuple(indexer)]
+
 def useDatasetMod(data3d, misc):
     """
     This function should be used to fix loading of files from datasets with wierd format.
@@ -436,7 +451,7 @@ def useDatasetMod(data3d, misc):
 
     # do misc
     if misc["flip_z"]:
-        data3d = np.flip(data3d, axis=0)
+        data3d = flip(data3d, axis=0)
 
     return data3d
 
