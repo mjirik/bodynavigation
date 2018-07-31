@@ -13,14 +13,10 @@ logger = logging.getLogger(__name__)
 import unittest
 from nose.plugins.attrib import attr
 
-import os
-import os.path as op
-import numpy as np
-import skimage.measure
-
 import io3d
 import io3d.datasets
 from bodynavigation.organ_detection import OrganDetection
+from bodynavigation.tools import readCompoundMask
 import bodynavigation.metrics as metrics
 
 import sed3 # for testing
@@ -60,116 +56,89 @@ class OrganDetectionTest(unittest.TestCase):
 
     def getBody_test(self):
         # get segmented data
-        body = self.obj.getBody()
+        mask = self.obj.getBody()
 
         # get preprocessed test data
-        datap = io3d.read(
+        test_mask, _ = readCompoundMask([
             io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "skin"),
-            # io3d.datasets.join_path("PATIENT_DICOM/MASKS_DICOM/skin"),
-            dataplus_format=True)
-        test_body = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
-
-        # ed = sed3.sed3(test_body.astype(np.uint8), contour=body.astype(np.uint8))
-        # ed.show()
-
-        # There must be only one object (body) in segmented data
-        test_body_label = skimage.measure.label(test_body, background=0)
-        self.assertEqual(np.max(test_body_label), 1)
+            ])
 
         # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_body, body)
+        dice = metrics.dice(test_mask, mask)
         print("getBody(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_BODY_DICE)
 
     def getLungs_test(self):
         # get segmented data
-        lungs = self.obj.getLungs()
+        mask = self.obj.getLungs()
 
         # get preprocessed test data
-        datap1 = io3d.read(
+        test_mask, _ = readCompoundMask([
             io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "leftlung"),
-            dataplus_format=True)
-        datap2 = io3d.read(
             io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "rightlung"),
-            dataplus_format=True)
-        test_lungs = (datap1["data3d"]+datap2["data3d"]) > 0 # reducing value range to <0,1> from <0,255>
-
-        # ed = sed3.sed3(test_lungs.astype(np.uint8), contour=lungs.astype(np.uint8))
-        # ed.show()
+            ])
 
         # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_lungs, lungs)
+        dice = metrics.dice(test_mask, mask)
         print("getLungs(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_LUNGS_DICE)
 
-    def getAorta_test(self):
+    def getBones_test(self):
         # get segmented data
-        aorta = self.obj.getAorta()
+        mask = self.obj.getBones()
 
         # get preprocessed test data
-        datap = io3d.read(io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "artery"), dataplus_format=True)
-        test_aorta = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
-
-        # ed = sed3.sed3(test_aorta.astype(np.uint8), contour=aorta.astype(np.uint8))
-        # ed.show()
+        test_mask, _ = readCompoundMask([
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "bone"),
+            ])
 
         # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_aorta, aorta)
+        dice = metrics.dice(test_mask, mask)
+        print("getBones(), Dice coeff: %s" % str(dice))
+        self.assertGreater(dice, self.GET_BONES_DICE)
+
+    def getAorta_test(self):
+        # get segmented data
+        mask = self.obj.getAorta()
+
+        # get preprocessed test data
+        test_mask, _ = readCompoundMask([
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "artery"),
+            ])
+
+        # Test requires at least ??% of correct segmentation
+        dice = metrics.dice(test_mask, mask)
         print("getAorta(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_AORTA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
 
     def getVenaCava_test(self):
         # get segmented data
-        venacava = self.obj.getVenaCava()
+        mask = self.obj.getVenaCava()
 
         # get preprocessed test data
-        datap = io3d.read(io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "venoussystem"), dataplus_format=True)
-        test_venacava = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
-
-        # ed = sed3.sed3(test_venacava.astype(np.uint8), contour=venacava.astype(np.uint8))
-        # ed.show()
+        test_mask, _ = readCompoundMask([
+            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "venoussystem"),
+            ])
 
         # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_venacava, venacava)
+        dice = metrics.dice(test_mask, mask)
         print("getVenaCava(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_VENACAVA_DICE)
         # TODO - better -> segment smaller connected vessels OR trim test mask
 
-    def getBones_test(self):
-        # get segmented data
-        bones = self.obj.getBones()
-
-        # get preprocessed test data
-        datap = io3d.read(io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "bone"), dataplus_format=True)
-        test_bones = datap["data3d"] > 0 # reducing value range to <0,1> from <0,255>
-
-        # ed = sed3.sed3(test_bones.astype(np.uint8), contour=bones.astype(np.uint8))
-        # ed.show()
-
-        # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_bones, bones)
-        print("getBones(), Dice coeff: %s" % str(dice))
-        self.assertGreater(dice, self.GET_BONES_DICE)
-
     def getKidneys_test(self):
         # get segmented data
-        kidneys = self.obj.getKidneys()
+        mask = self.obj.getKidneys()
 
         # get preprocessed test data
-        datap1 = io3d.read(
+        test_mask, _ = readCompoundMask([
             io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "leftkidney"),
-            dataplus_format=True)
-        datap2 = io3d.read(
             io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "rightkidney"),
-            dataplus_format=True)
-        test_kidneys = (datap1["data3d"]+datap2["data3d"]) > 0 # reducing value range to <0,1> from <0,255>
-
-        # ed = sed3.sed3(test_kidneys.astype(np.uint8), contour=kidneys.astype(np.uint8))
-        # ed.show()
+            ])
 
         # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_kidneys, kidneys)
+        dice = metrics.dice(test_mask, mask)
         print("getKidneys(), Dice coeff: %s" % str(dice))
         self.assertGreater(dice, self.GET_KIDNEYS_DICE)
 
