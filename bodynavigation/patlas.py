@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 import traceback
 
 import sys, os
+import json
+import copy
 
 import numpy as np
 import math
@@ -25,16 +27,13 @@ import skimage.segmentation
 import skimage.feature
 import sklearn.mixture
 
-import json
-import pkg_resources
-import copy
-
 import io3d
 import sed3
 
 from .organ_detection import OrganDetection
 from .tools import compressArray, decompressArray, NumpyEncoder, readCompoundMask, useDatasetMod
 from .transformation import Transformation
+from .files import loadDatasetsInfo
 
 """
 python -m bodynavigation.patlas -h
@@ -272,11 +271,7 @@ if __name__ == "__main__":
 
     # get list of valid datasets and masks
     logger.info("Loading dataset infos")
-    datasets = {}
-    with pkg_resources.resource_stream("bodynavigation.files", "3Dircadb1.json") as fp:
-        datasets.update( json.load(fp, encoding="utf-8") )
-    with pkg_resources.resource_stream("bodynavigation.files", "sliver07.json") as fp:
-        datasets.update( json.load(fp, encoding="utf-8") )
+    datasets = loadDatasetsInfo()
 
     # update paths to full paths
     logger.info("Updating paths to full paths")

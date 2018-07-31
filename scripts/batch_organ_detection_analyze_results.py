@@ -14,7 +14,6 @@ import sys, os, argparse
 import traceback
 
 import numpy as np
-import pkg_resources
 import json
 import pandas as pd
 
@@ -27,6 +26,7 @@ print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.org
 from bodynavigation.organ_detection import OrganDetection
 from bodynavigation.tools import readCompoundMask, useDatasetMod, NumpyEncoder, naturalSort
 from bodynavigation.metrics import compareVolumes
+from bodynavigation.files import loadDatasetsInfo
 
 """
 python batch_organ_detection_analyze_results.py -d -o ./batch_output/ -r ../READY_DIR/
@@ -73,11 +73,7 @@ def main():
     print("readydirs: %s" % args.readydirs)
 
     # get list of valid datasets and masks
-    datasets = {}
-    with pkg_resources.resource_stream("bodynavigation.files", "3Dircadb1.json") as fp:
-        datasets.update( json.load(fp, encoding="utf-8") )
-    with pkg_resources.resource_stream("bodynavigation.files", "sliver07.json") as fp:
-        datasets.update( json.load(fp, encoding="utf-8") )
+    datasets = loadDatasetsInfo()
 
     # start comparing masks
     forced_masks = args.masks.strip().lower().split(",") if (args.masks is not None) else args.masks

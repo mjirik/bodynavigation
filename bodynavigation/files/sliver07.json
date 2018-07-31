@@ -1,5 +1,5 @@
 {
-    "silver07-orig001":{
+    "sliver07-orig001":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig001.mhd",
         "MISC":{ "flip_z":true },
@@ -7,7 +7,7 @@
             "liver":["liver-seg001.mhd"]
         }
     },
-    "silver07-orig002":{
+    "sliver07-orig002":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig002.mhd",
         "MISC":{ "flip_z":true },
@@ -15,7 +15,7 @@
             "liver":["liver-seg002.mhd"]
         }
     },
-    "silver07-orig003":{
+    "sliver07-orig003":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig003.mhd",
         "MISC":{ "flip_z":true },
@@ -23,7 +23,7 @@
             "liver":["liver-seg003.mhd"]
         }
     },
-    "silver07-orig004":{
+    "sliver07-orig004":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig004.mhd",
         "MISC":{ "flip_z":true },
@@ -31,7 +31,7 @@
             "liver":["liver-seg004.mhd"]
         }
     },
-    "silver07-orig006":{
+    "sliver07-orig006":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig006.mhd",
         "MISC":{ "flip_z":true },
@@ -39,7 +39,7 @@
             "liver":["liver-seg006.mhd"]
         }
     },
-    "silver07-orig007":{
+    "sliver07-orig007":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig007.mhd",
         "MISC":{ "flip_z":true },
@@ -47,7 +47,7 @@
             "liver":["liver-seg007.mhd"]
         }
     },
-    "silver07-orig008":{
+    "sliver07-orig008":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig008.mhd",
         "MISC":{ "flip_z":true },
@@ -55,7 +55,7 @@
             "liver":["liver-seg008.mhd"]
         }
     },
-    "silver07-orig009":{
+    "sliver07-orig009":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig009.mhd",
         "MISC":{ "flip_z":true },
@@ -63,7 +63,7 @@
             "liver":["liver-seg009.mhd"]
         }
     },
-    "silver07-orig010":{
+    "sliver07-orig010":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig010.mhd",
         "MISC":{ "flip_z":true },
@@ -71,7 +71,7 @@
             "liver":["liver-seg010.mhd"]
         }
     },
-    "silver07-orig011":{
+    "sliver07-orig011":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig011.mhd",
         "MISC":{ "flip_z":true },
@@ -79,7 +79,7 @@
             "liver":["liver-seg011.mhd"]
         }
     },
-    "silver07-orig012":{
+    "sliver07-orig012":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig012.mhd",
         "MISC":{ "flip_z":true },
@@ -87,7 +87,7 @@
             "liver":["liver-seg012.mhd"]
         }
     },
-    "silver07-orig013":{
+    "sliver07-orig013":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig013.mhd",
         "MISC":{ "flip_z":true },
@@ -95,7 +95,7 @@
             "liver":["liver-seg013.mhd"]
         }
     },
-    "silver07-orig014":{
+    "sliver07-orig014":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig014.mhd",
         "MISC":{ "flip_z":true },
@@ -103,7 +103,7 @@
             "liver":["liver-seg014.mhd"]
         }
     },
-    "silver07-orig015":{
+    "sliver07-orig015":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig015.mhd",
         "MISC":{ "flip_z":true },
@@ -111,7 +111,7 @@
             "liver":["liver-seg015.mhd"]
         }
     },
-    "silver07-orig016":{
+    "sliver07-orig016":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig016.mhd",
         "MISC":{ "flip_z":true },
@@ -119,7 +119,7 @@
             "liver":["liver-seg016.mhd"]
         }
     },
-    "silver07-orig017":{
+    "sliver07-orig017":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig017.mhd",
         "MISC":{ "flip_z":true },
@@ -127,7 +127,7 @@
             "liver":["liver-seg017.mhd"]
         }
     },
-    "silver07-orig018":{
+    "sliver07-orig018":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig018.mhd",
         "MISC":{ "flip_z":true },
@@ -135,7 +135,7 @@
             "liver":["liver-seg018.mhd"]
         }
     },
-    "silver07-orig019":{
+    "sliver07-orig019":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig019.mhd",
         "MISC":{ "flip_z":true },
@@ -143,7 +143,7 @@
             "liver":["liver-seg019.mhd"]
         }
     },
-    "silver07-orig020":{
+    "sliver07-orig020":{
         "ROOT_PATH":"./",
         "CT_DATA_PATH":"liver-orig020.mhd",
         "MISC":{ "flip_z":true },
