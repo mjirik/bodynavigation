@@ -189,12 +189,11 @@ class Transformation(TransformationInf):
         # resize voxels/data
         if resize:
             self.target["spacing"] = reg_points_target["spacing"]
+            self.trans["scale"] = param["reg_scale"]
         else:
             self.target["spacing"] = param["spacing"]
-        self.trans["scale"] = np.asarray(param["spacing"])/np.asarray(self.target["spacing"])
-        self.target["shape"] = np.asarray(np.round(
-            self.trans["cut_shape"]*self.trans["scale"]
-            ), dtype=np.int)
+            self.trans["scale"] = np.asarray([1,1,1], dtype=np.float)
+        self.target["shape"] = np.round(self.trans["cut_shape"]*self.trans["scale"]).astype(np.int)
 
         # for recalculating coordinates to output format ( vec*scale + intercept )
         self.trans["coord_scale"] = np.asarray([
@@ -245,8 +244,9 @@ class Transformation(TransformationInf):
 
 
         ## registration - padding/crop/offset/translation
-        reg_scale = np.asarray(rp_t["spacing"], dtype=np.float)/np.asarray(ret["spacing"], dtype=np.float) # final data scaling
-        reg_shape = np.round(np.asarray(rp_t["shape"], dtype=np.float)*reg_scale).astype(np.int) # required shape before data scale
+        ret["reg_scale"] = np.asarray(ret["spacing"], dtype=np.float)/np.asarray(rp_t["spacing"], dtype=np.float) # final data scaling
+        reg_shape = np.round(np.asarray(rp_t["shape"], dtype=np.float)/ret["reg_scale"]).astype(np.int) # required shape before data scale
+        ret["reg_scale"] = np.asarray(rp_t["shape"], dtype=np.float)/np.asarray(reg_shape, dtype=np.float) # fix scale
 
         # calc required translation
         trans_yx_rel = np.asarray(rp_t["fatlessbody_centroid"])-np.asarray(rp_s["fatlessbody_centroid"])
