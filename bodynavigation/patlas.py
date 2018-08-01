@@ -33,7 +33,7 @@ import sed3
 from .organ_detection import OrganDetection
 from .tools import compressArray, decompressArray, NumpyEncoder, readCompoundMask, useDatasetMod
 from .transformation import Transformation
-from .files import loadDatasetsInfo
+from .files import loadDatasetsInfo, joinDatasetPaths
 
 """
 python -m bodynavigation.patlas -h
@@ -96,7 +96,7 @@ def buildPAtlas(datasets, target_name, readydirs=None, parts=None):
         readydir= os.path.join(readydirs, target_name) if (target_name in readysets) else None )
 
     # process train data
-    Atlas = {}
+    atlas = {}
     for name in datasets:
         logger.debug("Processing dataset: %s" % name)
         s_data3d, s_metadata, s_reg_points = loadDataWithRegPoints( datasets[name], \
@@ -114,30 +114,31 @@ def buildPAtlas(datasets, target_name, readydirs=None, parts=None):
             if parts is not None:
                 if key not in parts:
                     continue
-            if key not in Atlas:
-                Atlas[key] = []
+            if key not in atlas:
+                atlas[key] = []
 
             mask, mask_metadata = readCompoundMask(datasets[name]["MASKS"][key])
             mask = useDatasetMod(mask, datasets[name]["MISC"])
             mask = transform.transData(mask)
 
-            Atlas[key].append({
+            atlas[key].append({
                 "w":w, "MASK_COMP":compressArray(mask)
                 })
+    logger.debug(atlas)
 
     # build patlas
-    PA = {}; PA_info = {"registration_points":t_reg_points}
-    for key in Atlas:
+    PA = {}; PA_info = {"registration_points":t_reg_points, "masks":list(atlas.keys())}
+    for key in atlas:
         logger.info("Building PAtlas for: %s" % key)
         PA[key] = np.zeros(t_data3d.shape, dtype=np.float32)
 
         # calculate raw PA probability
-        for i in range(len(Atlas[key])):
-            mask = decompressArray(Atlas[key][i]["MASK_COMP"])
-            PA[key] += Atlas[key][i]["w"]*mask
+        for i in range(len(atlas[key])):
+            mask = decompressArray(atlas[key][i]["MASK_COMP"])
+            PA[key] += atlas[key][i]["w"]*mask
 
         # normalize PA probability
-        den = np.sum([ Atlas[key][i]["w"] for i in range(len(Atlas[key])) ])
+        den = np.sum([ atlas[key][i]["w"] for i in range(len(atlas[key])) ])
         PA[key] /= den
 
     return PA, PA_info
@@ -251,7 +252,7 @@ if __name__ == "__main__":
             help='path to patlas output dir')
     parser.add_argument('-so','--segmentation_outputdir', default="./PA_segmentation",
             help='path to segmentation output dir')
-    parser.add_argument('--target', default="3Dircadb1.1",
+    parser.add_argument('--target', default="3Dircadb1.19",
             help='registration target')
     parser.add_argument('-r','--readydirs', default=None,
             help='path to dir with dirs with processed data3d and masks')
@@ -276,10 +277,7 @@ if __name__ == "__main__":
     # update paths to full paths
     logger.info("Updating paths to full paths")
     for name in list(datasets.keys()):
-        datasets[name]["ROOT_PATH"] = os.path.join(args.datasets, datasets[name]["ROOT_PATH"])
-        datasets[name]["CT_DATA_PATH"] = os.path.join(datasets[name]["ROOT_PATH"], datasets[name]["CT_DATA_PATH"])
-        for mask in datasets[name]["MASKS"]:
-            datasets[name]["MASKS"][mask] = [ os.path.join(datasets[name]["ROOT_PATH"], pp) for pp in datasets[name]["MASKS"][mask] ]
+        datasets[name] = joinDatasetPaths(datasets[name], args.datasets)
 
     # remove datasets that are missing files
     logger.info("Removing dataset infos of missing datasets")

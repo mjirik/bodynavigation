@@ -102,8 +102,8 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
             if "venacava" not in parts_masks: parts_masks.append("venacava")
 
         COLOR_IDX = {
-            "body":7, "fatlessbody":8, "lungs":9, "abdomen":4, "kidneys":6, "bones":2, \
-            "vessels":5, "aorta":3, "venacava":0
+            "body":7, "fatlessbody":8, "lungs":9, "bones":2, "vessels":5, "aorta":3, "venacava":0, \
+            "kidneys":6, "liver":4, "spleen":1,
             }
         i = 0
         for p in parts:

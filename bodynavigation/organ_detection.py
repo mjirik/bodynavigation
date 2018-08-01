@@ -27,6 +27,7 @@ import sed3
 from .tools import NumpyEncoder, compressArray, decompressArray, toMemMap, delMemMap
 from .organ_detection_algo import OrganDetectionAlgo
 from .transformation import Transformation, TransformationNone
+from .files import getDefaultPAtlas
 
 """
 /usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data_imaging.nci.nih.gov/imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.203506725591245239614099471316
@@ -43,7 +44,7 @@ class OrganDetection(object):
     """
 
     def __init__(self, data3d=None, voxelsize=[1,1,1], low_mem=True, clean_data=True,
-        transformation_mode="spacing", crop=True):
+        transformation_mode="spacing", crop=True, patlas_path=None):
         """
         * Values of input data should be in HU units (or relatively close). [air -1000, water 0]
             https://en.wikipedia.org/wiki/Hounsfield_scale
@@ -63,7 +64,12 @@ class OrganDetection(object):
         self.spacing = np.asarray([1,1,1], dtype=np.float) # internal self.data3d spacing
         self.spacing_source = np.asarray([1,1,1], dtype=np.float) # original data3d spacing
         self.transformation = TransformationNone(self.data3d.shape, self.spacing)
-        self.registration_points = None
+        self.registration_points_source = None # source registration points
+        self.registration_points_target = None # target registration points
+        # empty undefined patlas values
+        self.patlas_path = None
+        self.patlas_info = None
+        self.patlas_transformation = None
 
         # compressed masks - example: compression lowered memory usage to 0.042% for bones
         self.masks_comp = {
@@ -72,11 +78,12 @@ class OrganDetection(object):
             "lungs":None,
             "bones":None,
             # "diaphragm":None,
-            "kidneys":None,
-            # "abdomen":None,
             "vessels":None,
             "aorta":None,
             "venacava":None,
+            "kidneys":None,
+            "liver":None,
+            "spleen":None
             }
 
         # statistics and models
@@ -85,9 +92,8 @@ class OrganDetection(object):
             self.stats[part] = None
 
         # create directory for temporary files
-        self.tempdir = None
-        if low_mem:
-            self.tempdir = tempfile.mkdtemp(prefix="organ_detection_")
+        self.low_mem = low_mem
+        self.tempdir = tempfile.mkdtemp(prefix="organ_detection_")
 
         # fix transform mode string
         transformation_mode = transformation_mode.strip().lower()
@@ -102,7 +108,7 @@ class OrganDetection(object):
                 body = None
 
             # dump/read cleaned data3d from file
-            if self.tempdir is not None:
+            if self.low_mem:
                 data3d = toMemMap(data3d, os.path.join(self.tempdir, "data3d_clean.dat"))
 
             # calculate transformation
@@ -112,21 +118,21 @@ class OrganDetection(object):
             else:
                 # calc registration points
                 logger.info("Preparing for calculation of registration points...")
-                obj = OrganDetection(data3d, voxelsize, low_mem=low_mem, clean_data=False,
+                obj = OrganDetection(data3d, voxelsize, low_mem=self.low_mem, clean_data=False,
                     transformation_mode="none", crop=False)
                 if body is not None:
                     obj.setPart("body", body, raw=False)
                 obj._preloadParts(["body","fatlessbody",]); obj._preloadStats(["lungs","bones"])
-                self.registration_points = obj.getRegistrationPoints()
+                self.registration_points_source = obj.getRegistrationPoints(target=False)
 
                 # init transformation from registration points
                 logger.info("Init of transformation...")
                 if transformation_mode == "spacing":
-                    self.transformation = Transformation(self.registration_points, resize=False, crop=crop)
+                    self.transformation = Transformation(self.registration_points_source, resize=False, crop=crop)
                 elif transformation_mode == "resize":
-                    self.transformation = Transformation(self.registration_points, resize=True, crop=crop)
+                    self.transformation = Transformation(self.registration_points_source, resize=True, crop=crop)
                 elif transformation_mode == "registration":
-                    self.transformation = Transformation(self.registration_points, registration=True)
+                    self.transformation = Transformation(self.registration_points_source, registration=True)
                 else:
                     logger.error("Invalid 'transformation_mode'! '%s'" % str(transformation_mode))
                     sys.exit(2)
@@ -143,7 +149,7 @@ class OrganDetection(object):
                 del(obj, body)
 
             # remove dumped cleaned data3d
-            if self.tempdir is not None:
+            if self.low_mem:
                 delMemMap(data3d)
 
             # remember spacing
@@ -151,6 +157,10 @@ class OrganDetection(object):
             self.spacing_source = self.transformation.getSourceSpacing()
 
             #ed = sed3.sed3(self.data3d); ed.show()
+
+            # load patlas
+            if patlas_path is not None:
+                self.loadPAtlas(patlas_path)
 
     def __del__(self):
         """ Decontructor """
@@ -162,16 +172,16 @@ class OrganDetection(object):
             import shutil
 
         # remove tempdir
-        if self.tempdir is not None:
-            shutil.rmtree(self.tempdir)
+        shutil.rmtree(self.tempdir)
 
     @classmethod
-    def fromReadyData(cls, data3d, data3d_info, masks={}, stats={}):
+    def fromReadyData(cls, data3d, data3d_info, masks={}, stats={}): # TODO - save and load custom patlas path
         """ For super fast testing """
         obj = cls()
 
         obj.transformation = Transformation.fromDict(data3d_info["transformation"])
-        obj.registration_points = data3d_info["registration_points"]
+        obj.registration_points_source = data3d_info["registration_points_source"]
+        obj.registration_points_target = data3d_info["registration_points_target"]
         obj.spacing = np.asarray(data3d_info["spacing"], dtype=np.float)
         obj.spacing_source = obj.transformation.getSourceSpacing()
         obj.setData3D(data3d, raw=True)
@@ -240,7 +250,8 @@ class OrganDetection(object):
         data3d_info = {
             "spacing": copy.deepcopy(self.spacing),
             "transformation": copy.deepcopy(self.transformation.toDict()),
-            "registration_points": copy.deepcopy(self.registration_points)
+            "registration_points_source": copy.deepcopy(self.registration_points_source),
+            "registration_points_target": copy.deepcopy(self.registration_points_target)
             }
         with open(data3d_info_p, 'w') as fp:
             json.dump(data3d_info, fp, sort_keys=True, cls=NumpyEncoder)
@@ -272,7 +283,7 @@ class OrganDetection(object):
         if not raw:
             data3d = self.transformation.transData(data3d, cval=-1024)
 
-        if self.tempdir is not None:
+        if self.low_mem:
             self.data3d = toMemMap(data3d, os.path.join(self.tempdir, "data3d.dat"))
         else:
             self.data3d = data3d
@@ -286,7 +297,7 @@ class OrganDetection(object):
 
         if part not in self.masks_comp:
             logger.error("Invalid bodypart '%s'! Returning empty mask!" % part)
-            data = np.zeros(self.data3d.shape)
+            data = np.zeros(self.data3d.shape).astype(np.bool)
 
         elif self.masks_comp[part] is not None:
             data = decompressArray(self.masks_comp[part])
@@ -307,14 +318,6 @@ class OrganDetection(object):
             # elif part == "diaphragm":
             #     self._preloadParts(["lungs",])
             #     data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
-            elif part == "kidneys":
-                self._preloadParts(["fatlessbody",]); self._preloadStats(["lungs",])
-                data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
-                    self.analyzeLungs(raw=True) )
-            # elif part == "abdomen":
-            #     self._preloadParts(["fatlessbody","diaphragm"]); self._preloadStats(["bones",])
-            #     data = OrganDetectionAlgo.getAbdomen(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
-            #         self.getDiaphragm(raw=True), self.analyzeBones(raw=True))
             elif part == "vessels":
                 self._preloadParts(["bones",]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.getVessels(self.data3d, self.spacing, \
@@ -327,6 +330,18 @@ class OrganDetection(object):
                 self._preloadParts(["vessels",]); self._preloadStats(["vessels",])
                 data = OrganDetectionAlgo.getVenaCava(self.data3d, self.spacing, self.getVessels(raw=True), \
                     self.analyzeVessels(raw=True) )
+            elif part == "kidneys": # TODO - use patlas
+                self._preloadParts(["fatlessbody",]); self._preloadStats(["lungs",])
+                data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
+                    self.analyzeLungs(raw=True) )
+            elif part == "liver": # TODO - create algorithm
+                self._preloadParts([]); self._preloadStats([])
+                logger.warning("getLiver() PROPER SEGMENTATION NOT IMPLEMENTED!")
+                data = self.getPartPAtlas("liver", raw=True) > 0.5
+            elif part == "spleen": # TODO - create algorithm
+                self._preloadParts([]); self._preloadStats([])
+                logger.warning("getSpleen() PROPER SEGMENTATION NOT IMPLEMENTED!")
+                data = self.getPartPAtlas("spleen", raw=True) > 0.5
 
             self.masks_comp[part] = compressArray(data)
 
@@ -368,12 +383,6 @@ class OrganDetection(object):
     # def getDiaphragm(self, raw=False):
     #     return self.getPart("diaphragm", raw=raw)
 
-    def getKidneys(self, raw=False):
-        return self.getPart("kidneys", raw=raw)
-
-    # def getAbdomen(self, raw=False):
-    #     return self.getPart("abdomen", raw=raw)
-
     def getVessels(self, raw=False):
         return self.getPart("vessels", raw=raw)
 
@@ -383,16 +392,91 @@ class OrganDetection(object):
     def getVenaCava(self, raw=False):
         return self.getPart("venacava", raw=raw)
 
+    def getKidneys(self, raw=False):
+        return self.getPart("kidneys", raw=raw)
+
+    def getLiver(self, raw=False):
+        return self.getPart("liver", raw=raw)
+
+    def getSpleen(self, raw=False):
+        return self.getPart("spleen", raw=raw)
+
+    ##############
+    ### PAtlas ###
+    ##############
+
+    def loadPAtlas(self, path=None):
+        # load default patlas
+        if path is None:
+            logger.info("Using default PAtlas")
+            path = os.path.join(self.tempdir, "patlas/")
+            if not os.path.exists(path):
+                os.makedirs(path)
+            getDefaultPAtlas(path)
+
+        # save path
+        self.patlas_path = path
+
+        # load patlas info
+        with open(os.path.join(path, "PA_info.json"), 'r') as fp:
+            self.patlas_info = json.load(fp, encoding="utf-8")
+
+        # init patlas transformation
+        target_reg_points = self.getRegistrationPoints(target=True)
+        patlas_reg_points = self.patlas_info["registration_points"]
+        self.patlas_transformation = Transformation(patlas_reg_points, target_reg_points, registration=True)
+
+    def getPartPAtlas(self, part, raw=False):
+        if self.patlas_path is None:
+            logger.warning("PAtlas was not loaded!")
+            self.loadPAtlas()
+
+        fpath = os.path.join(self.patlas_path, str("%s.dcm" % part))
+        if not os.path.exists(fpath):
+            logger.warning("Not found PAtlas mask path: %s" % fpath)
+            data = np.zeros(self.data3d.shape, dtype=np.float)
+        else:
+            data, _ = io3d.datareader.read(fpath, dataplus_format=False)
+            data = data.astype(np.float32)/self.patlas_info["data_multiplication"] # convert back to percantage
+            data = self.patlas_transformation.transData(data, cval=0)
+
+        if not raw:
+            data = self.transformation.transDataInv(data, cval=0)
+        return data
+
+    ########################
+    ### Distance to Part ###
+    ########################
+
+    def distToPart(self, part, raw=False):
+        data = scipy.ndimage.morphology.distance_transform_edt(
+            self.getPart(part, raw=False) == 0, sampling=self.spacing
+            )
+        if not raw:
+            data = self.transformation.transDataInv(data, cval=0)
+        return data
+
     ##################
     ### Statistics ###
     ##################
 
-    def getRegistrationPoints(self):
-        if self.registration_points is None:
-            self.registration_points = OrganDetectionAlgo.dataRegistrationPoints(self.spacing, \
-                self.getPart("body", raw=True), self.getPart("fatlessbody", raw=True), \
-                self.analyzePart("lungs", raw=True), self.analyzePart("bones", raw=True))
-        return copy.deepcopy(self.registration_points)
+    def getRegistrationPoints(self, target=False):
+        if target is False and self.registration_points_source is not None:
+            return self.registration_points_source
+        elif target is True and self.registration_points_target is not None:
+            return self.registration_points_target
+
+        spacing = self.spacing if target else self.spacing_source
+        reg_points = OrganDetectionAlgo.dataRegistrationPoints(spacing, \
+                self.getPart("body", raw=target), self.getPart("fatlessbody", raw=target), \
+                self.analyzePart("lungs", raw=target), self.analyzePart("bones", raw=target))
+
+        if target is False and self.registration_points_source is None:
+            self.registration_points_source = reg_points
+        elif target is True and self.registration_points_target is None:
+            self.registration_points_target = reg_points
+
+        return reg_points
 
     def analyzePart(self, part, raw=False):
         part = part.strip().lower()

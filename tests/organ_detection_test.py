@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 import unittest
+from nose.tools import nottest
 from nose.plugins.attrib import attr
 
 import io3d
@@ -18,11 +19,13 @@ import io3d.datasets
 from bodynavigation.organ_detection import OrganDetection
 from bodynavigation.tools import readCompoundMask
 import bodynavigation.metrics as metrics
+from bodynavigation.files import loadDatasetsInfo, joinDatasetPaths
 
 import sed3 # for testing
 
 # http://www.ircad.fr/softwares/3Dircadb/3Dircadb1/3Dircadb1.1.zip
-TEST_DATA_DIR = "3Dircadb1.1"
+ROOT_PATH = io3d.datasets.dataset_path()
+DATASET_NAME = "3Dircadb1.1"
 
 class OrganDetectionTest(unittest.TestCase):
     """
@@ -35,111 +38,60 @@ class OrganDetectionTest(unittest.TestCase):
     """
 
     # Minimal dice coefficients
-    GET_BODY_DICE = 0.95
-    GET_LUNGS_DICE = 0.95
-    GET_BONES_DICE =  0.75 # test data don't have segmented whole bones, missing center volumes
-    GET_KIDNEYS_DICE = 0.75
-    GET_AORTA_DICE = 0.25 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
-    GET_VENACAVA_DICE = 0.25 # TODO - used test data has smaller vessels connected to aorta => that's why the big error margin
-
+    DICE = {
+        "body": 0.95,
+        "lungs": 0.95,
+        "bones": 0.75, # test data don't have segmented whole bones, missing center volumes
+        "vessels": 0.50, # TODO - used test data has smaller vessels connected to aorta/venacava => that's why the big error margin
+        "kidneys": 0.75,
+        "liver": 0.75,
+        "spleen": 0.75
+    }
 
     @classmethod
     def setUpClass(cls):
-        datap = io3d.read(
-            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
-            dataplus_format=True)
+        # init dataset information
+        cls.dataset = loadDatasetsInfo()[DATASET_NAME]
+        cls.dataset = joinDatasetPaths(cls.dataset, ROOT_PATH)
+
+        # init OrganDetection object
+        datap = io3d.read(cls.dataset["CT_DATA_PATH"], dataplus_format=True)
         cls.obj = OrganDetection(datap["data3d"], datap["voxelsize_mm"])
 
     @classmethod
     def tearDownClass(cls):
         cls.obj = None
 
-    def getBody_test(self):
+    @nottest
+    def _genericMaskTest(self, part):
         # get segmented data
-        mask = self.obj.getBody()
-
+        mask = self.obj.getPart(part)
         # get preprocessed test data
-        test_mask, _ = readCompoundMask([
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "skin"),
-            ])
-
+        test_mask, _ = readCompoundMask(self.dataset["MASKS"][part])
         # Test requires at least ??% of correct segmentation
         dice = metrics.dice(test_mask, mask)
-        print("getBody(), Dice coeff: %s" % str(dice))
-        self.assertGreater(dice, self.GET_BODY_DICE)
+        print("%s, dice coeff: %s" % (part, str(dice)))
+        self.assertGreater(dice, self.DICE[part])
+
+    def getBody_test(self):
+        self._genericMaskTest("body")
 
     def getLungs_test(self):
-        # get segmented data
-        mask = self.obj.getLungs()
-
-        # get preprocessed test data
-        test_mask, _ = readCompoundMask([
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "leftlung"),
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "rightlung"),
-            ])
-
-        # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_mask, mask)
-        print("getLungs(), Dice coeff: %s" % str(dice))
-        self.assertGreater(dice, self.GET_LUNGS_DICE)
+        self._genericMaskTest("lungs")
 
     def getBones_test(self):
-        # get segmented data
-        mask = self.obj.getBones()
+        self._genericMaskTest("bones")
 
-        # get preprocessed test data
-        test_mask, _ = readCompoundMask([
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "bone"),
-            ])
-
-        # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_mask, mask)
-        print("getBones(), Dice coeff: %s" % str(dice))
-        self.assertGreater(dice, self.GET_BONES_DICE)
-
-    def getAorta_test(self):
-        # get segmented data
-        mask = self.obj.getAorta()
-
-        # get preprocessed test data
-        test_mask, _ = readCompoundMask([
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "artery"),
-            ])
-
-        # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_mask, mask)
-        print("getAorta(), Dice coeff: %s" % str(dice))
-        self.assertGreater(dice, self.GET_AORTA_DICE)
-        # TODO - better -> segment smaller connected vessels OR trim test mask
-
-    def getVenaCava_test(self):
-        # get segmented data
-        mask = self.obj.getVenaCava()
-
-        # get preprocessed test data
-        test_mask, _ = readCompoundMask([
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "venoussystem"),
-            ])
-
-        # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_mask, mask)
-        print("getVenaCava(), Dice coeff: %s" % str(dice))
-        self.assertGreater(dice, self.GET_VENACAVA_DICE)
-        # TODO - better -> segment smaller connected vessels OR trim test mask
+    def getVessels_test(self):
+        self._genericMaskTest("vessels")
 
     def getKidneys_test(self):
-        # get segmented data
-        mask = self.obj.getKidneys()
+        self._genericMaskTest("kidneys")
 
-        # get preprocessed test data
-        test_mask, _ = readCompoundMask([
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "leftkidney"),
-            io3d.datasets.join_path(TEST_DATA_DIR, "MASKS_DICOM", "rightkidney"),
-            ])
+    def getLiver_test(self):
+        self._genericMaskTest("liver")
 
-        # Test requires at least ??% of correct segmentation
-        dice = metrics.dice(test_mask, mask)
-        print("getKidneys(), Dice coeff: %s" % str(dice))
-        self.assertGreater(dice, self.GET_KIDNEYS_DICE)
+    def getSpleen_test(self):
+        self._genericMaskTest("spleen")
 
 

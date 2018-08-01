@@ -26,7 +26,7 @@ print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.org
 from bodynavigation.organ_detection import OrganDetection
 from bodynavigation.tools import readCompoundMask, useDatasetMod, NumpyEncoder, naturalSort
 from bodynavigation.metrics import compareVolumes
-from bodynavigation.files import loadDatasetsInfo
+from bodynavigation.files import loadDatasetsInfo, joinDatasetPaths
 
 """
 python batch_organ_detection_analyze_results.py -d -o ./batch_output/ -r ../READY_DIR/
@@ -74,6 +74,8 @@ def main():
 
     # get list of valid datasets and masks
     datasets = loadDatasetsInfo()
+    for name in datasets:
+        datasets[name] = joinDatasetPaths(datasets[name], args.datasets)
 
     # start comparing masks
     forced_masks = args.masks.strip().lower().split(",") if (args.masks is not None) else args.masks
@@ -91,8 +93,7 @@ def main():
                     continue
 
             # create paths to masks
-            mask_path_dataset = [ os.path.join(args.datasets, datasets[dirname]["ROOT_PATH"], \
-                part) for part in datasets[dirname]["MASKS"][mask] ]
+            mask_path_dataset = datasets[dirname]["MASKS"][mask]
             mask_path_ready = os.path.join(args.readydirs, dirname, str("%s.dcm" % mask))
 
             # check if required mask files exist
