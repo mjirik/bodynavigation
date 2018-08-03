@@ -31,8 +31,9 @@ from .trainer3d import Trainer3D
 from .files import getDefaultPAtlas, getDefaultClassifier
 
 """
-/usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data_imaging.nci.nih.gov/imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.203506725591245239614099471316
-/usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data_3Dircadb1/3Dircadb1.1
+Directly point to folder with patient ct data: (Must be in folder!)
+/usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data/3Dircadb1.1
+/usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data/sliver07-orig001
 """
 
 class OrganDetection(object):
@@ -336,31 +337,18 @@ class OrganDetection(object):
                 self._preloadParts(["vessels",]); self._preloadStats(["vessels",])
                 data = OrganDetectionAlgo.getVenaCava(self.data3d, self.spacing, self.getVessels(raw=True), \
                     self.analyzeVessels(raw=True) )
-            elif part == "kidneys": # TODO - use patlas
+            elif part == "kidneys":
                 self._preloadParts(["fatlessbody",]); self._preloadStats(["lungs",])
                 data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.analyzeLungs(raw=True) )
-            elif part == "liver": # TODO - create algorithm
-                self._preloadParts([]); self._preloadStats([])
-                logger.warning("getLiver() PROPER SEGMENTATION NOT IMPLEMENTED!")
-
-                # get output of classifier
-                ol = self.getClassifier(part)
-                fv_kwargs = {}
-                fv_kwargs["data3d"] = self.data3d
-                fv_kwargs["patlas"] = self.getPartPAtlas(part, raw=True)
-                #fv_kwargs["dist_fatlessbody_surface"] = self.distToPartSurface("fatlessbody", raw=True)
-                #fv_kwargs["dist_diaphragm"] = self.distToPart("diaphragm", raw=True)
-                data = ol.predict(self.data3d.shape, **fv_kwargs)
-
-                # cleaning
-                # data[ self.getFatlessBody(raw=True) == 0 ] = 0
-                # binary openning
-
-            elif part == "spleen": # TODO - create algorithm
-                self._preloadParts([]); self._preloadStats([])
-                logger.warning("getSpleen() PROPER SEGMENTATION NOT IMPLEMENTED!")
-                data = self.getPartPAtlas("spleen", raw=True) > 0.5
+            elif part == "liver":
+                self._preloadParts(["fatlessbody",])
+                data = OrganDetectionAlgo.getLiver(self.getClassifierOutput(part, raw=True), \
+                    self.spacing, self.getFatlessBody(raw=True))
+            elif part == "spleen":
+                self._preloadParts(["fatlessbody",])
+                data = OrganDetectionAlgo.getSpleen(self.getClassifierOutput(part, raw=True), \
+                    self.spacing, self.getFatlessBody(raw=True))
 
             self.masks_comp[part] = compressArray(data)
 
@@ -495,6 +483,19 @@ class OrganDetection(object):
             logger.warning("Not found Classifier for part: %s" % part)
 
         return self.classifier[part]
+
+    def getClassifierOutput(self, part, raw=False):
+        ol = self.getClassifier(part)
+        fv_kwargs = {}
+        fv_kwargs["data3d"] = self.data3d
+        fv_kwargs["patlas"] = self.getPartPAtlas(part, raw=True)
+        #fv_kwargs["dist_fatlessbody_surface"] = self.distToPartSurface("fatlessbody", raw=True)
+        #fv_kwargs["dist_diaphragm"] = self.distToPart("diaphragm", raw=True)
+        data = ol.predict(self.data3d.shape, **fv_kwargs)
+
+        if not raw:
+            data = self.transformation.transDataInv(data, cval=0)
+        return data
 
     ########################
     ### Distance to Part ###

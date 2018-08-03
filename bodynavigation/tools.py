@@ -481,3 +481,22 @@ def naturalSort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
     alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
     return sorted(l, key = alphanum_key)
+
+def getBiggestObjects(mask, N=1):
+    # get labels and counts of objects
+    mask_label = skimage.measure.label(mask, background=0)
+    unique, counts = np.unique(mask_label, return_counts=True)
+    unique = list(unique[1:]); counts = list(counts[1:])
+
+    # get labels of biggest objects
+    biggest_labels = []
+    for n in range(N):
+        biggest_idx = list(counts).index(max(counts))
+        biggest_labels.append(unique[biggest_idx])
+        del(unique[biggest_idx], counts[biggest_idx])
+
+    # return only biggest N objects
+    mask[:] = 0
+    for l in biggest_labels:
+        mask[mask_label==l] = 1
+    return mask

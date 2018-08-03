@@ -27,7 +27,7 @@ import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import getSphericalMask, getDiskMask, binaryClosing, binaryFillHoles, getDataPadding, \
-    cropArray, padArray, polyfit3D, growRegion, regionGrowing, getDataFractions
+    cropArray, padArray, polyfit3D, growRegion, regionGrowing, getDataFractions, getBiggestObjects
 
 class OrganDetectionAlgo(object):
     """
@@ -180,10 +180,7 @@ class OrganDetectionAlgo(object):
         body = scipy.ndimage.morphology.binary_opening(body, structure=getSphericalMask(5, spacing=spacing))
 
         # leave only biggest object in data
-        body_label = skimage.measure.label(body, background=0)
-        unique, counts = np.unique(body_label, return_counts=True)
-        unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
-        body = body_label == unique[list(counts).index(max(counts))]
+        body = getBiggestObjects(body, N=1)
 
         # filling nose/mouth openings + connected cavities
         # - fills holes separately on every slice along z axis (only part of mouth and nose should have cavity left)
@@ -709,7 +706,7 @@ class OrganDetectionAlgo(object):
     KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
 
     @classmethod
-    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats): # TODO - fix this; dont segment bones
+    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats): # TODO - fix this; dont segment bones # TODO - use patlas, classifier
         """ between 150 and 300, cant go lower then 150 """
         logger.info("getKidneys()")
         spacing_vol = spacing[0]*spacing[1]*spacing[2]
@@ -755,6 +752,40 @@ class OrganDetectionAlgo(object):
         kidneys[lungs_end:,:,:] = kidneys_s
 
         return kidneys
+
+    LIVER_BINARY_OPENING = 20
+
+    @classmethod
+    def getLiver(cls, cls_output, spacing, fatlessbody):
+        # output of classifier
+        data = cls_output
+        # cleaning
+        data[ fatlessbody == 0 ] = 0
+        # binary opening, but return 1 only if there was 1 in orginal data
+        data = data & scipy.ndimage.morphology.binary_opening(data, \
+            structure=getSphericalMask(cls.LIVER_BINARY_OPENING, spacing=spacing))
+        # return only biggest object
+        data = getBiggestObjects(data, 1)
+        # TODO - binary closing
+
+        return data
+
+    SPLEEN_BINARY_OPENING = 10
+
+    @classmethod
+    def getSpleen(cls, cls_output, spacing, fatlessbody):
+        # output of classifier
+        data = cls_output
+        # cleaning
+        data[ fatlessbody == 0 ] = 0
+        # binary opening, but return 1 only if there was 1 in orginal data
+        data = data & scipy.ndimage.morphology.binary_opening(data, \
+            structure=getSphericalMask(cls.SPLEEN_BINARY_OPENING, spacing=spacing))
+        # return only biggest object
+        data = getBiggestObjects(data, 1)
+        # TODO - binary closing
+
+        return data
 
     ##################
     ### Statistics ###
