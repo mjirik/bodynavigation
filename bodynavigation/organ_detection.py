@@ -27,7 +27,8 @@ import sed3
 from .tools import NumpyEncoder, compressArray, decompressArray, toMemMap, delMemMap
 from .organ_detection_algo import OrganDetectionAlgo
 from .transformation import Transformation, TransformationNone
-from .files import getDefaultPAtlas
+from .trainer3d import Trainer3D
+from .files import getDefaultPAtlas, getDefaultClassifier
 
 """
 /usr/bin/time -v python -m bodynavigation.organ_detection -d -i ./test_data_imaging.nci.nih.gov/imaging.nci.nih.gov_NSCLC-Radiogenomics-Demo_1.3.6.1.4.1.14519.5.2.1.4334.1501.203506725591245239614099471316
@@ -44,7 +45,7 @@ class OrganDetection(object):
     """
 
     def __init__(self, data3d=None, voxelsize=[1,1,1], low_mem=True, clean_data=True,
-        transformation_mode="spacing", crop=True, patlas_path=None):
+        transformation_mode="spacing", crop=True, patlas_path=None, classifier_path=None):
         """
         * Values of input data should be in HU units (or relatively close). [air -1000, water 0]
             https://en.wikipedia.org/wiki/Hounsfield_scale
@@ -70,6 +71,9 @@ class OrganDetection(object):
         self.patlas_path = None
         self.patlas_info = None
         self.patlas_transformation = None
+        # empty undefined classifier values
+        self.classifier_path = None
+        self.classifier = {} # keys are masks and values are Trainer3D
 
         # compressed masks - example: compression lowered memory usage to 0.042% for bones
         self.masks_comp = {
@@ -158,9 +162,11 @@ class OrganDetection(object):
 
             #ed = sed3.sed3(self.data3d); ed.show()
 
-            # load patlas
+            # load patlas and classifier
             if patlas_path is not None:
                 self.loadPAtlas(patlas_path)
+            if classifier_path is not None:
+                self.loadClassifier(classifier_path)
 
     def __del__(self):
         """ Decontructor """
@@ -175,7 +181,7 @@ class OrganDetection(object):
         shutil.rmtree(self.tempdir)
 
     @classmethod
-    def fromReadyData(cls, data3d, data3d_info, masks={}, stats={}): # TODO - save and load custom patlas path
+    def fromReadyData(cls, data3d, data3d_info, masks={}, stats={}): # TODO - save and load custom patlas and classifier path
         """ For super fast testing """
         obj = cls()
 
@@ -337,7 +343,15 @@ class OrganDetection(object):
             elif part == "liver": # TODO - create algorithm
                 self._preloadParts([]); self._preloadStats([])
                 logger.warning("getLiver() PROPER SEGMENTATION NOT IMPLEMENTED!")
-                data = self.getPartPAtlas("liver", raw=True) > 0.5
+
+                ol = self.getClassifier(part)
+                patlas = self.getPartPAtlas(part, raw=True)
+                data = ol.predict(self.data3d.shape, data3d=self.data3d, patlas=patlas)
+
+                # cleaning
+                # data[ self.getFatlessBody(raw=True) ] = 0
+                # data[ self.getLungs(raw=True) ] = 0
+
             elif part == "spleen": # TODO - create algorithm
                 self._preloadParts([]); self._preloadStats([])
                 logger.warning("getSpleen() PROPER SEGMENTATION NOT IMPLEMENTED!")
@@ -401,9 +415,9 @@ class OrganDetection(object):
     def getSpleen(self, raw=False):
         return self.getPart("spleen", raw=raw)
 
-    ##############
-    ### PAtlas ###
-    ##############
+    #############################
+    ### PAtlas and Classifier ###
+    #############################
 
     def loadPAtlas(self, path=None):
         # load default patlas
@@ -444,6 +458,41 @@ class OrganDetection(object):
             data = self.transformation.transDataInv(data, cval=0)
         return data
 
+    def loadClassifier(self, path=None):
+        # load default classifier
+        if path is None:
+            logger.info("Using default Classifier")
+            path = os.path.join(self.tempdir, "classifier/")
+            if not os.path.exists(path):
+                os.makedirs(path)
+            getDefaultClassifier(path)
+
+        # save path
+        self.classifier_path = path
+
+        # get list of availible classifiers
+        part_classifiers = []
+        for fname in [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]:
+            fpath = os.path.join(path, fname)
+            name, ext = os.path.splitext(fname)
+            if ext == ".pickle":
+                part_classifiers.append(name)
+
+        # load classifier for parts
+        for part in part_classifiers:
+            fpath = os.path.join(self.classifier_path, str("%s.pickle" % part))
+            self.classifier[part] = Trainer3D.fromFile(fpath)
+
+    def getClassifier(self, part):
+        if self.classifier_path is None:
+            logger.warning("Classifier was not loaded!")
+            self.loadClassifier()
+
+        if part not in self.classifier:
+            logger.warning("Not found Classifier for part: %s" % part)
+
+        return self.classifier[part]
+
     ########################
     ### Distance to Part ###
     ########################
@@ -451,6 +500,15 @@ class OrganDetection(object):
     def distToPart(self, part, raw=False):
         data = scipy.ndimage.morphology.distance_transform_edt(
             self.getPart(part, raw=False) == 0, sampling=self.spacing
+            )
+        if not raw:
+            data = self.transformation.transDataInv(data, cval=0)
+        return data
+
+    def distToPartSurface(self, part, raw=False):
+        """ From inside of part to part surface or beyond """
+        data = scipy.ndimage.morphology.distance_transform_edt(
+            self.getPart(part, raw=False), sampling=self.spacing
             )
         if not raw:
             data = self.transformation.transDataInv(data, cval=0)
@@ -569,6 +627,10 @@ if __name__ == "__main__":
             help='draw image in solid depth mode.')
     parser.add_argument("--show", default=None,
             help='Show one specific segmented part with sed3 viewer. example: "bones"')
+    parser.add_argument("--patlas", default=None,
+            help='Path to custom patlas')
+    parser.add_argument("--classifier", default=None,
+            help='Path to custom classifier')
     parser.add_argument("-d", "--debug", action="store_true",
             help='run in debug mode')
     args = parser.parse_args()
@@ -594,7 +656,13 @@ if __name__ == "__main__":
     else: # readydir
         obj = OrganDetection.fromDirectory(os.path.abspath(args.readydir))
         voxelsize = obj.spacing_source
-    data3d = obj.getData3D() # display results on processed data3d
+    # always display results on processed data3d
+    data3d = obj.getData3D()
+    # load custom patlas and classifier
+    if args.patlas is not None:
+        obj.loadPAtlas(args.patlas)
+    if args.classifier is not None:
+        obj.loadClassifier(args.classifier)
 
     if args.dump is not None:
         for part in obj.masks_comp:

@@ -387,6 +387,18 @@ def delMemMap(data3d):
     del(data3d)
     os.remove(filename)
 
+def concatenateMemMap(A, B):
+    """
+    concatenate memmap along axis=0
+    A - must be np.memmap
+    B - must be same dtype as A, but does not need to be memmap
+    """
+    old_shape = tuple(A.shape)
+    new_shape = tuple([A.shape[0]+B.shape[0],]+list(A.shape)[1:])
+    A = np.memmap(A.filename, dtype=A.dtype, mode='r+', shape=new_shape, order='C')
+    A[old_shape[0]:,:] = B
+    return A
+
 ###################
 # Misc
 ###################
