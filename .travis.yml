@@ -1,6 +1,12 @@
 language: python
 #virtualenv:
 #    system_site_packages: false
+
+# run in virtualization environment with high memory (7.5 GB)
+# https://docs.travis-ci.com/user/reference/overview/#virtualization-environments
+sudo: required
+dist: trusty
+
 env:
     - CONDA_PYTHON_VERSION=2.7
     - CONDA_PYTHON_VERSION=3.6

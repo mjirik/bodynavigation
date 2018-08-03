@@ -323,8 +323,9 @@ class OrganDetection(object):
                 data = OrganDetectionAlgo.getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getLungs(raw=True), self.analyzeLungs(raw=True) )
             elif part == "diaphragm":
-                self._preloadParts(["lungs",])
-                data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
+                self._preloadParts(["lungs","body"])
+                data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True), \
+                    self.getBody(raw=True))
             elif part == "vessels":
                 self._preloadParts(["bones",]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.getVessels(self.data3d, self.spacing, \
@@ -342,13 +343,13 @@ class OrganDetection(object):
                 data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.analyzeLungs(raw=True) )
             elif part == "liver":
-                self._preloadParts(["fatlessbody",])
-                data = OrganDetectionAlgo.getLiver(self.getClassifierOutput(part, raw=True), \
-                    self.spacing, self.getFatlessBody(raw=True))
+                self._preloadParts(["fatlessbody","diaphragm"])
+                data = OrganDetectionAlgo.getLiver(self.data3d, self.spacing, \
+                    self.getClassifierOutput(part, raw=True), self.getFatlessBody(raw=True), self.getDiaphragm(raw=True))
             elif part == "spleen":
-                self._preloadParts(["fatlessbody",])
-                data = OrganDetectionAlgo.getSpleen(self.getClassifierOutput(part, raw=True), \
-                    self.spacing, self.getFatlessBody(raw=True))
+                self._preloadParts(["fatlessbody","diaphragm"])
+                data = OrganDetectionAlgo.getLiver(self.data3d, self.spacing, \
+                    self.getClassifierOutput(part, raw=True), self.getFatlessBody(raw=True), self.getDiaphragm(raw=True))
 
             self.masks_comp[part] = compressArray(data)
 

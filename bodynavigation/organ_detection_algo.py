@@ -451,13 +451,14 @@ class OrganDetectionAlgo(object):
     DIAPHRAGM_MAX_LUNGS_END_DIST = 100 # mm
 
     @classmethod
-    def getDiaphragm(cls, data3d, spacing, lungs):
+    def getDiaphragm(cls, data3d, spacing, lungs, body):
         """ Returns interpolated shape of Thoracic diaphragm (continues outsize of body) """
         logger.info("getDiaphragm()")
         if np.sum(lungs) == 0:
             logger.warning("Couldn't find proper diaphragm, because we dont have lungs! Using a fake one that's in diaphragm[0,:,:].")
             diaphragm = np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
             diaphragm[0,:,:] = 1
+            diaphragm[body == 0] = 0
             return diaphragm
 
         # get edges of lungs on z axis
@@ -498,16 +499,18 @@ class OrganDetectionAlgo(object):
         for y in range(diaphragm.shape[1]):
             for x in range(diaphragm.shape[2]):
                 z = int(heightmap[y,x])
-                diaphragm[z,y,x] = 1
+                diaphragm[:min(z+1, diaphragm.shape[0]),y,x] = 1
 
         # make sure that diaphragm is lower then lungs volume
-        diaphragm[ lungs == 1 ] = 1
+        diaphragm[ lungs ] = 1
         for y in range(diaphragm.shape[1]):
             for x in range(diaphragm.shape[2]):
                 tmp = diaphragm[:,y,x][::-1]
                 z = len(tmp) - np.argmax(tmp) - 1
-                diaphragm[:,y,x] = 0
-                diaphragm[z,y,x] = 1
+                diaphragm[:min(z+1, diaphragm.shape[0]),y,x] = 1
+
+        # remove any data outside of body
+        diaphragm[body == 0] = 0
 
         #ed = sed3.sed3(data3d, seeds=diaphragm); ed.show()
         return diaphragm
@@ -753,37 +756,39 @@ class OrganDetectionAlgo(object):
 
         return kidneys
 
+    ################################################################################################
+
     LIVER_BINARY_OPENING = 20
 
     @classmethod
-    def getLiver(cls, cls_output, spacing, fatlessbody):
+    def getLiver(cls, data3d, spacing, cls_output, fatlessbody, diaphragm):
         # output of classifier
         data = cls_output
         # cleaning
         data[ fatlessbody == 0 ] = 0
+        data[ diaphragm ] = 0
         # binary opening, but return 1 only if there was 1 in orginal data
         data = data & scipy.ndimage.morphology.binary_opening(data, \
             structure=getSphericalMask(cls.LIVER_BINARY_OPENING, spacing=spacing))
         # return only biggest object
         data = getBiggestObjects(data, 1)
-        # TODO - binary closing
 
         return data
 
     SPLEEN_BINARY_OPENING = 10
 
     @classmethod
-    def getSpleen(cls, cls_output, spacing, fatlessbody):
+    def getSpleen(cls, data3d, spacing, cls_output, fatlessbody, diaphragm):
         # output of classifier
         data = cls_output
         # cleaning
         data[ fatlessbody == 0 ] = 0
+        data[ diaphragm ] = 0
         # binary opening, but return 1 only if there was 1 in orginal data
         data = data & scipy.ndimage.morphology.binary_opening(data, \
             structure=getSphericalMask(cls.SPLEEN_BINARY_OPENING, spacing=spacing))
         # return only biggest object
         data = getBiggestObjects(data, 1)
-        # TODO - binary closing
 
         return data
 
