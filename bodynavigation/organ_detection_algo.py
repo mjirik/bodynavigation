@@ -451,7 +451,7 @@ class OrganDetectionAlgo(object):
     DIAPHRAGM_MAX_LUNGS_END_DIST = 100 # mm
 
     @classmethod
-    def getDiaphragm(cls, data3d, spacing, lungs, body):
+    def getDiaphragm(cls, data3d, spacing, lungs, body): # TODO - improve
         """ Returns interpolated shape of Thoracic diaphragm (continues outsize of body) """
         logger.info("getDiaphragm()")
         if np.sum(lungs) == 0:

@@ -483,6 +483,9 @@ def naturalSort(l):
     return sorted(l, key = alphanum_key)
 
 def getBiggestObjects(mask, N=1):
+    if np.sum(mask) == 0:
+        return mask
+
     # get labels and counts of objects
     mask_label = skimage.measure.label(mask, background=0)
     unique, counts = np.unique(mask_label, return_counts=True)

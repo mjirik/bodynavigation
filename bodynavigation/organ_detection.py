@@ -492,7 +492,7 @@ class OrganDetection(object):
         fv_kwargs["patlas"] = self.getPartPAtlas(part, raw=True)
         #fv_kwargs["dist_fatlessbody_surface"] = self.distToPartSurface("fatlessbody", raw=True)
         #fv_kwargs["dist_diaphragm"] = self.distToPart("diaphragm", raw=True)
-        data = ol.predict(self.data3d.shape, **fv_kwargs)
+        data = ol.predict(self.data3d.shape, **fv_kwargs) != 0
 
         if not raw:
             data = self.transformation.transDataInv(data, cval=0)

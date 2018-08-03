@@ -9,7 +9,6 @@ from builtins import range              # replaces range with xrange
 
 import logging
 logger = logging.getLogger(__name__)
-logging.getLogger("io3d").setLevel(logging.WARNING)
 
 import unittest
 from nose.tools import nottest
@@ -51,6 +50,9 @@ class OrganDetectionTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # hide io3d logger
+        logging.getLogger("io3d").setLevel(logging.WARNING)
+
         # init dataset information
         cls.dataset = loadDatasetsInfo()[DATASET_NAME]
         cls.dataset = joinDatasetPaths(cls.dataset, ROOT_PATH)
