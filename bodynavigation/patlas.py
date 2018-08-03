@@ -186,6 +186,7 @@ if __name__ == "__main__":
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    logging.getLogger("io3d").setLevel(logging.WARNING)
     print("datasets: ", args.datasets)
     print("outputdir:", args.outputdir)
     print("target:", args.target)

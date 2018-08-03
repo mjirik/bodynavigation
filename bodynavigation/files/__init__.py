@@ -30,7 +30,7 @@ def joinDatasetPaths(dataset, root_path=""):
         dataset["MASKS"][mask] = [ os.path.join(root_path, pp) for pp in dataset["MASKS"][mask] ]
     return dataset
 
-def addDatasetRegPoints(datasets, readydirs=None):
+def addDatasetRegPoints(datasets, readydirs=None): # TODO - do I need this anywhere but patlas???
     # imports must be here to prevent possible cyclic imports of OrganDetection
     import io3d
     from ..organ_detection import OrganDetection

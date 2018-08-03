@@ -13,17 +13,18 @@ import traceback
 
 import sys, os
 import tempfile, shutil
+import json, copy
 import dill as pickle
 
 import numpy as np
 import sklearn
 import sklearn.mixture
 
-from .tools import toMemMap, concatenateMemMap
+from .tools import toMemMap, concatenateMemMap, NumpyEncoder
 
 class GMMCl(object):
     """
-    Modified imtools.ml.gmmcl
+    Improved version of imtools.ml.gmmcl
 
     Requires: sklearn>=0.18.0
     """
@@ -32,10 +33,49 @@ class GMMCl(object):
         self.clspars = clspars
         self.cls = {}
 
+    def toDict(self):
+        out = {
+            "NAME": "GMMCl",
+            "clspars": self.clspars,
+            "cls": {}
+            }
+        for key in self.cls:
+            key_str = str(key)
+            out["cls"][key_str] = {"LABEL":int(key), }
+            # save to trained variables
+            out["cls"][key_str]["weights_"] = self.cls[key].weights_
+            out["cls"][key_str]["means_"] = self.cls[key].means_
+            out["cls"][key_str]["covariances_"] = self.cls[key].covariances_
+            out["cls"][key_str]["precisions_"] = self.cls[key].precisions_
+            out["cls"][key_str]["precisions_cholesky_"] = self.cls[key].precisions_cholesky_
+            out["cls"][key_str]["converged_"] = self.cls[key].converged_
+            out["cls"][key_str]["n_iter_"] = self.cls[key].n_iter_
+            out["cls"][key_str]["lower_bound_"] = self.cls[key].lower_bound_
+        return out
+
+    @classmethod
+    def fromDict(cls, data):
+        obj = cls()
+        obj.clspars = data["clspars"]
+        for key in data["cls"]:
+            cls_key = data["cls"][key]["LABEL"]
+            obj.cls[cls_key] = sklearn.mixture.GaussianMixture(**obj.clspars)
+            obj.cls[cls_key].fit(np.random.rand(10, 2))  # Now it thinks it is trained
+            # update to trained variables
+            obj.cls[cls_key].weights_ = np.asarray(data["cls"][key]["weights_"])
+            obj.cls[cls_key].means_ = np.asarray(data["cls"][key]["means_"])
+            obj.cls[cls_key].covariances_ = np.asarray(data["cls"][key]["covariances_"])
+            obj.cls[cls_key].precisions_ = np.asarray(data["cls"][key]["precisions_"])
+            obj.cls[cls_key].precisions_cholesky_ = np.asarray(data["cls"][key]["precisions_cholesky_"])
+            obj.cls[cls_key].converged_ = data["cls"][key]["converged_"]
+            obj.cls[cls_key].n_iter_ = data["cls"][key]["n_iter_"]
+            obj.cls[cls_key].lower_bound_ = data["cls"][key]["lower_bound_"]
+        return obj
+
     def fit(self, data, target):
         """
         data.dtype = any
-        target.dtype = bool OR int
+        target.dtype = any int
         """
         un = np.unique(target)
         for label in un:
@@ -76,7 +116,7 @@ class Trainer3D():
     If feature_function() needs resized data (to same shape), do that before using this class.
     """
 
-    def __init__(self, feature_function=None, train_nth=50, memmap=True): # TODO - test how much does memmap lower MEM usage
+    def __init__(self, feature_function=None, train_nth=50, memmap=True): # TODO - test if memmap lowers MEM usage when using self.fit()
         """
         feature_function = feature_function(**fv_kwargs)
             - should return numpy vector for every voxel in data3d
@@ -116,16 +156,16 @@ class Trainer3D():
         if self.tempdir is not None:
             shutil.rmtree(self.tempdir)
 
-    def save(self, file_path="trainer3d.pickle"):
-        sv = { "cl": self.cl, }
-        with open(file_path, "wb") as fp:
-            pickle.dump(sv, fp) # TODO - is this safe?
+    def save(self, file_path="trainer3d.json"):
+        sv = copy.deepcopy({ "cl": self.cl.toDict(), })
+        with open(file_path, 'w') as fp:
+            json.dump(sv, fp, encoding="utf-8", cls=NumpyEncoder)
 
-    def load(self, file_path="trainer3d.pickle"):
+    def load(self, file_path="trainer3d.json"):
         """ Load pretrained Classifier """
-        with open(file_path, "rb") as fp:
-            sv = pickle.load(fp)
-        self.cl = sv["cl"]
+        with open(file_path, 'r') as fp:
+            data = json.load(fp, encoding="utf-8")
+        self.cl = GMMCl.fromDict(data["cl"])
 
     @classmethod
     def fromFile(cls, file_path):
@@ -141,12 +181,14 @@ class Trainer3D():
     def defaultFeatureFunction(**kwargs):
         """ Default feature_function """
         fv_list = []
+        # dicts dont have any specific order, so this is very important
+        kwargs_keys = sorted(list(kwargs.keys()))
 
-        if "data3d" in kwargs: # intensity model
+        if "data3d" in kwargs_keys: # intensity model
             fv_list.append( kwargs["data3d"].reshape(-1, 1) )
-        if "patlas" in kwargs: # patlas
+        if "patlas" in kwargs_keys: # patlas
             fv_list.append( kwargs["patlas"].reshape(-1, 1) )
-        for key in kwargs: # distances to parts
+        for key in kwargs_keys: # distances to parts
             if key.startswith("dist_"):
                 fv_list.append( kwargs[key].reshape(-1, 1) )
 
@@ -162,7 +204,7 @@ class Trainer3D():
 
         # use only fraction of data to save on memory
         data = fv[::self.train_nth]
-        output = np.reshape(output, [-1, 1])[::self.train_nth]
+        output = np.reshape(output, [-1, 1])[::self.train_nth].astype(np.int8)
 
         # save train data
         if self.train_data is None:
@@ -213,7 +255,8 @@ if __name__ == "__main__":
     import io3d
     import sed3
 
-    from .files import loadDatasetsInfo, joinDatasetPaths, addDatasetRegPoints, getDefaultPAtlas
+    from .organ_detection import OrganDetection
+    from .files import loadDatasetsInfo, joinDatasetPaths, getDefaultPAtlas
     from .tools import readCompoundMask, useDatasetMod
     from .transformation import Transformation
     from .patlas import loadPAtlas
@@ -240,6 +283,7 @@ if __name__ == "__main__":
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    logging.getLogger("io3d").setLevel(logging.WARNING)
     print("datasets: ", args.datasets)
     print("patlas:", args.patlas)
     print("outputdir:", args.outputdir)
@@ -265,11 +309,16 @@ if __name__ == "__main__":
     if not os.path.exists(args.outputdir):
         os.makedirs(args.outputdir)
 
-    # update datasets infos with registration points
-    logger.info("update datasets infos with registration points")
-    datasets = addDatasetRegPoints(datasets, args.readydirs)
+    # get list of ready dirs
+    logger.info("get list of ready dirs")
+    readysets = []
+    if args.readydirs is not None:
+        for dirname in next(os.walk(args.readydirs))[1]:
+            if dirname in datasets:
+                readysets.append(dirname)
 
-    # patlas
+    # load patlas
+    logger.info("load patlas")
     patlas_path = args.patlas
     if patlas_path is None:
         patlas_path = tempfile.mkdtemp(prefix="trainer3d_patlas_")
@@ -292,24 +341,48 @@ if __name__ == "__main__":
         for name in datasets:
             if part not in datasets[name]["MASKS"]:
                 continue
+            fv_kwargs = {}
+
+            # load OrganDetection
+            readydir = os.path.join(args.readydirs, name) if (name in readysets) else None
+            if readydir is not None:
+                obj = OrganDetection.fromDirectory(readydir)
+                data3d = None
+            else:
+                data3d, metadata = io3d.datareader.read(datasets[name]["CT_DATA_PATH"], dataplus_format=False)
+                data3d = useDatasetMod(data3d, datasets[name]["MISC"])
+                obj = OrganDetection(data3d, metadata["voxelsize_mm"])
+
+            # add reg points to dataset info
+            if "REG_POINTS" not in datasets[name]:
+                datasets[name]["REG_POINTS"] = obj.getRegistrationPoints()
+
+            # some values from OrganDetection segmentation
+            # fv_kwargs["dist_fatlessbody_surface"] = obj.distToPartSurface("fatlessbody")
+            # fv_kwargs["dist_diaphragm"] = obj.distToPart("diaphragm")
+
+            # del organ detection to free some MEM
+            del(obj)
+
+            # data3d
+            if data3d is None:
+                data3d, _ = io3d.datareader.read(datasets[name]["CT_DATA_PATH"], dataplus_format=False)
+                data3d = useDatasetMod(data3d, datasets[name]["MISC"])
+            data3d = scipy.ndimage.filters.median_filter(data3d, 3) # remove noise
+            fv_kwargs["data3d"] = data3d
+
+            # patlas
+            transform = Transformation(PA_info["registration_points"], \
+                datasets[name]["REG_POINTS"], registration=True)
+            fv_kwargs["patlas"] = transform.transData(PA[part])
+            #ed = sed3.sed3(fv_kwargs["patlas"]); ed.show()
 
             # classification target
             mask, _ = readCompoundMask(datasets[name]["MASKS"][part])
             mask = useDatasetMod(mask, datasets[name]["MISC"])
 
-            # data3d
-            data3d, _ = io3d.datareader.read(datasets[name]["CT_DATA_PATH"], dataplus_format=False)
-            data3d = useDatasetMod(data3d, datasets[name]["MISC"])
-            data3d = scipy.ndimage.filters.median_filter(data3d, 3) # remove noise
-
-            # patlas
-            transform = Transformation(PA_info["registration_points"], \
-                datasets[name]["REG_POINTS"], registration=True)
-            patlas = transform.transData(PA[part])
-            #ed = sed3.sed3(patlas); ed.show()
-
             # add train data to classifier
-            ol.addTrainData(mask, data3d=data3d, patlas=patlas)
+            ol.addTrainData(mask, **fv_kwargs)
             data_i += 1
 
         # test if we added any data at all
@@ -319,25 +392,5 @@ if __name__ == "__main__":
 
         # train and save classifier
         ol.fit()
-        ol.save(os.path.join(args.outputdir, str("%s.pickle" % part)))
+        ol.save(os.path.join(args.outputdir, str("%s.json" % part)))
         del(ol)
-
-
-# TODO - remove
-# def localization_fv_navigation_intensity(data3d, voxelsize_mm):
-#         fv = []
-#         f0 = scipy.ndimage.filters.gaussian_filter(data3d, sigma=3).reshape(-1, 1)
-#         import bodynavigation as bn
-#         ss = bn.BodyNavigation(data3d, voxelsize_mm)
-#         fd1 = ss.dist_to_lungs().reshape(-1, 1)
-#         fd2 = ss.dist_to_spine().reshape(-1, 1)
-#         fd3 = ss.dist_sagittal().reshape(-1, 1)
-#         fd4 = ss.dist_coronal().reshape(-1, 1)
-#         fd5 = ss.dist_axial().reshape(-1, 1)
-#         fd6 = ss.dist_to_surface().reshape(-1, 1)
-#         fd7 = ss.dist_diaphragm().reshape(-1, 1)
-#         fv = np.concatenate([
-#                 f0,
-#                 fd1, fd2, fd3, fd4, fd5, fd6, fd7,
-#             ], 1)
-#         return fv

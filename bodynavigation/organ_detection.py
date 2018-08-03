@@ -81,7 +81,7 @@ class OrganDetection(object):
             "fatlessbody":None,
             "lungs":None,
             "bones":None,
-            # "diaphragm":None,
+            "diaphragm":None,
             "vessels":None,
             "aorta":None,
             "venacava":None,
@@ -321,9 +321,9 @@ class OrganDetection(object):
                 self._preloadParts(["fatlessbody","lungs"]); self._preloadStats(["lungs",])
                 data = OrganDetectionAlgo.getBones(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
                     self.getLungs(raw=True), self.analyzeLungs(raw=True) )
-            # elif part == "diaphragm":
-            #     self._preloadParts(["lungs",])
-            #     data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
+            elif part == "diaphragm":
+                self._preloadParts(["lungs",])
+                data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True))
             elif part == "vessels":
                 self._preloadParts(["bones",]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.getVessels(self.data3d, self.spacing, \
@@ -344,13 +344,18 @@ class OrganDetection(object):
                 self._preloadParts([]); self._preloadStats([])
                 logger.warning("getLiver() PROPER SEGMENTATION NOT IMPLEMENTED!")
 
+                # get output of classifier
                 ol = self.getClassifier(part)
-                patlas = self.getPartPAtlas(part, raw=True)
-                data = ol.predict(self.data3d.shape, data3d=self.data3d, patlas=patlas)
+                fv_kwargs = {}
+                fv_kwargs["data3d"] = self.data3d
+                fv_kwargs["patlas"] = self.getPartPAtlas(part, raw=True)
+                #fv_kwargs["dist_fatlessbody_surface"] = self.distToPartSurface("fatlessbody", raw=True)
+                #fv_kwargs["dist_diaphragm"] = self.distToPart("diaphragm", raw=True)
+                data = ol.predict(self.data3d.shape, **fv_kwargs)
 
                 # cleaning
-                # data[ self.getFatlessBody(raw=True) ] = 0
-                # data[ self.getLungs(raw=True) ] = 0
+                # data[ self.getFatlessBody(raw=True) == 0 ] = 0
+                # binary openning
 
             elif part == "spleen": # TODO - create algorithm
                 self._preloadParts([]); self._preloadStats([])
@@ -394,8 +399,8 @@ class OrganDetection(object):
     def getBones(self, raw=False):
         return self.getPart("bones", raw=raw)
 
-    # def getDiaphragm(self, raw=False):
-    #     return self.getPart("diaphragm", raw=raw)
+    def getDiaphragm(self, raw=False):
+        return self.getPart("diaphragm", raw=raw)
 
     def getVessels(self, raw=False):
         return self.getPart("vessels", raw=raw)
@@ -442,7 +447,6 @@ class OrganDetection(object):
 
     def getPartPAtlas(self, part, raw=False):
         if self.patlas_path is None:
-            logger.warning("PAtlas was not loaded!")
             self.loadPAtlas()
 
         fpath = os.path.join(self.patlas_path, str("%s.dcm" % part))
@@ -475,17 +479,16 @@ class OrganDetection(object):
         for fname in [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]:
             fpath = os.path.join(path, fname)
             name, ext = os.path.splitext(fname)
-            if ext == ".pickle":
+            if ext == ".json":
                 part_classifiers.append(name)
 
         # load classifier for parts
         for part in part_classifiers:
-            fpath = os.path.join(self.classifier_path, str("%s.pickle" % part))
+            fpath = os.path.join(self.classifier_path, str("%s.json" % part))
             self.classifier[part] = Trainer3D.fromFile(fpath)
 
     def getClassifier(self, part):
         if self.classifier_path is None:
-            logger.warning("Classifier was not loaded!")
             self.loadClassifier()
 
         if part not in self.classifier:
@@ -497,21 +500,36 @@ class OrganDetection(object):
     ### Distance to Part ###
     ########################
 
+    def _distToMask(self, mask, spacing):
+        return scipy.ndimage.morphology.distance_transform_edt(mask == 0, sampling=spacing)
+
+    def _distToMaskSurface(self, mask, spacing):
+        """
+        From inside of part to part surface or beyond.
+        If object is touching border, that part is not counted as surface
+        """
+        return scipy.ndimage.morphology.distance_transform_edt(mask, sampling=spacing)
+
+    def _distToMaskFull(self, mask, spacing):
+        """ Distances under part surface are negative """
+        data = self._distToMask(mask, spacing)
+        data[data==0] = (self._distToMaskSurface(mask, spacing)*(-1))[data==0]
+        return data
+
     def distToPart(self, part, raw=False):
-        data = scipy.ndimage.morphology.distance_transform_edt(
-            self.getPart(part, raw=False) == 0, sampling=self.spacing
-            )
-        if not raw:
-            data = self.transformation.transDataInv(data, cval=0)
+        spacing = self.spacing if (raw is False) else self.spacing_source
+        data = self._distToMask(self.getPart(part, raw=raw), spacing)
         return data
 
     def distToPartSurface(self, part, raw=False):
-        """ From inside of part to part surface or beyond """
-        data = scipy.ndimage.morphology.distance_transform_edt(
-            self.getPart(part, raw=False), sampling=self.spacing
-            )
-        if not raw:
-            data = self.transformation.transDataInv(data, cval=0)
+        spacing = self.spacing if (raw is False) else self.spacing_source
+        data = self._distToMaskSurface(self.getPart(part, raw=raw), spacing)
+        return data
+
+    def distToPartFull(self, part, raw=False):
+        """ Distances under part surface are negative """
+        spacing = self.spacing if (raw is False) else self.spacing_source
+        data = self._distToMaskFull(self.getPart(part, raw=raw), spacing)
         return data
 
     ##################
@@ -637,6 +655,7 @@ if __name__ == "__main__":
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    logging.getLogger("io3d").setLevel(logging.WARNING)
 
     if (args.datadir is None) and (args.readydir is None):
         logger.error("Missing data directory path --datadir or --readydir")

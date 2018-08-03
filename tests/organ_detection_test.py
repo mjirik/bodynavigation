@@ -9,6 +9,7 @@ from builtins import range              # replaces range with xrange
 
 import logging
 logger = logging.getLogger(__name__)
+logging.getLogger("io3d").setLevel(logging.WARNING)
 
 import unittest
 from nose.tools import nottest

@@ -450,134 +450,72 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(data3d, contour=bones); ed.show()
         return bones
 
-    ################################################################################################
-
-    # @classmethod
-    # def getDiaphragm(cls, data3d, spacing, lungs):
-    #     """ Returns interpolated shape of Thoracic diaphragm (continues outsize of body) """
-    #     logger.info("getDiaphragm()")
-    #     diaphragm = scipy.ndimage.filters.sobel(lungs.astype(np.int16), axis=0) < -10
-
-    #     # create diaphragm heightmap
-    #     heightmap = np.zeros((diaphragm.shape[1], diaphragm.shape[2]), dtype=np.float)
-    #     lungs_stop = lungs.shape[0]-getDataPadding(lungs)[0][1]
-    #     diaphragm_start = max(0, lungs_stop - int(100/spacing[0]))
-    #     for y in range(diaphragm.shape[1]):
-    #         for x in range(diaphragm.shape[2]):
-    #             if np.sum(diaphragm[:,y,x]) == 0:
-    #                 heightmap[y,x] = np.nan
-    #             else:
-    #                 tmp = diaphragm[:,y,x][::-1]
-    #                 z = len(tmp) - np.argmax(tmp) - 1
-    #                 if z < diaphragm_start:
-    #                     # make sure that diaphragm is not higher then lowest lungs point -100mm
-    #                     heightmap[y,x] = np.nan
-    #                 else:
-    #                     heightmap[y,x] = z
-
-    #     # interpolate missing values
-    #     height_median = np.nanmedian(heightmap)
-    #     x = np.arange(0, heightmap.shape[1])
-    #     y = np.arange(0, heightmap.shape[0])
-    #     heightmap = np.ma.masked_invalid(heightmap)
-    #     xx, yy = np.meshgrid(x, y)
-    #     x1 = xx[~heightmap.mask]
-    #     y1 = yy[~heightmap.mask]
-    #     newarr = heightmap[~heightmap.mask]
-    #     heightmap = scipy.interpolate.griddata((x1, y1), newarr.ravel(), (xx, yy), \
-    #         method='linear', fill_value=height_median)
-    #     #ed = sed3.sed3(np.expand_dims(heightmap, axis=0)); ed.show()
-
-    #     # 2D heightmap -> 3D diaphragm
-    #     diaphragm = np.zeros(diaphragm.shape, dtype=np.bool).astype(np.bool)
-    #     for y in range(diaphragm.shape[1]):
-    #         for x in range(diaphragm.shape[2]):
-    #             z = int(heightmap[y,x])
-    #             diaphragm[z,y,x] = 1
-
-    #     # make sure that diaphragm is lower then lungs volume
-    #     diaphragm[ lungs == 1 ] = 1
-    #     for y in range(diaphragm.shape[1]):
-    #         for x in range(diaphragm.shape[2]):
-    #             tmp = diaphragm[:,y,x][::-1]
-    #             z = len(tmp) - np.argmax(tmp) - 1
-    #             diaphragm[:,y,x] = 0
-    #             diaphragm[z,y,x] = 1
-
-    #     #ed = sed3.sed3(data3d, seeds=diaphragm); ed.show()
-    #     return diaphragm
-
-    KIDNEYS_THRESHOLD_1 = 180 #150 # 180
-    KIDNEYS_THRESHOLD_2 = 180 #250 # 180
-    KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
+    DIAPHRAGM_SOBEL_THRESHOLD = -10
+    DIAPHRAGM_MAX_LUNGS_END_DIST = 100 # mm
 
     @classmethod
-    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats): # TODO - fix this; dont segment bones
-        """ between 150 and 300, cant go lower then 150 """
-        logger.info("getKidneys()")
-        spacing_vol = spacing[0]*spacing[1]*spacing[2]
+    def getDiaphragm(cls, data3d, spacing, lungs):
+        """ Returns interpolated shape of Thoracic diaphragm (continues outsize of body) """
+        logger.info("getDiaphragm()")
+        if np.sum(lungs) == 0:
+            logger.warning("Couldn't find proper diaphragm, because we dont have lungs! Using a fake one that's in diaphragm[0,:,:].")
+            diaphragm = np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
+            diaphragm[0,:,:] = 1
+            return diaphragm
 
-        # work only on data under lungs -5cm
-        lungs_end = lungs_stats["end"]
-        lungs_end = int(max(0, lungs_end-(50/spacing[0])))
-        orig_shape = tuple(data3d.shape)
-        data3d = data3d[lungs_end:,:,:]; fatlessbody = fatlessbody[lungs_end:,:,:]
+        # get edges of lungs on z axis
+        diaphragm = scipy.ndimage.filters.sobel(lungs.astype(np.int16), axis=0) < cls.DIAPHRAGM_SOBEL_THRESHOLD
 
-        #threshold tisue (without ribs)
-        fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing) # for ignoring ribs
-        kidneys = (fatless_dst > 15) & (data3d > cls.KIDNEYS_THRESHOLD_1); del(fatless_dst) # includes bones
-        kidneys = binaryClosing(kidneys, structure=getSphericalMask(5, spacing=spacing))
-        kidneys = binaryFillHoles(kidneys, z_axis=True)
-        #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
+        # create diaphragm heightmap
+        heightmap = np.zeros((diaphragm.shape[1], diaphragm.shape[2]), dtype=np.float)
+        lungs_stop = lungs.shape[0]-getDataPadding(lungs)[0][1]
+        diaphragm_start = max(0, lungs_stop - int(cls.DIAPHRAGM_MAX_LUNGS_END_DIST/spacing[0]))
+        for y in range(diaphragm.shape[1]):
+            for x in range(diaphragm.shape[2]):
+                if np.sum(diaphragm[:,y,x]) == 0:
+                    heightmap[y,x] = np.nan
+                else:
+                    tmp = diaphragm[:,y,x][::-1]
+                    z = len(tmp) - np.argmax(tmp) - 1
+                    if z < diaphragm_start:
+                        # make sure that diaphragm is not higher then lowest lungs point -100mm
+                        heightmap[y,x] = np.nan
+                    else:
+                        heightmap[y,x] = z
 
-        ###
+        # interpolate missing values
+        height_median = np.nanmedian(heightmap)
+        x = np.arange(0, heightmap.shape[1])
+        y = np.arange(0, heightmap.shape[0])
+        heightmap = np.ma.masked_invalid(heightmap)
+        xx, yy = np.meshgrid(x, y)
+        x1 = xx[~heightmap.mask]
+        y1 = yy[~heightmap.mask]
+        newarr = heightmap[~heightmap.mask]
+        heightmap = scipy.interpolate.griddata((x1, y1), newarr.ravel(), (xx, yy), \
+            method='linear', fill_value=height_median)
+        #ed = sed3.sed3(np.expand_dims(heightmap, axis=0)); ed.show()
 
-        # remove spine # TODO - redo
-        bones_only  = (data3d > 500) # only rough bone contours
-        b200_l = skimage.measure.label((data3d > cls.KIDNEYS_THRESHOLD_2), background=0) # TODO - check if threshold is ok
-        tmp = b200_l.copy(); tmp[bones_only == 0] = 0
-        bone_labels = np.unique(tmp)[1:]; del(tmp); del(bones_only)
-        for l in np.unique(b200_l)[1:]:
-            if l not in bone_labels:
-                b200_l[b200_l == l] = 0
-        kidneys[b200_l != 0] = 0
+        # 2D heightmap -> 3D diaphragm
+        diaphragm = np.zeros(diaphragm.shape, dtype=np.bool).astype(np.bool)
+        for y in range(diaphragm.shape[1]):
+            for x in range(diaphragm.shape[2]):
+                z = int(heightmap[y,x])
+                diaphragm[z,y,x] = 1
 
-        # remove objects with too small volume
-        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
+        # make sure that diaphragm is lower then lungs volume
+        diaphragm[ lungs == 1 ] = 1
+        for y in range(diaphragm.shape[1]):
+            for x in range(diaphragm.shape[2]):
+                tmp = diaphragm[:,y,x][::-1]
+                z = len(tmp) - np.argmax(tmp) - 1
+                diaphragm[:,y,x] = 0
+                diaphragm[z,y,x] = 1
 
-        # TODO - remove connected vessels
+        #ed = sed3.sed3(data3d, seeds=diaphragm); ed.show()
+        return diaphragm
 
-        # try to add kidney stones + middle part of kidneys #TODO
-        kidneys = scipy.ndimage.binary_dilation(kidneys, structure=getSphericalMask(10, spacing=spacing))
-        kidneys[(data3d > 150) == 0] = 0
-        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
-
-        #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
-        # expand array to original shape
-        kidneys_s = kidneys; kidneys = np.zeros(orig_shape, dtype=kidneys.dtype).astype(kidneys.dtype)
-        kidneys[lungs_end:,:,:] = kidneys_s
-
-        return kidneys
-
-    # @classmethod
-    # def getAbdomen(cls, data3d, spacing, fatlessbody, diaphragm, bones_stats):
-    #     """ Helpful for segmentation of organs in abdomen """
-    #     logger.info("getAbdomen()")
-    #     # define abdomen as fatless volume under diaphragm
-    #     abdomen = fatlessbody.copy()
-    #     for y in range(diaphragm.shape[1]):
-    #         for x in range(diaphragm.shape[2]):
-    #             tmp = diaphragm[:,y,x][::-1]
-    #             z = len(tmp) - np.argmax(tmp) - 1
-    #             abdomen[:z+1,y,x] = 0
-
-    #     # remove everything under hip joints
-    #     if len(bones_stats["hips_joints"]) != 0:
-    #         hips_start = bones_stats["hips_joints"][0][0]
-    #         abdomen[hips_start:,:,:] = 0
-
-    #     #ed = sed3.sed3(data3d, contour=abdomen); ed.show()
-    #     return abdomen
+    ################################################################################################
 
     VESSELS_THRESHOLD = 110 # 145
     VESSELS_SPINE_WIDTH = 22 # from center (radius)
@@ -766,6 +704,58 @@ class OrganDetectionAlgo(object):
 
         return venacava
 
+    KIDNEYS_THRESHOLD_1 = 180 #150 # 180
+    KIDNEYS_THRESHOLD_2 = 180 #250 # 180
+    KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
+
+    @classmethod
+    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats): # TODO - fix this; dont segment bones
+        """ between 150 and 300, cant go lower then 150 """
+        logger.info("getKidneys()")
+        spacing_vol = spacing[0]*spacing[1]*spacing[2]
+
+        # work only on data under lungs -5cm
+        lungs_end = lungs_stats["end"]
+        lungs_end = int(max(0, lungs_end-(50/spacing[0])))
+        orig_shape = tuple(data3d.shape)
+        data3d = data3d[lungs_end:,:,:]; fatlessbody = fatlessbody[lungs_end:,:,:]
+
+        #threshold tisue (without ribs)
+        fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing) # for ignoring ribs
+        kidneys = (fatless_dst > 15) & (data3d > cls.KIDNEYS_THRESHOLD_1); del(fatless_dst) # includes bones
+        kidneys = binaryClosing(kidneys, structure=getSphericalMask(5, spacing=spacing))
+        kidneys = binaryFillHoles(kidneys, z_axis=True)
+        #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
+
+        ###
+
+        # remove spine # TODO - redo
+        bones_only  = (data3d > 500) # only rough bone contours
+        b200_l = skimage.measure.label((data3d > cls.KIDNEYS_THRESHOLD_2), background=0) # TODO - check if threshold is ok
+        tmp = b200_l.copy(); tmp[bones_only == 0] = 0
+        bone_labels = np.unique(tmp)[1:]; del(tmp); del(bones_only)
+        for l in np.unique(b200_l)[1:]:
+            if l not in bone_labels:
+                b200_l[b200_l == l] = 0
+        kidneys[b200_l != 0] = 0
+
+        # remove objects with too small volume
+        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
+
+        # TODO - remove connected vessels
+
+        # try to add kidney stones + middle part of kidneys #TODO
+        kidneys = scipy.ndimage.binary_dilation(kidneys, structure=getSphericalMask(10, spacing=spacing))
+        kidneys[(data3d > 150) == 0] = 0
+        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
+
+        #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
+        # expand array to original shape
+        kidneys_s = kidneys; kidneys = np.zeros(orig_shape, dtype=kidneys.dtype).astype(kidneys.dtype)
+        kidneys[lungs_end:,:,:] = kidneys_s
+
+        return kidneys
+
     ##################
     ### Statistics ###
     ##################
@@ -816,6 +806,82 @@ class OrganDetectionAlgo(object):
     @classmethod
     def analyzeBones(cls, bones, spacing, fatlessbody, lungs_stats): # TODO - clean, add ribs start/end (maybe)
         logger.info("analyzeBones()")
+
+        # out = {"spine":[], "hips_joints":[], "hips_start":[]}
+
+        # if np.sum(bones) == 0:
+        #     logger.warning("Since no bones were found, returning empty values")
+        #     return out
+
+        # # merge near "bones" into big blobs
+        # bones = binaryClosing(bones, structure=getSphericalMask(20, spacing=spacing)) # takes around 1m
+
+        # # define sizes of spine and hip sections
+        # frac_left = {"h":(0,1),"w":(0,0.40)}
+        # frac_spine = {"h":(0.25,1),"w":(0.40,0.60)}
+        # frac_front = {"h":(0,0.25),"w":(0.40,0.60)}
+        # frac_right = {"h":(0,1),"w":(0.60,1)}
+
+        # # get rough points
+        # points_spine = []
+        # for z in range(lungs_stats["start"], bones.shape[0]):
+        #     view_left, view_spine, view_front, view_right = getDataFractions(bones[z,:,:], \
+        #         fraction_defs=[frac_left,frac_spine,frac_front,frac_right], mask=fatlessbody[z,:,:])
+        #     s_left, s_spine, s_front, s_right = getDataFractions(bones[z,:,:], \
+        #         fraction_defs=[frac_left,frac_spine,frac_front,frac_right], mask=fatlessbody[z,:,:], \
+        #         return_slices=True)
+
+        #     # get volumes
+        #     total_v = np.sum(bones[z,:,:])
+        #     left_v = np.sum(view_left); spine_v = np.sum(view_spine); right_v = np.sum(view_right)
+
+        #     # get centroids
+        #     left_c = None; spine_c = None; right_c = None
+        #     if left_v != 0:
+        #         left_c = list(scipy.ndimage.measurements.center_of_mass(view_left))
+        #         left_c[0] += s_left[0].start
+        #         left_c[1] += s_left[1].start
+        #     if spine_v != 0:
+        #         spine_c = list(scipy.ndimage.measurements.center_of_mass(view_spine))
+        #         spine_c[0] += s_spine[0].start
+        #         spine_c[1] += s_spine[1].start
+        #     if right_v != 0:
+        #         right_c = list(scipy.ndimage.measurements.center_of_mass(view_right))
+        #         right_c[0] += s_right[0].start
+        #         right_c[1] += s_right[1].start
+
+        #     # detect spine points
+        #     if spine_v/total_v > 0.6:
+        #         points_spine.append( (z, int(spine_c[0]), int(spine_c[1])) )
+
+        #     # # try to detect hip joints
+        #     # if (z >= lungs_end) and (left_v/total_v > 0.4) and (right_v/total_v > 0.4):
+        #     #     # gets also leg bones
+        #     #     #print(z, abs(left_c[1]-right_c[1]))
+        #     #     if abs(left_c[1]-right_c[1]) < (180.0/spacing[2]): # max hip dist. 180mm
+        #     #         # anything futher out should be only leg bones
+        #     #         points_hips_joints_l.append( (z, int(left_c[0]), int(left_c[1])) )
+        #     #         points_hips_joints_r.append( (z, int(right_c[0]), int(right_c[1])) )
+
+        #     # # try to detect hip bones start on z axis
+        #     # if (z >= lungs_end) and (left_v/total_v > 0.1):
+        #     #     points_hips_start_l[z] = (z, int(left_c[0]), int(left_c[1]))
+        #     # if (z >= lungs_end) and (right_v/total_v > 0.1):
+        #     #     points_hips_start_r[z] = (z, int(right_c[0]), int(right_c[1]))
+
+
+
+
+
+        #     sys.exit(0)
+
+        # # fit curve to spine points and recalculate new points from curve
+        # if len(points_spine) >= 2:
+        #     points_spine = polyfit3D(points_spine)
+        # out["spine"] = points_spine
+
+        # return out
+        ############################################################################################
 
         # remove every bone higher then lungs
         lungs_start = lungs_stats["start"] # start of lungs on z-axis

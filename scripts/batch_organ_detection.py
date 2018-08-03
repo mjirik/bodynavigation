@@ -103,7 +103,7 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
 
         COLOR_IDX = {
             "body":7, "fatlessbody":8, "lungs":9, "bones":2, "vessels":5, "aorta":3, "venacava":0, \
-            "kidneys":6, "liver":4, "spleen":1,
+            "kidneys":6, "liver":4, "spleen":1, "diaphragm":10,
             }
         i = 0
         for p in parts:
@@ -172,6 +172,7 @@ def main():
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    logging.getLogger("io3d").setLevel(logging.WARNING)
 
     if args.datadirs is None:
         logger.error("Missing data directory path --datadirs")

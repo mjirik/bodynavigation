@@ -55,6 +55,7 @@ def main():
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    logging.getLogger("io3d").setLevel(logging.WARNING)
 
     if args.readydirs is None:
         logger.error("Missing processed data directory path --readydirs")
