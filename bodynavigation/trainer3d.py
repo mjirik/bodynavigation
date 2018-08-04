@@ -116,7 +116,8 @@ class Trainer3D():
     If feature_function() needs resized data (to same shape), do that before using this class.
     """
 
-    def __init__(self, feature_function=None, train_nth=50, memmap=True): # TODO - test if memmap lowers MEM usage when using self.fit()
+    # TODO - test if memmap lowers MEM usage when using self.fit()
+    def __init__(self, feature_function=None, train_nth=50, predict_len=100000, memmap=True):
         """
         feature_function = feature_function(**fv_kwargs)
             - should return numpy vector for every voxel in data3d
@@ -135,6 +136,9 @@ class Trainer3D():
         self.train_data = None
         self.train_output = None
         self.train_nth = train_nth
+
+        # prediction
+        self.predict_len = predict_len
 
         # memmap
         self.memmap = memmap
@@ -227,10 +231,30 @@ class Trainer3D():
         logger.debug("train_output bytesize: %s" % self.train_output.nbytes)
         self.cl.fit(self.train_data, self.train_output)
 
+    def _predict(self, fv):
+        """ predict data by small parts to prevent high mem usage """
+        N = int(np.ceil(fv.shape[0]/self.predict_len))
+        out = np.zeros((fv.shape[0],), dtype=np.int8).astype(np.int8)
+        for n in range(N):
+            s_from = self.predict_len*n
+            s_to = min(self.predict_len*(n+1), fv.shape[0])
+            out[s_from:s_to] = self.cl.predict(fv[s_from:s_to,:])
+        return out
+
+    def _scores(self, fv): # TODO - untested
+        """ scores data by small parts to prevent high mem usage """
+        N = int(np.ceil(fv.shape[0]/self.predict_len))
+        out = np.zeros((fv.shape[0],), dtype=np.float32).astype(np.float32)
+        for n in range(N):
+            s_from = self.predict_len*n
+            s_to = min(self.predict_len*(n+1), fv.shape[0])
+            out[s_from:s_to] = self.cl.scores(fv[s_from:s_to,:])
+        return out
+
     def predict(self, shape, **fv_kwargs):
         """ shape - expected shape of output data """
         fv = self.feature_function(**fv_kwargs)
-        return self.cl.predict(fv).reshape(shape)
+        return self._predict(fv).reshape(shape)
 
     def predictW(self, shape, weight, label0=0, label1=1, **fv_kwargs): # TODO - untested
         """
@@ -243,7 +267,7 @@ class Trainer3D():
     def scores(self, shape, **fv_kwargs): # TODO - untested
         """ shape - expected shape of output data """
         fv = self.feature_function(**fv_kwargs)
-        scores = self.cl.scores(fv)
+        scores = self._scores(fv)
         for key in scores:
             scores[key] = scores[key].reshape(shape)
         return scores
