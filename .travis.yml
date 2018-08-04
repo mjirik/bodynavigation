@@ -42,9 +42,18 @@ install:
     - pip install -r requirements_pip.txt
     - python -m io3d.datasets -l 3Dircadb1.1
 
+# write stuff to stdout to stop travis from terminating after 10min of no output.
+# Note: doing it this way because "travis_wait MIN" errors on complex functions
+before_script: |
+  function keep_alive() {
+    while true; do
+      echo -en "\a"
+      sleep 5
+    done
+  }
+  keep_alive &
+
 # command to run tests
-# using "travis_wait MIN" to stop travis from terminating after 10min of no output.
-# Note: travis_wait time is shared between different python versions!
-script: travis_wait 180 nosetests -v -s --with-coverage --cover-package=bodynavigation
+script: nosetests -v -s --with-coverage --cover-package=bodynavigation
 after_success:
     - coveralls
