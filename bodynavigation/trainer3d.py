@@ -392,7 +392,8 @@ if __name__ == "__main__":
             if data3d is None:
                 data3d, _ = io3d.datareader.read(datasets[name]["CT_DATA_PATH"], dataplus_format=False)
                 data3d = useDatasetMod(data3d, datasets[name]["MISC"])
-            data3d = scipy.ndimage.filters.median_filter(data3d, 3) # remove noise
+            for z in range(data3d.shape[0]): # remove noise
+                data3d[z,:,:] = scipy.ndimage.filters.median_filter(data3d[z,:,:], 3)
             fv_kwargs["data3d"] = data3d
 
             # patlas

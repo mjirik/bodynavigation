@@ -41,8 +41,10 @@ def main():
     parser = argparse.ArgumentParser(description="Compares segmentation results to masks from datasets. Only compares already segmented data (does not run any segmentation algorithms).")
     parser.add_argument('-i','--datasets', default=io3d.datasets.dataset_path(),
             help='path to dir with raw datasets, default is default io3d.datasets path.')
-    parser.add_argument('-o','--outputdir', default="./batch_output",
+    parser.add_argument('-o','--outputdir', default="./",
             help='path to output dir')
+    parser.add_argument('-on','--outputname', default="output",
+            help='name of output files')
     parser.add_argument('-r','--readydirs', default=None,
             help='path to dir with dirs with processed data3d.dcm and masks')
     parser.add_argument('--metrics', default="voe,vd,dice,avgd,rmsd,maxd",
@@ -120,7 +122,7 @@ def main():
             output[dirname][mask] = compareVolumes(mask_dataset, mask_ready, voxelsize_mm)
 
     # save raw output
-    output_path = os.path.join(outputdir, "output_raw.json")
+    output_path = os.path.join(outputdir, str("%s.json" % args.outputname))
     print("Saving output to:", output_path)
     with open(output_path, 'w') as fp:
         json.dump(output, fp, encoding="utf-8", sort_keys=True, indent=4, cls=NumpyEncoder)
@@ -158,19 +160,39 @@ def main():
         tmp = pd.DataFrame([line,], columns=columns)
         df = df.append(tmp)
 
-    # finish and print table
-    df.columns = pd.MultiIndex.from_tuples(df.columns, names=["",""])
+    # if no data exit
+    if df.empty:
+        print("Empty Table! Exiting...")
+        sys.exit(0)
+
+    # calculate statistics
+    df_stats =  df[df.columns[1:]].describe().loc[['mean','std','min','max']]
+    df_stats = df_stats.round(3)
+
+    # format tables
+    if len(used_masks) == 1:
+        df.columns = [ c[1] for c in df.columns ]
+        df_stats.columns = [ c[1] for c in df_stats.columns ]
+    else:
+        df.columns = pd.MultiIndex.from_tuples(df.columns, names=["",""])
+        df_stats.columns = pd.MultiIndex.from_tuples(df_stats.columns, names=["",""])
     df.fillna("-", inplace=True)
+
+    # print tables
     print(df) # index is ignored when saving with index=False
+    print(df_stats)
 
     # write to csv and tex
-    df.to_csv(os.path.join(outputdir, "output.csv"), encoding='utf-8', index=False)
+    df.to_csv(os.path.join(outputdir, str("%s.csv" % args.outputname)), encoding='utf-8', index=False)
+    df_stats.to_csv(os.path.join(outputdir, str("%s_stats.csv" % args.outputname)), encoding='utf-8', index=False)
 
     column_format = "|c|"
     for mask in used_masks:
         column_format += ("c"*len(used_metrics))+"|"
-    df.to_latex(os.path.join(outputdir, "output.tex"), encoding='utf-8', index=False, \
-        column_format=column_format, multicolumn_format="c|", longtable=True)
+    df.to_latex(os.path.join(outputdir, str("%s.tex" % args.outputname)), encoding='utf-8', index=False, \
+        column_format=column_format, multicolumn_format="c|", longtable=False)
+    df_stats.to_latex(os.path.join(outputdir, str("%s_stats.tex" % args.outputname)), encoding='utf-8', index=True, \
+        column_format=column_format, multicolumn_format="c|", longtable=False)
 
 if __name__ == "__main__":
     main()

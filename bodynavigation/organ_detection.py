@@ -339,9 +339,10 @@ class OrganDetection(object):
                 data = OrganDetectionAlgo.getVenaCava(self.data3d, self.spacing, self.getVessels(raw=True), \
                     self.analyzeVessels(raw=True) )
             elif part == "kidneys":
-                self._preloadParts(["fatlessbody",]); self._preloadStats(["lungs",])
-                data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, self.getFatlessBody(raw=True), \
-                    self.analyzeLungs(raw=True) )
+                self._preloadParts(["fatlessbody","diaphragm"])
+                data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, \
+                    self.getClassifierOutput(part, raw=True), self.getFatlessBody(raw=True), \
+                    self.getDiaphragm(raw=True), self.getLiver(raw=True))
             elif part == "liver":
                 self._preloadParts(["fatlessbody","diaphragm"])
                 data = OrganDetectionAlgo.getLiver(self.data3d, self.spacing, \
@@ -670,8 +671,21 @@ if __name__ == "__main__":
         sys.exit(2)
 
     if args.datadir is not None:
-        print("Reading DICOM dir...")
-        data3d, metadata = io3d.datareader.read(args.datadir, dataplus_format=False)
+        print("Loading CT data...")
+        # detect sole file or *.mhd
+        datapath = args.datadir
+        onlyfiles = sorted([f for f in os.listdir(datapath) if os.path.isfile(os.path.join(datapath, f))])
+        if len(onlyfiles) == 1:
+            datapath = os.path.join(datapath, onlyfiles[0])
+            print("Only one file datapath! Changing datapath to: ", datapath)
+        else:
+            for f in onlyfiles:
+                if f.strip().lower().endswith(".mhd"):
+                    datapath = os.path.join(datapath, f)
+                    print("Detected *.mhd file! Changing datapath to: ", datapath)
+                    break
+        # lead data3d and init OrganDetection
+        data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
         voxelsize = metadata["voxelsize_mm"]
         obj = OrganDetection(data3d, voxelsize)
     else: # readydir

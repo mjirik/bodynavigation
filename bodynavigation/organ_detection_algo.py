@@ -63,9 +63,12 @@ class OrganDetectionAlgo(object):
         data3d[ data3d > np.iinfo(np.int16).max ] = np.iinfo(np.int16).max
         data3d = data3d.astype(np.int16)
 
-        # filter out noise - median filter with radius 1 (kernel 3x3x3)
+        # filter out noise - median filter with radius 1 (kernel 1x3x3)
+        # Filter is not used along z axis because the slices are so thick that any filter will
+        # create ghosts of pervous and next slices on them.
         logger.debug("Removing noise with filter")
-        data3d = scipy.ndimage.filters.median_filter(data3d, 3)
+        for z in range(data3d.shape[0]):
+            data3d[z,:,:] = scipy.ndimage.filters.median_filter(data3d[z,:,:], 3)
         # ed = sed3.sed3(data3d); ed.show()
 
         # remove high brightness errors near edges of valid data (takes about 70s)
@@ -100,7 +103,7 @@ class OrganDetectionAlgo(object):
         body = cls.getBody(data3d, spacing)
         data3d[ body == 0 ] = -1024
 
-        #ed = sed3.sed3(data3d); ed.show()
+        # ed = sed3.sed3(data3d); ed.show()
         return data3d, body
 
     @classmethod
@@ -704,64 +707,32 @@ class OrganDetectionAlgo(object):
 
         return venacava
 
-    KIDNEYS_THRESHOLD_1 = 180 #150 # 180
-    KIDNEYS_THRESHOLD_2 = 180 #250 # 180
-    KIDNEYS_MIN_VOLUME = 100000 # experimantal volume of kidneys is about 200k mm3
+    ################################################################################################
+
+    KIDNEYS_BINARY_OPENING = 10
 
     @classmethod
-    def getKidneys(cls, data3d, spacing, fatlessbody, lungs_stats): # TODO - fix this; dont segment bones # TODO - use patlas, classifier
-        """ between 150 and 300, cant go lower then 150 """
+    def getKidneys(cls, data3d, spacing, cls_output, fatlessbody, diaphragm, liver): # TODO - some data can have only one kidney
         logger.info("getKidneys()")
-        spacing_vol = spacing[0]*spacing[1]*spacing[2]
+        # output of classifier
+        data = cls_output
+        # cleaning
+        data[ fatlessbody == 0 ] = 0
+        data[ diaphragm ] = 0
+        data[ liver ] = 0
+        # binary opening, but return 1 only if there was 1 in orginal data
+        data = data & scipy.ndimage.morphology.binary_opening(data, \
+            structure=getSphericalMask(cls.KIDNEYS_BINARY_OPENING, spacing=spacing))
+        # return only 2 biggest objects
+        data = getBiggestObjects(data, 2)
 
-        # work only on data under lungs -5cm
-        lungs_end = lungs_stats["end"]
-        lungs_end = int(max(0, lungs_end-(50/spacing[0])))
-        orig_shape = tuple(data3d.shape)
-        data3d = data3d[lungs_end:,:,:]; fatlessbody = fatlessbody[lungs_end:,:,:]
-
-        #threshold tisue (without ribs)
-        fatless_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing) # for ignoring ribs
-        kidneys = (fatless_dst > 15) & (data3d > cls.KIDNEYS_THRESHOLD_1); del(fatless_dst) # includes bones
-        kidneys = binaryClosing(kidneys, structure=getSphericalMask(5, spacing=spacing))
-        kidneys = binaryFillHoles(kidneys, z_axis=True)
-        #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
-
-        ###
-
-        # remove spine # TODO - redo
-        bones_only  = (data3d > 500) # only rough bone contours
-        b200_l = skimage.measure.label((data3d > cls.KIDNEYS_THRESHOLD_2), background=0) # TODO - check if threshold is ok
-        tmp = b200_l.copy(); tmp[bones_only == 0] = 0
-        bone_labels = np.unique(tmp)[1:]; del(tmp); del(bones_only)
-        for l in np.unique(b200_l)[1:]:
-            if l not in bone_labels:
-                b200_l[b200_l == l] = 0
-        kidneys[b200_l != 0] = 0
-
-        # remove objects with too small volume
-        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
-
-        # TODO - remove connected vessels
-
-        # try to add kidney stones + middle part of kidneys #TODO
-        kidneys = scipy.ndimage.binary_dilation(kidneys, structure=getSphericalMask(10, spacing=spacing))
-        kidneys[(data3d > 150) == 0] = 0
-        kidneys = skimage.morphology.remove_small_objects(kidneys, min_size=int(cls.KIDNEYS_MIN_VOLUME/spacing_vol))
-
-        #ed = sed3.sed3(data3d, contour=kidneys); ed.show()
-        # expand array to original shape
-        kidneys_s = kidneys; kidneys = np.zeros(orig_shape, dtype=kidneys.dtype).astype(kidneys.dtype)
-        kidneys[lungs_end:,:,:] = kidneys_s
-
-        return kidneys
-
-    ################################################################################################
+        return data
 
     LIVER_BINARY_OPENING = 20
 
     @classmethod
     def getLiver(cls, data3d, spacing, cls_output, fatlessbody, diaphragm):
+        logger.info("getLiver()")
         # output of classifier
         data = cls_output
         # cleaning
@@ -779,6 +750,7 @@ class OrganDetectionAlgo(object):
 
     @classmethod
     def getSpleen(cls, data3d, spacing, cls_output, fatlessbody, diaphragm):
+        logger.info("getSpleen()")
         # output of classifier
         data = cls_output
         # cleaning
