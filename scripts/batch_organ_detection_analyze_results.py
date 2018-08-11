@@ -132,7 +132,7 @@ def main():
     used_metrics = args.metrics.strip().lower().split(",")
 
     # init columns
-    columns = [("",""),]
+    columns = [("","dataset"),]
     for mask in used_masks:
         for met in used_metrics:
             columns.append((mask,met))
@@ -166,7 +166,8 @@ def main():
         sys.exit(0)
 
     # calculate statistics
-    df_stats =  df[df.columns[1:]].describe().loc[['mean','std','min','max']]
+    df_stats =  df[df.columns[1:]].describe().loc[['50%','std','min','max']]
+    df_stats = df_stats.rename(index={'50%': 'median'})
     df_stats = df_stats.round(3)
 
     # format tables

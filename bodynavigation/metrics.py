@@ -33,7 +33,7 @@ def vd(vol1, vol2):
     return float(np.sum(vol2) - np.sum(vol1)) / float(np.sum(vol1))
 
 def dice(vol1, vol2):
-    """ Dice[0;1] - Dice coefficient """
+    """ Dice[0;1] - Dice coefficient. Dice = 1.0 - VOE """
     a = np.sum( vol1[vol2] )
     b = np.sum( vol1 )
     c = np.sum( vol2 )
