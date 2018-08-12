@@ -990,11 +990,12 @@ class OrganDetectionAlgo(object):
         vessels_cut = scipy.ndimage.binary_opening(vessels, structure=np.ones((3,3,3)))
         # ed = sed3.sed3(data3d, contour=vessels, seeds=vessels_cut); ed.show()
 
-        # get liver vessels
-        erosion_size = 20
+        # get liver vessels # TODO - something eats crazy amount of memory here
+        erosion_size = 30
         liver_cut = scipy.ndimage.morphology.binary_erosion(liver, structure=getSphericalMask(erosion_size, spacing=spacing))
         liver_vessels = regionGrowing(vessels_cut, (vessels_cut & liver_cut), vessels_cut, \
             spacing=spacing, max_dist=erosion_size, mode="watershed")
+        # ed = sed3.sed3(data3d, contour=vessels_cut, seeds=(liver_cut.astype(np.int8)+liver_vessels)); ed.show()
 
         # get connection borders
         connection = (scipy.ndimage.binary_dilation(liver_vessels, structure=np.ones((3,3,3)))-liver_vessels) & vessels_cut
