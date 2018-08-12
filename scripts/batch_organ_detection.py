@@ -97,14 +97,12 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         parts_stats = [x for x in parts if x.endswith("_stats")]
         parts_masks = [x for x in parts if (x not in parts_stats)]
 
-        if "vessels" in parts_masks:
-            if "aorta" not in parts_masks: parts_masks.append("aorta")
-            if "venacava" not in parts_masks: parts_masks.append("venacava")
-
         COLOR_IDX = {
-            "body":7, "fatlessbody":8, "lungs":9, "bones":2, "vessels":5, "aorta":3, "venacava":0, \
-            "kidneys":6, "liver":4, "spleen":1, "diaphragm":10,
+            "body":7, "fatlessbody":8, "lungs":9, "bones":2, "vessels":0,
+            "kidneys":6, "liver":4, "spleen":7, "diaphragm":10,
             }
+        # for k in COLOR_IDX: # TODO - remove
+        #     COLOR_IDX[k] = COLOR_IDX["bones"]
         i = 0
         for p in parts:
             if p not in COLOR_IDX:
@@ -124,8 +122,9 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
                 point_sets.append([stats["hips_start"], {"color":(0,0,255), "border":(0,0,0), "size":7}])
 
             elif ps == "vessels_stats":
-                point_sets.append([interpolatePointsZ(stats["aorta"], step=0.1), {"color":rd.getRGBA(3), "border":(0,0,0), "size":1}])
-                point_sets.append([interpolatePointsZ(stats["vena_cava"], step=0.1), {"color":rd.getRGBA(0), "border":(0,0,0), "size":1}])
+                point_sets.append([interpolatePointsZ(stats["aorta"], step=0.1), {"color":rd.getRGBA(6), "border":(0,0,0), "size":1}])
+                point_sets.append([interpolatePointsZ(stats["vena_cava"], step=0.1), {"color":rd.getRGBA(7), "border":(0,0,0), "size":1}])
+                point_sets.append([stats["liver"], {"color":rd.getRGBA(2), "border":(0,0,0), "size":7}])
 
         img = rd.drawImage(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
         img.save(os.path.join(outputdir, "%s.png" % name))

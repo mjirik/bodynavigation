@@ -563,10 +563,10 @@ class OrganDetection(object):
                 data = OrganDetectionAlgo.analyzeBones(self.getBones(raw=True), self.spacing, \
                     fatlessbody=self.getFatlessBody(raw=True), lungs_stats=self.analyzeLungs(raw=True) )
             elif part == "vessels":
-                self._preloadParts(["vessels", "bones"]); self._preloadStats(["bones",])
+                self._preloadParts(["vessels", "bones","liver"]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.analyzeVessels( \
                 data3d=self.data3d, spacing=self.spacing, vessels=self.getVessels(raw=True), \
-                bones_stats=self.analyzeBones(raw=True) )
+                bones_stats=self.analyzeBones(raw=True), liver=self.getLiver(raw=True) )
 
             self.stats[part] = copy.deepcopy(data)
 
@@ -587,6 +587,7 @@ class OrganDetection(object):
             elif part == "vessels":
                 data["aorta"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["aorta"] ]
                 data["vena_cava"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["vena_cava"] ]
+                data["liver"] = [ tuple(self.toOutputCoordinates(p).astype(np.int)) for p in data["liver"] ]
         return data
 
     def _preloadStats(self, statlist):
@@ -744,9 +745,11 @@ if __name__ == "__main__":
 
     # vessels_stats = obj.analyzeVessels()
     # points_aorta = vessels_stats["aorta"];  points_vena_cava = vessels_stats["vena_cava"]
+    # points_liver = vessels_stats["liver"]
     # seeds = np.zeros(vessels.shape)
     # for p in points_aorta: seeds[p[0], p[1], p[2]] = 1
     # for p in points_vena_cava: seeds[p[0], p[1], p[2]] = 2
+    # for p in points_liver: seeds[p[0], p[1], p[2]] = 3
     # seeds = scipy.ndimage.morphology.grey_dilation(seeds, size=(1,5,5))
     # ed = sed3.sed3(data3d, contour=vessels, seeds=seeds); ed.show()
 

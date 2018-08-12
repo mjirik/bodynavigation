@@ -27,7 +27,7 @@ import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import getSphericalMask, getDiskMask, binaryClosing, binaryFillHoles, getDataPadding, \
-    cropArray, padArray, polyfit3D, growRegion, regionGrowing, getDataFractions, getBiggestObjects, firstNonzero
+    cropArray, padArray, polyfit3D, regionGrowing, getDataFractions, getBiggestObjects, firstNonzero
 
 class OrganDetectionAlgo(object):
     """
@@ -594,6 +594,8 @@ class OrganDetectionAlgo(object):
                 # remove everything thats on voxel with lower denzity then threshold
                 hough_res[z,(data3d[z,:,:] < cls.VESSELS_HOUGH_INTENSITY_THRESHOLD)] = 0
 
+            # TODO - remove everything up of lungs_end-OFFSET -> current version works well only on abdomen only data
+
             # threshold radii
             hough_res = hough_res > cls.VESSELS_HOUGH_THRESHOLD
             #ed = sed3.sed3(data3d_c, seeds=hough_res); ed.show()
@@ -666,6 +668,11 @@ class OrganDetectionAlgo(object):
         vessels = skimage.morphology.remove_small_objects(vessels, \
             min_size=int(cls.VESSELS_OBJ_MIN_SIZE/voxel_volume), connectivity=2)
         #vessels = scipy.ndimage.binary_opening(vessels, structure=np.ones((3,3,3)))
+
+        # TODO
+        # remove all that are not connected to objects before and around spine
+
+        # TODO - remove everything before heart? -> current version works well only on abdomen only data
 
         return vessels
 
@@ -967,14 +974,50 @@ class OrganDetectionAlgo(object):
 
         return {"spine":points_spine, "hips_joints":points_hips_joints, "hips_start":points_hips_start}
 
+
     @classmethod
-    def analyzeVessels(cls, data3d, spacing, vessels, bones_stats): # TODO - pridej bod kde se porta dotika jater
+    def analyzeVessels(cls, data3d, spacing, vessels, bones_stats, liver):
         """ Returns: {"aorta":[], "vena_cava":[]} """
         logger.info("analyzeVessels()")
+        out = {"aorta":[], "vena_cava":[], "liver":[],}
         if np.sum(vessels) == 0:
             logger.warning("No vessels to find vessel points for!")
-            return {"aorta":[], "vena_cava":[]}
+            return out
 
+        ######################################
+        # Detect where vessels go into liver #
+        ######################################
+        vessels_cut = scipy.ndimage.binary_opening(vessels, structure=np.ones((3,3,3)))
+        # ed = sed3.sed3(data3d, contour=vessels, seeds=vessels_cut); ed.show()
+
+        # get liver vessels
+        erosion_size = 20
+        liver_cut = scipy.ndimage.morphology.binary_erosion(liver, structure=getSphericalMask(erosion_size, spacing=spacing))
+        liver_vessels = regionGrowing(vessels_cut, (vessels_cut & liver_cut), vessels_cut, \
+            spacing=spacing, max_dist=erosion_size, mode="watershed")
+
+        # get connection borders
+        connection = (scipy.ndimage.binary_dilation(liver_vessels, structure=np.ones((3,3,3)))-liver_vessels) & vessels_cut
+        # ed = sed3.sed3(data3d, contour=vessels_cut, seeds=connection); ed.show()
+
+        # get connection points
+        connection_l = skimage.measure.label(connection, background=0, connectivity=2)
+        points = []
+        for u in np.unique(connection_l)[1:]:
+            points.append(scipy.ndimage.measurements.center_of_mass(connection_l == u))
+        if len(points) != 0:
+            # use only top and bottom point
+            top = points[0]; bottom = points[0]
+            for p in points:
+                if top[0] > p[0]:
+                    top = p
+                if bottom[0] < p[0]:
+                    bottom = p
+        out["liver"] = [top,bottom]
+
+        ##############################
+        # Detect Aorta and Vena Cava #
+        ##############################
         points_spine = bones_stats["spine"]
         spine_zmin = points_spine[0][0]; spine_zmax = points_spine[-1][0]
         rad = np.asarray([ 7,8,9,10,11,12,13,14 ], dtype=np.float32)
@@ -1011,7 +1054,7 @@ class OrganDetectionAlgo(object):
             cseeds[p[0],p[1],p[2]] = 1
         for p in points_vena_cava:
             cseeds[p[0],p[1],p[2]] = 2
-        r = skimage.morphology.watershed(vessels, cseeds, mask=vessels) # TODO replace with regionGrowing()
+        r = regionGrowing(vessels, cseeds, vessels, mode="watershed")
         #ed = sed3.sed3(data3d, contour=r, seeds=cseeds); ed.show()
 
         for p in points_unknown:
@@ -1055,4 +1098,7 @@ class OrganDetectionAlgo(object):
         if len(points_vena_cava) >= 2:
             points_vena_cava = polyfit3D(points_vena_cava)
 
-        return {"aorta":points_aorta, "vena_cava":points_vena_cava}
+        out["aorta"] = points_aorta
+        out["vena_cava"] = points_vena_cava
+
+        return out

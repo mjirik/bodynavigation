@@ -279,7 +279,8 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
     """
     # note - large areas that are covered by seeds do not increase memory requirements
     #        (works almost as if they had mask == 0)
-    seeds = seeds.astype(np.int8)
+    seeds = seeds.astype(np.int8).copy()
+    mask = mask.copy()
 
     # limit max segmentation distance
     if max_dist > 0:
@@ -333,22 +334,6 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
                 seeds[resize(tmp == s, shape_orig, order=0, mode="reflect")] = s
 
     return seeds
-
-def growRegion(region, mask, iterations=1): # TODO - DEPRACED BY regionGrowing()!!!
-    logger.warning("growRegion() is DEPRACED BY regionGrowing()!!!")
-    # TODO - remove parts of mask that are not connected to region
-    region[ mask == 0 ] = 0
-
-    kernel1 = np.zeros((3,3,3), dtype=np.bool).astype(np.bool)
-    kernel1[:,1,1] = 1; kernel1[1,1,:] = 1; kernel1[1,:,1] = 1
-    kernel2 = np.zeros((3,3,3), dtype=np.bool).astype(np.bool)
-    kernel2[:,1,1] = 1; kernel2[1,:,:] = 1
-    for i in range(iterations):
-        if np.sum(region) == 0: break
-        kernel = kernel1 if i%2 == 0 else kernel2
-        region = scipy.ndimage.binary_dilation(region, structure=kernel, mask=mask)
-
-    return region
 
 ###################
 # Memory saving
