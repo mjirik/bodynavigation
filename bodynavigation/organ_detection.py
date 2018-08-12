@@ -84,8 +84,6 @@ class OrganDetection(object):
             "bones":None,
             "diaphragm":None,
             "vessels":None,
-            "aorta":None,
-            "venacava":None,
             "kidneys":None,
             "liver":None,
             "spleen":None
@@ -327,19 +325,11 @@ class OrganDetection(object):
                 data = OrganDetectionAlgo.getDiaphragm(self.data3d, self.spacing, self.getLungs(raw=True), \
                     self.getBody(raw=True))
             elif part == "vessels":
-                self._preloadParts(["bones",]); self._preloadStats(["bones",])
+                self._preloadParts(["fatlessbody","bones","kidneys"]); self._preloadStats(["bones",])
                 data = OrganDetectionAlgo.getVessels(self.data3d, self.spacing, \
-                    self.getBones(raw=True), self.analyzeBones(raw=True) )
-            elif part == "aorta":
-                self._preloadParts(["vessels",]); self._preloadStats(["vessels",])
-                data = OrganDetectionAlgo.getAorta(self.data3d, self.spacing, self.getVessels(raw=True), \
-                    self.analyzeVessels(raw=True) )
-            elif part == "venacava":
-                self._preloadParts(["vessels",]); self._preloadStats(["vessels",])
-                data = OrganDetectionAlgo.getVenaCava(self.data3d, self.spacing, self.getVessels(raw=True), \
-                    self.analyzeVessels(raw=True) )
+                    self.getFatlessBody(raw=True), self.getBones(raw=True), self.analyzeBones(raw=True), self.getKidneys(raw=True) )
             elif part == "kidneys":
-                self._preloadParts(["fatlessbody","diaphragm"])
+                self._preloadParts(["fatlessbody","diaphragm","liver"])
                 data = OrganDetectionAlgo.getKidneys(self.data3d, self.spacing, \
                     self.getClassifierOutput(part, raw=True), self.getFatlessBody(raw=True), \
                     self.getDiaphragm(raw=True), self.getLiver(raw=True))
@@ -351,6 +341,8 @@ class OrganDetection(object):
                 self._preloadParts(["fatlessbody","diaphragm"])
                 data = OrganDetectionAlgo.getLiver(self.data3d, self.spacing, \
                     self.getClassifierOutput(part, raw=True), self.getFatlessBody(raw=True), self.getDiaphragm(raw=True))
+            else:
+                raise Exception("Looks like someone forgot to specify which algorithm to use for part '%s'..." % part)
 
             self.masks_comp[part] = compressArray(data)
 
@@ -394,12 +386,6 @@ class OrganDetection(object):
 
     def getVessels(self, raw=False):
         return self.getPart("vessels", raw=raw)
-
-    def getAorta(self, raw=False):
-        return self.getPart("aorta", raw=raw)
-
-    def getVenaCava(self, raw=False):
-        return self.getPart("venacava", raw=raw)
 
     def getKidneys(self, raw=False):
         return self.getPart("kidneys", raw=raw)

@@ -114,13 +114,11 @@ def getDataFractions(data2d, fraction_defs=[], mask=None, return_slices=False):
         slices.append((h_s,w_s))
         fractions.append(data2d[(h_s,w_s)])
 
-    if return_slices:
-        fractions = slices
-
-    if len(fractions)==1:
-        return fractions[0]
+    r = slices if return_slices else fractions
+    if len(r)==1:
+        return r[0]
     else:
-        return tuple(fractions)
+        return tuple(r)
 
 ###########################################
 # Resize

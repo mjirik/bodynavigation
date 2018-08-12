@@ -27,7 +27,7 @@ import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import getSphericalMask, getDiskMask, binaryClosing, binaryFillHoles, getDataPadding, \
-    cropArray, padArray, polyfit3D, growRegion, regionGrowing, getDataFractions, getBiggestObjects
+    cropArray, padArray, polyfit3D, growRegion, regionGrowing, getDataFractions, getBiggestObjects, firstNonzero
 
 class OrganDetectionAlgo(object):
     """
@@ -41,7 +41,7 @@ class OrganDetectionAlgo(object):
     """
 
     @classmethod
-    def cleanData(cls, data3d, spacing):
+    def cleanData(cls, data3d, spacing, remove_brightness_errors=True):
         """
         Filters out noise, removes some errors in data, sets undefined voxel value to -1024, etc ...
         """
@@ -72,31 +72,32 @@ class OrganDetectionAlgo(object):
         # ed = sed3.sed3(data3d); ed.show()
 
         # remove high brightness errors near edges of valid data (takes about 70s)
-        logger.debug("Removing high brightness errors near edges of valid data") # TODO - clean this part up
-        valid_mask = data3d > -1024
-        valid_mask = skimage.measure.label(valid_mask, background=0)
-        unique, counts = np.unique(valid_mask, return_counts=True)
-        unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
-        valid_mask = valid_mask == unique[list(counts).index(max(counts))]
-        for z in range(valid_mask.shape[0]):
-            tmp = valid_mask[z,:,:]
-            if np.sum(tmp) == 0: continue
-            tmp = skimage.morphology.convex_hull_image(tmp)
-            # get contours
-            tmp = (skimage.feature.canny(tmp) != 0)
-            # thicken contour (expecting 512x512 resolution)
-            tmp = scipy.ndimage.binary_dilation(tmp, structure=skimage.morphology.disk(11, dtype=np.bool))
-            # lower all values near border bigger then BODY_THRESHOLD closer to BODY_THRESHOLD
-            dst = scipy.ndimage.morphology.distance_transform_edt(tmp).astype(np.float)
-            dst = dst/np.max(dst)
-            dst[ dst != 0 ] = 0.01**dst[ dst != 0 ]; dst[ dst == 0 ] = 1.0
+        if remove_brightness_errors:
+            logger.debug("Removing high brightness errors near edges of valid data") # TODO - clean this part up
+            valid_mask = data3d > -1024
+            valid_mask = skimage.measure.label(valid_mask, background=0)
+            unique, counts = np.unique(valid_mask, return_counts=True)
+            unique = unique[1:]; counts = counts[1:] # remove background label (is 0)
+            valid_mask = valid_mask == unique[list(counts).index(max(counts))]
+            for z in range(valid_mask.shape[0]):
+                tmp = valid_mask[z,:,:]
+                if np.sum(tmp) == 0: continue
+                tmp = skimage.morphology.convex_hull_image(tmp)
+                # get contours
+                tmp = (skimage.feature.canny(tmp) != 0)
+                # thicken contour (expecting 512x512 resolution)
+                tmp = scipy.ndimage.binary_dilation(tmp, structure=skimage.morphology.disk(11, dtype=np.bool))
+                # lower all values near border bigger then BODY_THRESHOLD closer to BODY_THRESHOLD
+                dst = scipy.ndimage.morphology.distance_transform_edt(tmp).astype(np.float)
+                dst = dst/np.max(dst)
+                dst[ dst != 0 ] = 0.01**dst[ dst != 0 ]; dst[ dst == 0 ] = 1.0
 
-            mask = data3d[z,:,:] > cls.BODY_THRESHOLD
-            data3d[z,:,:][mask] = ( \
-                ((data3d[z,:,:][mask].astype(np.float)+300)*dst[mask])-300 \
-                ).astype(np.int16) # TODO - use cls.BODY_THRESHOLD
-        del(valid_mask, dst)
-        # ed = sed3.sed3(data3d); ed.show()
+                mask = data3d[z,:,:] > cls.BODY_THRESHOLD
+                data3d[z,:,:][mask] = ( \
+                    ((data3d[z,:,:][mask].astype(np.float)+300)*dst[mask])-300 \
+                    ).astype(np.int16) # TODO - use cls.BODY_THRESHOLD
+            del(valid_mask, dst)
+            # ed = sed3.sed3(data3d); ed.show()
 
         # remove anything that is not in body volume
         logger.debug("Removing all data outside of segmented body")
@@ -385,7 +386,7 @@ class OrganDetectionAlgo(object):
         for z in range(data3d.shape[0]): # only left and right sections for ribs and hips detection
             view_spine, view_front = getDataFractions(b_surface[z,:,:], \
                 fraction_defs=[frac_spine,frac_front], mask=fatlessbody[z,:,:])
-            view_spine[:,:] = 0; view_front[:,:] = 0
+            view_spine[:,:] = 0; view_front[:,:] = 0 # TODO - test if changes original array
         b_surface_sums = np.sum(np.sum(b_surface,axis=1),axis=1)
 
         if np.sum(b_surface_sums[lungs_stats["end_sym"]:] == 0) == 0:
@@ -413,7 +414,7 @@ class OrganDetectionAlgo(object):
             view_spine = getDataFractions(bones[z,:,:], fraction_defs=[frac_spine,], mask=fatlessbody[z,:,:])
             tmp = view_spine.copy()
             bones[z,:,:][(bones[z,:,:] != 0) & (b_surface[z,:,:] == 0)] = 2
-            view_spine[:,:] = tmp[:,:]
+            view_spine[:,:] = tmp[:,:] # TODO - test if changes original array
         # readd seed blobs that are connected to good seeds (half removed ribs in lower part of body)
         # as maybe bones (remove seeds)
         bones[ (regionGrowing(bones != 0, bones == 1, bones != 0, mode="watershed") == 1) & (bones == 2) ] = 0
@@ -451,7 +452,7 @@ class OrganDetectionAlgo(object):
         return bones
 
     DIAPHRAGM_SOBEL_THRESHOLD = -10
-    DIAPHRAGM_MAX_LUNGS_END_DIST = 100 # mm
+    DIAPHRAGM_MAX_LUNGS_END_DIST = 100 # mm # TODO - maybe 150? (some data is cut too early)
 
     @classmethod
     def getDiaphragm(cls, data3d, spacing, lungs, body): # TODO - improve
@@ -518,201 +519,163 @@ class OrganDetectionAlgo(object):
         #ed = sed3.sed3(data3d, seeds=diaphragm); ed.show()
         return diaphragm
 
-    ################################################################################################
-
-    VESSELS_THRESHOLD = 110 # 145
-    VESSELS_SPINE_WIDTH = 22 # from center (radius)
-    VESSELS_SPINE_HEIGHT = 30 # from center (radius)
+    # vessels threshold detection
+    VESSELS_ROUGH_THRESHOLD = [70,170]
+    VESSELS_CANNY_MEDIAN = 10
+    VESSELS_HOUGH_RADII = np.arange(5, 16, 1) # in mm, radius of aorta is 10-14mm, venacava is 24mm
+    VESSELS_HOUGH_THRESHOLD = 0.4
+    VESSELS_HOUGH_INTENSITY_THRESHOLD = VESSELS_ROUGH_THRESHOLD[0]+5
+    VESSELS_HOUGH_RADII_DILATION = 10 # mm
+    # vessels segmentation
+    VESSELS_SEEDS_PART_EROSION = 5 # mm
+    VESSELS_SPINE_BLOB_RADII = 20 # mm
+    VESSELS_SEEDS_MIN_DIST = 15 # mm
+    VESSELS_SEEDS_SURFACE_DIST = 40 # mm
+    VESSELS_OBJ_MIN_SIZE = 10**3 # mm3
 
     @classmethod
-    def getVessels(cls, data3d, spacing, bones, bones_stats, contrast_agent=True): # TODO - fix this; doesnt work for voxelsize only resize
+    def getVessels(cls, data3d, spacing, fatlessbody, bones, bones_stats, kidneys, threshold=None):
         """
-        Tabular value of blood radiodensity is 13-50 HU.
-        When contrast agent is used, it rises to roughly 100-140 HU.
-        Vessels are segmentable only if contrast agent was used.
+        Tabular value of blood radiodensity is 13-50 HU, but when contrast agent is used, it
+        rises to roughly 100-240 HU. Threshold must be detected automaticaly.
         """
         logger.info("getVessels()")
-        points_spine = bones_stats["spine"]
-        if len(points_spine) == 0:
-            logger.warning("Couldn't find vessels!")
-            return np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
-        # get spine z-range
-        spine_zmin = points_spine[0][0]; spine_zmax = points_spine[-1][0]
+        voxel_volume = spacing[0]*spacing[1]*spacing[2]
+        voxel_avrg_2d_spacing = (spacing[1]+spacing[2])/2.0
 
-        #ed = sed3.sed3(data3d, contour=bones); ed.show()
+        ##########################
+        # Find Vessels Threshold #
+        ##########################
+        if threshold is None:
+            logger.debug("Find Vessels Threshold")
 
-        SPINE_WIDTH = int(cls.VESSELS_SPINE_WIDTH/spacing[2])
-        SPINE_HEIGHT = int(cls.VESSELS_SPINE_HEIGHT/spacing[1])
+            def get_normed_intensity_range(data, low, high):
+                """ Converts <LOW,HIGH> to <0,255> """
+                data = data.astype(np.float32)
+                data[ data < low ] = low
+                data[ data > high ] = high
+                data -= low
+                data *= 255.0/(high-low)
+                data = data.astype(np.uint8)
+                return data
 
-        if contrast_agent:
-            vessels = data3d > cls.VESSELS_THRESHOLD
+            # use rough threshold, convert range to <0;255> and remove small details from data to prepare for edge detection
+            data3d_c = get_normed_intensity_range(data3d, low=cls.VESSELS_ROUGH_THRESHOLD[0], high=cls.VESSELS_ROUGH_THRESHOLD[1])
+            for z in range(data3d.shape[0]):
+                data3d_c[z,:,:] = scipy.ndimage.filters.median_filter(data3d_c[z,:,:], cls.VESSELS_CANNY_MEDIAN)
+            # ed = sed3.sed3(data3d_c); ed.show()
 
-            seeds = bones.astype(np.uint8) # = 1
+            # find edges in data
+            edges = np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
+            for z in range(data3d.shape[0]):
+                edges[z,:,:] = skimage.feature.canny(data3d_c[z,:,:], sigma=0.0, low_threshold=150, high_threshold=200 )
+
+            # Detect radii
+            hough_res = np.zeros(data3d.shape, dtype=np.float32)
+            for z in range(data3d.shape[0]):
+                hough_res[z,:,:] = np.max(skimage.transform.hough_circle(edges[z,:,:], \
+                    np.round(cls.VESSELS_HOUGH_RADII.astype(np.float)/voxel_avrg_2d_spacing).astype(np.int)), axis=0)
+            # ed = sed3.sed3(hough_res, seeds=edges); ed.show()
+
+            # remove unimportant detected radii
+            for z in range(data3d.shape[0]):
+                s_spine = getDataFractions(hough_res[z,:,:], fraction_defs=[{"h":(0.25,1),"w":(0.40,0.60)},], \
+                    mask=fatlessbody[z,:,:], return_slices=True)
+                # remove everything not in spine section
+                tmp = hough_res[z,:,:][s_spine].copy()
+                hough_res[z,:,:] = np.zeros(hough_res[z,:,:].shape, dtype=hough_res.dtype)
+                hough_res[z,:,:][s_spine] = tmp
+                # remove everything behind spine
+                tmp = np.zeros(bones[z,:,:].shape, dtype=bones.dtype)
+                tmp[s_spine] = bones[z,:,:][s_spine].copy()
+                max_spine_y = np.min(firstNonzero(tmp, axis=0, invalid_val=np.inf))
+                if max_spine_y != np.inf:
+                    hough_res[z,int(max_spine_y):,:] = 0
+                # remove everything thats on voxel with lower denzity then threshold
+                hough_res[z,(data3d[z,:,:] < cls.VESSELS_HOUGH_INTENSITY_THRESHOLD)] = 0
+
+            # threshold radii
+            hough_res = hough_res > cls.VESSELS_HOUGH_THRESHOLD
+            #ed = sed3.sed3(data3d_c, seeds=hough_res); ed.show()
+
+            # remove outliners and get pointsin vessels volume
+            hough_res = scipy.ndimage.binary_dilation(hough_res, \
+                structure=getDiskMask(cls.VESSELS_HOUGH_RADII_DILATION, spacing=spacing))
+            hough_res_label = skimage.measure.label(hough_res, background=0)
+            for u in np.unique(hough_res_label)[1:]:
+                # remove if connected centers are not at more then N slices
+                if ( hough_res.shape[0]-np.sum(getDataPadding(hough_res_label == u)[0]) ) <= 5:
+                    hough_res_label[ hough_res_label == u ] = 0
+            hough_res = hough_res_label != 0
+            hough_res[data3d < cls.VESSELS_HOUGH_INTENSITY_THRESHOLD] = 0
+            #ed = sed3.sed3(data3d_c, seeds=hough_res); ed.show()
+
+            # test if any vessels were detected at all
+            if np.sum(hough_res) == 0:
+                logger.warning("Could not detect vessels! (In vessels threshold detection)")
+                return np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
+
+            # calculate statistics and thresholds
+            d = data3d[hough_res]; d_p = {}
+            d_min = int(np.min(d))
+            d_max = int(np.max(d))
+            logger.debug("Vessels intensity min: %i, max: %i" % (d_min, d_max))
+            for p in range(5, 100, 5):
+                d_p[p] = int(np.percentile(d, p))
+            logger.debug("Vessels intensity percentiles: %s" % str(sorted(d_p.items())))
+            threshold = [d_p[10],d_p[90]+50]
+            logger.debug("Detected vessels threshold: <%i,%i>" % (threshold[0], threshold[1]))
+
+        ########################
+        # Vessels Segmentation #
+        ########################
+        logger.debug("Vessels Segmentation")
+
+        ## threshold vessels
+        vessels = (data3d > threshold[0]) & (data3d < threshold[1])
+        # ed = sed3.sed3(data3d, seeds=vessels); ed.show()
+        vessels = binaryFillHoles(vessels, z_axis=True)
+        # ed = sed3.sed3(data3d, seeds=vessels); ed.show()
+
+        ## region growing - init seeds
+        seeds = np.zeros(vessels.shape, dtype=np.int8)
+        # bad seeds - already segmented parts and center of spine
+        seeds[ kidneys ] = 1
+        seeds[ bones ] = 1
+        if len(bones_stats["spine"]) != 0:
+            spine_zmin = bones_stats["spine"][0][0]; spine_zmax = bones_stats["spine"][-1][0]
             for z in range(spine_zmin,spine_zmax+1): # draw seeds elipse at spine center
-                sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
-                rr, cc = skimage.draw.ellipse(sc[0], sc[1], SPINE_HEIGHT, SPINE_WIDTH, \
-                    shape=seeds[z,:,:].shape)
+                sc = bones_stats["spine"][z-spine_zmin]; sc = (sc[1], sc[2])
+                rr, cc = skimage.draw.ellipse( \
+                    sc[0], sc[1], int(cls.VESSELS_SPINE_BLOB_RADII/spacing[1]), \
+                    int(cls.VESSELS_SPINE_BLOB_RADII/spacing[2]), shape=seeds[z,:,:].shape)
                 seeds[z,rr,cc] = 1
-            seeds[ scipy.ndimage.morphology.distance_transform_edt(seeds == 0, sampling=spacing) > 15 ] = 2
-            seeds[ vessels == 0 ] = 0 # seeds only where there are vessels
+        # good seeds - min distance from already segmented parts
+        fatlessbody_dst = scipy.ndimage.morphology.distance_transform_edt(fatlessbody, sampling=spacing)
+        bad_seeds_dst = scipy.ndimage.morphology.distance_transform_edt(seeds != 1, sampling=spacing)
+        seeds[ (bad_seeds_dst > cls.VESSELS_SEEDS_MIN_DIST) & (fatlessbody_dst > cls.VESSELS_SEEDS_SURFACE_DIST) ] = 2
+        seeds[ (seeds == 2) & (vessels == 0) ] = 0 # only in possible vessels volume
 
-            vessels = skimage.morphology.watershed(vessels, seeds, mask=vessels) # TODO replace with regionGrowing()
-            #ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
-            vessels = vessels == 2 # even smallest vessels and kidneys
+        ## region growing - run it
+        # ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
+        vessels = regionGrowing(skimage.util.invert(data3d), seeds, vessels, mode="watershed")
+        # ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
+        vessels = vessels == 2
 
-            vessels = scipy.ndimage.morphology.binary_fill_holes(vessels)
-            vessels = scipy.ndimage.binary_opening(vessels, structure=np.ones((3,3,3)))
+        ## remove small objects that are not connected to vessel tree
+        vessels = skimage.morphology.remove_small_objects(vessels, \
+            min_size=int(cls.VESSELS_OBJ_MIN_SIZE/voxel_volume), connectivity=2)
+        #vessels = scipy.ndimage.binary_opening(vessels, structure=np.ones((3,3,3)))
 
-            # remove vessels outside of detected spine z-range
-            vessels[:spine_zmin,:,:] = 0
-            vessels[spine_zmax+1:,:,:] = 0
-            #ed = sed3.sed3(data3d, contour=vessels); ed.show()
-
-            # remove liver and similar half-segmented organs
-            cut_rad = (150, 70); cut_rad = (cut_rad[0]/spacing[1], cut_rad[1]/spacing[2])
-            seeds = np.zeros(vessels.shape, dtype=np.int8)
-            for z in range(spine_zmin,spine_zmax+1):
-                vs = vessels[z,:,:]; sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
-
-                rr, cc = skimage.draw.ellipse(sc[0]-cut_rad[0]-SPINE_HEIGHT, sc[1], \
-                    cut_rad[0], cut_rad[1], shape=seeds[z,:,:].shape)
-                seeds[z,rr,cc] = 1
-
-                rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], \
-                    shape=seeds[z,:,:].shape)
-                mask = np.zeros(seeds[z,:,:].shape); mask[rr, cc] = 1
-                mask[int(sc[0]):,:] = 0
-                seeds[z, mask != 1] = 2
-            # ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
-
-            r = skimage.morphology.watershed(vessels, seeds, mask=vessels) # TODO replace with regionGrowing()
-            vessels = r == 1
-            #ed = sed3.sed3(data3d, contour=vessels); ed.show()
-
-            # find circles near spine
-            rad = np.asarray(list(range(9,12)), dtype=np.float32)
-            rad = list( rad / float((spacing[1]+spacing[2])/2.0) )
-            seeds = np.zeros(vessels.shape, dtype=np.int8)
-            for z in range(spine_zmin,spine_zmax+1):
-                vs = vessels[z,:,:]; sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
-                SPINE_HEIGHT = sc[0]-SPINE_HEIGHT
-
-                # get circle centers
-                edge = skimage.feature.canny(vs, sigma=0.0)
-                #ed = sed3.sed3(np.expand_dims(edge.astype(np.float), axis=0)); ed.show()
-                r = skimage.transform.hough_circle(edge, radius=rad)
-                #ed = sed3.sed3(r, contour=np.expand_dims(vs, axis=0)); ed.show()
-                r = np.sum(r > 0.35, axis=0) != 0
-                r[ vs == 0 ] = 0 # remove centers outside segmented vessels
-                r = scipy.ndimage.binary_closing(r, structure=np.ones((10,10))) # connect near centers
-                #ed = sed3.sed3(np.expand_dims(r.astype(np.float), axis=0), contour=np.expand_dims(vs, axis=0)); ed.show()
-
-                # get circle centers
-                if np.sum(r) == 0: continue
-                rl = skimage.measure.label(r, background=0)
-                centers = scipy.ndimage.measurements.center_of_mass(r, rl, range(1, np.max(rl)+1))
-
-                # use only circle centers that are near spine, and are in vessels
-                for i, c in enumerate(centers):
-                    dst_y = abs(sc[0]*spacing[1]-c[0]*spacing[1])
-                    dst_x = abs(sc[1]*spacing[2]-c[1]*spacing[2])
-                    dst2 = dst_y**2 + dst_x**2
-                    if vs[int(c[0]),int(c[1])] == 0: continue # must be inside segmented vessels
-                    elif dst2 > 70**2: continue # max dist from spine
-                    elif c[0] > SPINE_HEIGHT: continue # no lower then spine height
-                    else: seeds[z,int(c[0]),int(c[1])] = 1
-
-            # convolution with vertical kernel to remove seeds in vessels not going up-down
-            kernel = np.ones((15,1,1))
-            r = scipy.ndimage.convolve(vessels.astype(np.uint32), kernel)
-            #ed = sed3.sed3(r, contour=vessels); ed.show()
-            seeds[ r < np.sum(kernel) ] = 0
-
-            # remove everything thats not connected to at least one seed
-            vessels = skimage.measure.label(vessels, background=0)
-            tmp = vessels.copy(); tmp[ seeds == 0 ] = 0
-            for l in np.unique(tmp)[1:]:
-                vessels[ vessels == l ] = -1
-            vessels = (vessels == -1); del(tmp)
-
-            # watershed
-            seeds_base = seeds.copy() # only circle centers
-            seeds = scipy.ndimage.binary_dilation(seeds.astype(np.bool), structure=np.ones((1,3,3))).astype(np.int8)
-            cut_rad = (90, 70); cut_rad = (cut_rad[0]/spacing[1], cut_rad[1]/spacing[2])
-            for z in range(spine_zmin,spine_zmax+1):
-                sc = points_spine[z-spine_zmin]; sc = (sc[1], sc[2])
-                rr, cc = skimage.draw.ellipse(sc[0], sc[1], cut_rad[0], cut_rad[1], shape=seeds[z,:,:].shape)
-                mask = np.zeros(seeds[z,:,:].shape); mask[rr, cc] = 1
-                mask[int(sc[0]):,:] = 0
-                seeds[z, mask != 1] = 2
-            #ed = sed3.sed3(data3d, seeds=seeds, contour=vessels); ed.show()
-
-            r = skimage.morphology.watershed(vessels, seeds, mask=vessels) # TODO replace with regionGrowing()
-            #ed = sed3.sed3(data3d, seeds=seeds, contour=r); ed.show()
-            vessels = r == 1
-
-            # remove everything thats not connected to at least one seed, again (just to be safe)
-            vessels = skimage.measure.label(vessels, background=0)
-            tmp = vessels.copy(); tmp[ seeds_base == 0 ] = 0
-            for l in np.unique(tmp)[1:]:
-                vessels[ vessels == l ] = -1
-            vessels = (vessels == -1); del(tmp)
-
-            return vessels
-
-        else: # without contrast agent, blood is 13-50 HU
-            logger.warning("Couldn't find vessels!")
-            return np.zeros(data3d.shape, dtype=np.bool).astype(np.bool)
-
-            # TODO - try it anyway
-            # - FIND EDGES, THRESHOLD EDGES - canny
-            # - hough_circle
-            # - convolution with kernel with very big z-axis
-            # - combine last two steps
-            # - points_spine - select close circles to spine
-
-    VESSELS_AORTA_RADIUS = 12
-
-    @classmethod
-    def getAorta(cls, data3d, spacing, vessels, vessels_stats):
-        logger.info("getAorta()")
-        points = vessels_stats["aorta"]
-        if len(points) == 0 or np.sum(vessels) == 0:
-            logger.warning("Couldn't find aorta volume!")
-            return np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
-
-        aorta = np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
-        for p in points:
-            aorta[p[0],p[1],p[2]] = 1
-        aorta = growRegion(aorta, vessels, iterations=cls.VESSELS_AORTA_RADIUS) # TODO - replace with regionGrowing
-        # aorta = regionGrowing(vessels, aorta, vessels, max_dist=cls.VESSELS_AORTA_RADIUS, mode="watershed")
-
-        return aorta
-
-    VESSELS_VENACAVA_RADIUS = 12
-
-    @classmethod
-    def getVenaCava(cls, data3d, spacing, vessels, vessels_stats):
-        logger.info("getVenaCava()")
-        points = vessels_stats["vena_cava"]
-        if len(points) == 0 or np.sum(vessels) == 0:
-            logger.warning("Couldn't find venacava volume!")
-            return np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
-
-        venacava = np.zeros(vessels.shape, dtype=np.bool).astype(np.bool)
-        for p in points:
-            venacava[p[0],p[1],p[2]] = 1
-        venacava = growRegion(venacava, vessels, iterations=cls.VESSELS_VENACAVA_RADIUS) # TODO - replace with regionGrowing
-        # venacava = regionGrowing(vessels, venacava, vessels, max_dist=cls.VESSELS_AORTA_RADIUS, mode="watershed")
-
-        return venacava
-
-    ################################################################################################
+        return vessels
 
     KIDNEYS_BINARY_OPENING = 10
 
     @classmethod
-    def getKidneys(cls, data3d, spacing, cls_output, fatlessbody, diaphragm, liver): # TODO - some data can have only one kidney
+    def getKidneys(cls, data3d, spacing, cls_output, fatlessbody, diaphragm, liver):
+        # TODO
+        # - some data can have only one kidney
+        # - potrebuje hodne vylepsit (zkus se podivat na predchozi verzi co nepouzivala patlas)
         logger.info("getKidneys()")
         # output of classifier
         data = cls_output
@@ -1005,7 +968,7 @@ class OrganDetectionAlgo(object):
         return {"spine":points_spine, "hips_joints":points_hips_joints, "hips_start":points_hips_start}
 
     @classmethod
-    def analyzeVessels(cls, data3d, spacing, vessels, bones_stats):
+    def analyzeVessels(cls, data3d, spacing, vessels, bones_stats): # TODO - pridej bod kde se porta dotika jater
         """ Returns: {"aorta":[], "vena_cava":[]} """
         logger.info("analyzeVessels()")
         if np.sum(vessels) == 0:
