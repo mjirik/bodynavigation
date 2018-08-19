@@ -389,11 +389,11 @@ class OrganDetectionAlgo(object):
             view_spine[:,:] = 0; view_front[:,:] = 0 # TODO - test if changes original array
         b_surface_sums = np.sum(np.sum(b_surface,axis=1),axis=1)
 
-        if np.sum(b_surface_sums[lungs_stats["end_sym"]:] == 0) == 0:
+        if np.sum(b_surface_sums[lungs_stats["end"]:] == 0) == 0:
             logger.warning("End of ribs not found in data! Using data3d.shape[0]")
             ribs_end = data3d.shape[0]
         else:
-            ribs_end = lungs_stats["end_sym"]+np.argmax( b_surface_sums[lungs_stats["end_sym"]:] == 0 )
+            ribs_end = lungs_stats["end"]+np.argmax( b_surface_sums[lungs_stats["end"]:] == 0 )
 
         if (ribs_end == data3d.shape[0]) or (np.sum(b_surface_sums[min(data3d.shape[0],ribs_end+1):]) == 0):
             logger.warning("Start of hips not found in data! Using data3d.shape[0]")
