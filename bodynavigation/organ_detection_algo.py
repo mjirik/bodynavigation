@@ -345,7 +345,7 @@ class OrganDetectionAlgo(object):
 
         #create convex hull of lungs
         lungs_hull = np.zeros(lungs.shape, dtype=np.bool).astype(np.bool)
-        for z in range(lungs_stats["start_sym"],lungs_stats["end_sym"]):
+        for z in range(lungs_stats["start"],lungs_stats["end"]):
             if np.sum(lungs[z,:,:]) == 0: continue
             lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs[z,:,:])
 
@@ -415,6 +415,7 @@ class OrganDetectionAlgo(object):
             tmp = view_spine.copy()
             bones[z,:,:][(bones[z,:,:] != 0) & (b_surface[z,:,:] == 0)] = 2
             view_spine[:,:] = tmp[:,:] # TODO - test if changes original array
+        # ed = sed3.sed3(data3d, seeds=bones); ed.show()
         # readd seed blobs that are connected to good seeds (half removed ribs in lower part of body)
         # as maybe bones (remove seeds)
         bones[ (regionGrowing(bones != 0, bones == 1, bones != 0, mode="watershed") == 1) & (bones == 2) ] = 0
@@ -745,7 +746,6 @@ class OrganDetectionAlgo(object):
 
         out = {
             "start":0, "end":0, # start and end of lungs on z-axis
-            "start_sym":0, "end_sym":0, # start and end of lungs_hull on z-axis cropped until all slices are roughly symetrical
             "max_area_z":0  # idx of slice with biggest lungs area
             }
         if np.sum(lungs) == 0:
@@ -756,27 +756,6 @@ class OrganDetectionAlgo(object):
         out["start"] = lungs_pad[0][0]
         out["end"] = lungs.shape[0]-lungs_pad[0][1]
         out["max_area_z"] = np.argmax(np.sum(np.sum(lungs,axis=1),axis=1))
-
-        #create convex hull of lungs
-        lungs_hull = lungs.copy()
-        for z in range(out["start"],out["end"]):
-            if np.sum(lungs_hull[z,:,:]) == 0: continue
-            lungs_hull[z,:,:] = skimage.morphology.convex_hull_image(lungs_hull[z,:,:])
-        # crop hull in places it is not symetrical in (start and end of lungs), and save start/end.
-        out["start_sym"] = out["start"]
-        out["end_sym"] = out["end"]
-        for z in range(out["start"],out["end"]):
-            if np.sum(lungs_hull[z,:,:]) == 0: continue
-            left = getDataFractions(lungs_hull[z,:,:], fraction_defs=[{"h":(0,1),"w":(0,0.5)},], mask=fatlessbody[z,:,:])
-            left_sum_frac = np.sum(left)/np.sum(lungs_hull[z,:,:])
-            if not ( abs(left_sum_frac-0.5) < cls.LUNGS_HULL_SYM_LIMIT ):
-                out["start_sym"] = z; break
-        for z in range(out["end"]-1,out["start"],-1):
-            if np.sum(lungs_hull[z,:,:]) == 0: continue
-            left = getDataFractions(lungs_hull[z,:,:], fraction_defs=[{"h":(0,1),"w":(0,0.5)},], mask=fatlessbody[z,:,:])
-            left_sum_frac = np.sum(left)/np.sum(lungs_hull[z,:,:])
-            if not ( abs(left_sum_frac-0.5) < cls.LUNGS_HULL_SYM_LIMIT ):
-                out["end_sym"] = z; break
 
         return out
 
