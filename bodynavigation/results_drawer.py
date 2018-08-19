@@ -154,9 +154,9 @@ class ResultsDrawer(object): # TODO - custom resolution by setting target voxels
         if axis == 0:
             new_shape = (int(data3d.shape[1] * voxelsize[1]), int(data3d.shape[2] * voxelsize[2]))
         elif axis == 1:
-            new_shape = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[1] * voxelsize[1]))
-        else: # axis == 2
             new_shape = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[2] * voxelsize[2]))
+        else: # axis == 2
+            new_shape = (int(data3d.shape[0] * voxelsize[0]), int(data3d.shape[1] * voxelsize[1]))
 
         order = 0 if mask else 1
         view = resize(view, new_shape, order=order, mode="reflect").astype(np.int32)
@@ -176,7 +176,7 @@ class ResultsDrawer(object): # TODO - custom resolution by setting target voxels
 
         points = [ list(np.asarray(p)*voxelsize) for p in points ]
 
-        z, y, x = zip(*points)
+        z, y, x = zip(*points) # TODO - is this correct???
         if axis == 0:
             points_2d = zip(x, y)
         elif axis == 1:
