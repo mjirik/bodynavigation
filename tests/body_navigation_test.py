@@ -74,7 +74,8 @@ class BodyNavigationTest(unittest.TestCase):
         profile, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(return_gradient_image=True)
         self.assertGreater(np.max(gradient), self.obj.GRADIENT_THRESHOLD, "Gradient threshold is too low")
         self.assertLess(np.min(gradient), -self.obj.GRADIENT_THRESHOLD, "Gradient threshold is to low")
-        self.assertGreater(np.max(profile) - np.min(profile), 5, "Low and high diaphragm level should be at least 5 slices")
+
+        self.assertGreater(np.nanmax(profile) - np.nanmin(profile), 5, "Low and high diaphragm level should be at least 5 slices")
         import matplotlib.pyplot as plt
         import sed3
         # ed = sed3.sed3(gradient)
