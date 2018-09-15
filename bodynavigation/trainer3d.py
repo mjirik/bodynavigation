@@ -105,7 +105,7 @@ class GMMCl(object):
 
     def _relabel(self, target, new_keys):
         out = np.zeros(target.shape, dtype=target.dtype)
-        for label, i in new_keys.iteritems():
+        for label, i in new_keys.items():
             out[target==i] = label
         return out
 
