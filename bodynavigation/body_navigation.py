@@ -494,10 +494,11 @@ class BodyNavigation:
     def _filter_diaphragm_profile_image_remove_outlayers(self, profile, axis=0, tolerance=80):
         # import bottleneck
         # tolerance * 1.5mm
+        non_nan_profile = profile[~np.isnan(profile)]
+        positive_non_nan_profile_values = non_nan_profile[non_nan_profile > 0]
+        med = np.median(positive_non_nan_profile_values)
 
-        print("none ", np.sum(np.isnan(profile)))
-        med = np.median(profile[profile > 0])
-        profile[np.abs(profile - med) > tolerance] = 0
+        profile[np.greater(np.abs(profile - med), tolerance, where=~np.isnan(profile))] = 0
         return profile
 
     def get_diaphragm_profile_image_with_empty_areas(self, axis=0, return_gradient_image=False):
