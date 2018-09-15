@@ -90,10 +90,24 @@ class BodyNavigationTest(unittest.TestCase):
         # import sed3
         # ed = sed3.sed3(self.data3d, contour=self.obj.get_lungs())
         # ed.show()
-        dst_diaphragm = self.obj.dist_diaphragm()
-        # import matplotlib.pyplot as plt
-        # profile, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(return_gradient_image=True)
-        # plt.imshow(self.obj.get_diaphragm_profile_image())
+        import matplotlib.pyplot as plt
+        profile_with_nan, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(return_gradient_image=True)
+        self.assertGreater(np.sum(np.isnan(profile_with_nan)), np.prod(profile_with_nan.shape) * 0.10,
+                           "Expected at least 10% NaN's in profile image")
+
+        self.assertGreater(np.nanmean(profile_with_nan), 5, "The diaphragm is expected to be more than 5 slices in the data")
+        self.assertLess(np.nanmean(profile_with_nan), self.obj.lungs.shape[0] - 5, "The diaphragm is expected to be more than 5 slices in the data")
+        # plt.imshow(profile_with_nan)
+        # plt.colorbar()
+        # plt.show()
+        profile, preprocessed_profile = self.obj.get_diaphragm_profile_image(return_preprocessed_image=True)
+        self.assertEqual(np.sum(np.isnan(profile)), 0, "Expected 0 NaN's in postprocessed profile image")
+        self.assertGreater(np.nanmean(profile), 5, "The diaphragm is expected to be more than 5 slices in the data")
+        self.assertLess(np.nanmean(profile), self.obj.lungs.shape[0] - 5, "The diaphragm is expected to be more than 5 slices in the data")
+        # plt.imshow(preprocessed_profile)
+        # plt.colorbar()
+        # plt.show()
+        # plt.imshow(profile)
         # plt.colorbar()
         # plt.show()
         # print(dst_diaphragm.shape, self.data3d.shape)
@@ -104,8 +118,17 @@ class BodyNavigationTest(unittest.TestCase):
         # ed.show()
         # ed = sed3.sed3(self.data3d, contour=self.obj.get_diaphragm_mask())
         # ed.show()
+        dst_diaphragm = self.obj.dist_diaphragm()
         # above diaphragm it should be positive
-        self.assertGreater(dst_diaphragm[0, 500, 10], 0)
+        # plt.imshow(self.data3d[0,:,:])
+        # plt.show()
+        # plt.imshow(dst_diaphragm[0,:,:])
+        # plt.colorbar()
+        # plt.show()
+        # plt.imshow(dst_diaphragm[:,250,:])
+        # plt.colorbar()
+        # plt.show()
+        self.assertGreater(dst_diaphragm[0, 500, 10], 2, "Diaphragm should be at least few mm from the top of the image")
         # unter diaphragm
         self.assertLess(dst_diaphragm[120, 250, 250], -20)
 

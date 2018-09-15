@@ -498,7 +498,7 @@ class BodyNavigation:
         positive_non_nan_profile_values = non_nan_profile[non_nan_profile > 0]
         med = np.median(positive_non_nan_profile_values)
 
-        profile[np.greater(np.abs(profile - med), tolerance, where=~np.isnan(profile))] = 0
+        profile[np.greater(np.abs(profile - med), tolerance, where=~np.isnan(profile))] = None
         return profile
 
     def get_diaphragm_profile_image_with_empty_areas(self, axis=0, return_gradient_image=False):
@@ -614,7 +614,7 @@ class BodyNavigation:
         import astropy.convolution
         flat_out = astropy.convolution.convolve(flat, kernel, boundary='extend')
 
-        too_bad_pixels = np.abs(flat_out - flat) > (max_dist_mm/self.working_vs[0])
+        too_bad_pixels = np.greater(np.abs(flat_out - flat), (max_dist_mm/self.working_vs[0]), where=~np.isnan(flat))
 
 
         flat[too_bad_pixels] = np.NaN
@@ -638,13 +638,20 @@ class BodyNavigation:
         return diaphragm_profile_orig_shape_mm
 
     def get_diaphragm_profile_image(self, axis=0, preprocessing=True, return_preprocessed_image=False):
+        """
+        Diaphragm profile in pixels. Use get_diaphragm_profile_image_orig_shape_in_mm to get data in mm.
+        :param axis:
+        :param preprocessing:
+        :param return_preprocessed_image:
+        :return:
+        """
         flat = self.get_diaphragm_profile_image_with_empty_areas(axis)
 
         if preprocessing:
             flat = self.remove_pizza(flat)
             flat = self._filter_diaphragm_profile_image_remove_outlayers(flat)
-            flat = self.filter_ignoring_nan(flat)
-            flat = self.filter_remove_outlayers(flat)
+            # flat = self.filter_ignoring_nan(flat)
+            # flat = self.filter_remove_outlayers(flat)
 
 
 
