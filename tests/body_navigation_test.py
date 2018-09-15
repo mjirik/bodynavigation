@@ -70,12 +70,40 @@ class BodyNavigationTest(unittest.TestCase):
         dst_lungs = self.obj.dist_to_lungs()
     # @unittest.skipIf(not interactiveTest, "interactive test")
 
+    def test_diaphragm_profile_image(self):
+        profile, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(return_gradient_image=True)
+        self.assertGreater(np.max(gradient), self.obj.GRADIENT_THRESHOLD, "Gradient threshold is too low")
+        self.assertLess(np.min(gradient), -self.obj.GRADIENT_THRESHOLD, "Gradient threshold is to low")
+        self.assertGreater(np.max(profile) - np.min(profile), 5, "Low and high diaphragm level should be at least 5 slices")
+        import matplotlib.pyplot as plt
+        import sed3
+        # ed = sed3.sed3(gradient)
+        # ed.show()
+        # plt.imshow(profile)
+        # plt.colorbar()
+        # plt.show()
+        # grt = gradient > self.obj.GRADIENT_THRESHOLD
+
+
     def test_diaphragm(self):
+        # import sed3
+        # ed = sed3.sed3(self.data3d, contour=self.obj.get_lungs())
+        # ed.show()
         dst_diaphragm = self.obj.dist_diaphragm()
+        # import matplotlib.pyplot as plt
+        # profile, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(return_gradient_image=True)
+        # plt.imshow(self.obj.get_diaphragm_profile_image())
+        # plt.colorbar()
+        # plt.show()
+        # print(dst_diaphragm.shape, self.data3d.shape)
         # import sed3
         # ed = sed3.sed3(dst_diaphragm)
         # ed.show()
-        # above diaphragm
+        # ed = sed3.sed3(self.obj.get_diaphragm_mask())
+        # ed.show()
+        # ed = sed3.sed3(self.data3d, contour=self.obj.get_diaphragm_mask())
+        # ed.show()
+        # above diaphragm it should be positive
         self.assertGreater(dst_diaphragm[0, 500, 10], 0)
         # unter diaphragm
         self.assertLess(dst_diaphragm[120, 250, 250], -20)
@@ -146,8 +174,8 @@ class BodyNavigationTest(unittest.TestCase):
     def test_diaphragm_martin(self):
         # bn = bodynavigation.BodyNavigation(use_new_get_lungs_setup=True)
         self.obj.use_new_get_lungs_setup=True
+        binary_lungs = self.obj.get_lungs_martin()
         dst_diaphragm = self.obj.dist_diaphragm()
-        dst_diaphragm = self.obj.get_lungs_martin()
         # import sed3
         # ed = sed3.sed3(dst_diaphragm)
         # ed.show()

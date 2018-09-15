@@ -28,7 +28,7 @@ from .organ_detection_algo import OrganDetectionAlgo
 class BodyNavigation:
     """ Range of values in input data must be <-1024;intmax> """
 
-    def __init__(self, data3d, voxelsize_mm, use_new_get_lungs_setup=True):
+    def __init__(self, data3d, voxelsize_mm, use_new_get_lungs_setup=False, head_first=True):
         # temporary fix for io3d <-512;511> value range bug
         if np.min(data3d) >= -512:
             data3d = data3d * 2
@@ -54,17 +54,18 @@ class BodyNavigation:
         self.spine_center_wvs = None
         self.ribs = None
         self.chest = None
+        self.head_first = head_first
         self.use_new_get_lungs_setup = use_new_get_lungs_setup
         self.set_parameters()
 
-    def set_parameters(self, version=0):
+    def set_parameters(self, version=1):
         if version == 0:
             self.GRADIENT_THRESHOLD = 12
 
         if version == 1:
             self.GRADIENT_THRESHOLD = 10
 
-    def get_body(self):
+    def get_body(self, skip_resize=False):
         # create segmented 3d data
         body = OrganDetectionAlgo.getBody(\
             scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=2), \
@@ -102,13 +103,16 @@ class BodyNavigation:
         self.body_width = body_width * float(self.voxelsize_mm[2])
         self.body_height = body_height * float(self.voxelsize_mm[1])
 
-        return resize_to_shape(self.body, self.orig_shape)
+        if skip_resize:
+            return self.body
+        else:
+            return resize_to_shape(self.body, self.orig_shape)
 
-    def get_spine(self):
+    def get_spine(self, skip_resize=False):
         """ Should have been named get_bones() """
         # prepare required data
         if self.body is None:
-            self.get_body() # self.body
+            self.get_body(skip_resize=True) # self.body
 
         # filter out noise in data
         data3dr = scipy.ndimage.filters.median_filter(self.data3dr, 3)
@@ -129,17 +133,27 @@ class BodyNavigation:
         # self.center2 = np.mean(np.nonzero(bones), 2)
 
         self.spine_wvs = bones
-        return resize_to_shape(bones, self.orig_shape)
+        if skip_resize:
+            return bones
+        else:
+            return resize_to_shape(bones, self.orig_shape)
 
-    def get_lungs(self):
+    def get_lungs(self, skip_resize=False):
+        self.diaphragm_mask = None
         if self.use_new_get_lungs_setup:
             return self.get_lungs_martin()
         else:
-            return self.get_lungs_orig()
+            return self.get_lungs_orig(skip_resize=skip_resize)
 
-    def get_lungs_orig(self): # TODO - this doesnt work correctly, is segmenting a lot of unneeded stuff
-        lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > -150
-        lungs[0, :, :] = 1
+    def get_lungs_orig(self, skip_resize=False):
+        lungs_density_threshold_hu = -150
+        lungs = scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=[4, 2, 2]) > lungs_density_threshold_hu
+
+        if self.head_first:
+            bottom_slice_id = -1
+        else:
+            bottom_slice_id = 0
+        lungs[bottom_slice_id, :, :] = 1
 
         lungs = scipy.ndimage.morphology.binary_fill_holes(lungs)
         labs, n = scipy.ndimage.measurements.label(lungs==0)
@@ -169,7 +183,10 @@ class BodyNavigation:
         lungs = labs > 0
         self.lungs = lungs
         #self.body = (labs == 80)
-        return resize_to_shape(lungs, self.orig_shape)
+        if skip_resize:
+            return self.lungs
+        else:
+            return resize_to_shape(lungs, self.orig_shape)
 
     def get_lungs_martin(self):
         '''
@@ -261,9 +278,9 @@ class BodyNavigation:
         """
         # TODO: upravit kody
         if self.body is None:
-            self.get_body()
+            self.get_body(skip_resize=True)
         if self.lungs is None:
-            self.get_lungs()
+            self.get_lungs(skip_resize=True)
 
         chloc = chest_localization.ChestLocalization(bona_object=self, data3dr_tmp=self.data3dr)
 
@@ -318,7 +335,7 @@ class BodyNavigation:
 
     def dist_to_surface(self):
         if self.body is None:
-            self.get_body()
+            self.get_body(skip_resize=True)
         ld = scipy.ndimage.morphology.distance_transform_edt(self.body)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
         return resize_to_shape(ld, self.orig_shape)
@@ -332,7 +349,7 @@ class BodyNavigation:
 
     def dist_to_spine(self):
         if self.spine_wvs is None:
-            self.get_spine()
+            self.get_spine(skip_resize=True)
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine_wvs)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
         return resize_to_shape(ld, self.orig_shape)
@@ -364,7 +381,7 @@ class BodyNavigation:
 
     def get_coronal(self):
         if self.spine_wvs is None:
-            self.get_spine()
+            self.get_spine(skip_resize=True)
         if self.angle is None:
             self.find_symmetry()
         spine_mean = np.mean(np.nonzero(self.spine_wvs), 1)
@@ -372,7 +389,7 @@ class BodyNavigation:
 
     def dist_coronal(self, return_in_working_voxelsize=False):
         if self.spine_wvs is None:
-            self.get_spine()
+            self.get_spine(skip_resize=True)
         if self.angle is None:
             self.find_symmetry()
 
@@ -392,7 +409,7 @@ class BodyNavigation:
 
     def dist_axial(self):
         if self.diaphragm_mask is None:
-            self.get_diaphragm_mask()
+            self.get_diaphragm_mask(skip_resize=True)
         axdst = np.ones(self.data3dr.shape, dtype=np.int16)
         axdst[0 ,: ,:] = 0
         iz, ix, iy = np.nonzero(self.diaphragm_mask)
@@ -404,13 +421,17 @@ class BodyNavigation:
 
 
     def dist_diaphragm(self):
+        """
+        Get positive values in superior to (above) diaphragm and negative values inferior (under) diaphragm.
+        :return:
+        """
         if self.diaphragm_mask is None:
-            self.get_diaphragm_mask()
+            self.get_diaphragm_mask(skip_resize=True)
         dst = (scipy.ndimage.morphology.distance_transform_edt(
-                self.diaphragm_mask)
+                self.diaphragm_mask)#, sampling=self.voxelsize_mm)
                -
                scipy.ndimage.morphology.distance_transform_edt(
-                1 - self.diaphragm_mask)
+                1 - self.diaphragm_mask)#, sampling=self.voxelsize_mm)
               )
         return resize_to_shape(dst, self.orig_shape)
 
@@ -442,19 +463,26 @@ class BodyNavigation:
         # import bottleneck
         # tolerance * 1.5mm
 
+        print("none ", np.sum(np.isnan(profile)))
         med = np.median(profile[profile > 0])
         profile[np.abs(profile - med) > tolerance] = 0
         return profile
 
     def get_diaphragm_profile_image_with_empty_areas(self, axis=0, return_gradient_image=False):
+        """
+
+        :param axis:
+        :param return_gradient_image: If true, return profile_image, gradient_image
+        :return: profile_image or (profile_image, gradient_image)
+        """
         if self.lungs is None:
-            self.get_lungs()
+            self.get_lungs(skip_resize=True)
         if self.spine_wvs is None:
-            self.get_spine()
+            self.get_spine(skip_resize=True)
         if self.angle is None:
             self.find_symmetry()
         if self.body is None:
-            self.get_body()
+            self.get_body(skip_resize=True)
 
         data = self.lungs
         ia, ib, ic = self._get_ia_ib_ic(axis)
@@ -462,7 +490,10 @@ class BodyNavigation:
         # gradient
         gr = scipy.ndimage.filters.sobel(data.astype(np.int16), axis=ia)
         # seg = (np.abs(ss.dist_coronal()) > 20).astype(np.uint8) + (np.abs(ss.dist_sagittal()) > 20).astype(np.uint8)
-        grt = gr > self.GRADIENT_THRESHOLD
+        if self.head_first:
+            grt = gr < -self.GRADIENT_THRESHOLD
+        else:
+            grt = gr > self.GRADIENT_THRESHOLD
 
         # TODO zahodit velke gradienty na okraji tela,
 
@@ -652,7 +683,13 @@ class BodyNavigation:
         return profile_w
         # plt.imshow(profile_w, cmap='jet')
 
-    def get_diaphragm_mask(self, axis=0):
+    def get_diaphragm_mask(self, axis=0, skip_resize=False):
+        """
+        Get False in inferior to diaphragm and True in superior to diaphragm.
+        :param axis:
+        :param skip_resize:
+        :return: Boolean 3D ndarray
+        """
         if self.lungs is None:
             self.get_lungs()
         ia, ib, ic = self._get_ia_ib_ic(axis)
@@ -668,6 +705,10 @@ class BodyNavigation:
             elif ia == 2:
                 mask[:,:,i] = ou > i
 
+        if not self.head_first:
+            # invert mask
+            mask = mask == False
+
         self.diaphragm_mask = mask
 
         # maximal point is used for axial ze
@@ -675,11 +716,13 @@ class BodyNavigation:
         self.diaphragm_mask_level = np.median(ou)
         self.center0 = self.diaphragm_mask_level * self.working_vs[0]
 
+        if skip_resize:
+            return self.diaphragm_mask
         return resize_to_shape(self.diaphragm_mask, self.orig_shape)
 
     def get_center(self):
-        self.get_diaphragm_mask()
-        self.get_spine()
+        self.get_diaphragm_mask(skip_resize=True)
+        self.get_spine(skip_resize=True)
 
         self.center = np.array([self.diaphragm_mask_level, self.spine_center_wvs[0], self.spine_center_wvs[1]])
         self.center_mm = self.center * self.working_vs
