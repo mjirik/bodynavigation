@@ -138,6 +138,14 @@ class BodyNavigation:
         else:
             return resize_to_shape(bones, self.orig_shape)
 
+    def get_coronal(self):
+        if self.spine_wvs is None:
+            self.get_spine(skip_resize=True)
+        if self.angle is None:
+            self.find_symmetry()
+        spine_mean = np.mean(np.nonzero(self.spine_wvs), 1)
+        rldst = np.ones(self.orig_shape, dtype=np.int16)
+
     def get_lungs(self, skip_resize=False):
         self.diaphragm_mask = None
         if self.use_new_get_lungs_setup:
@@ -262,6 +270,16 @@ class BodyNavigation:
         self.lungs = precav_erosion
         return resize_to_shape(precav_erosion, self.orig_shape)
 
+    def get_center(self):
+        self.get_diaphragm_mask(skip_resize=True)
+        self.get_spine(skip_resize=True)
+
+        self.center = np.array([self.diaphragm_mask_level, self.spine_center_wvs[0], self.spine_center_wvs[1]])
+        self.center_mm = self.center * self.working_vs
+        self.center_orig = self.center * self.voxelsize_mm / self.working_vs.astype(np.double)
+
+        return self.center_orig
+
     def get_chest(self):
         """ Compute, where is the chest in CT data.
             :return: binary array
@@ -312,15 +330,28 @@ class BodyNavigation:
 
         return ribs
 
+    def _distance_transform(self, data):
+        return scipy.ndimage.morphology.distance_transform_edt(data, sampling=self.voxelsize_mm)
+
+    def _resize_to_orig_shape(self, data):
+        return resize_to_shape(data, self.orig_shape)
+
+    def _resize_and_dist(self, data):
+        return self._distance_transform(self._resize_to_orig_shape(data))
 
     def dist_to_chest(self):
+        """
+        Get distance in mm.
+        :return:
+        """
         if self.chest is None:
             self.get_ribs()
+        # chest = self._resize_to_orig_shape(self.chest)
         ld_positive = scipy.ndimage.morphology.distance_transform_edt(self.chest)
         ld_negative = scipy.ndimage.morphology.distance_transform_edt(1 - self.chest)
         ld = ld_positive - ld_negative
         ld = ld*float(self.working_vs[0]) # convert distances to mm
-        return resize_to_shape(ld, self.orig_shape)
+        return self._resize_to_orig_shape(ld)
 
     def dist_to_ribs(self):
         """
@@ -332,10 +363,16 @@ class BodyNavigation:
         ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.ribs)
         ld = ld * float(self.working_vs[0]) # convert distances to mm
         return resize_to_shape(ld, self.orig_shape)
+        # return self._resize_and_dist(1 - self.ribs)
 
     def dist_to_surface(self):
+        """
+        Positive values in mm inside of body.
+        :return:
+        """
         if self.body is None:
             self.get_body(skip_resize=True)
+        # return self._resize_and_dist(self.body)
         ld = scipy.ndimage.morphology.distance_transform_edt(self.body)
         ld = ld*float(self.working_vs[0]) # convert distances to mm
         return resize_to_shape(ld, self.orig_shape)
@@ -379,14 +416,6 @@ class BodyNavigation:
         # return resize_to_shape(rldst, self.orig_shape)
         return rldst
 
-    def get_coronal(self):
-        if self.spine_wvs is None:
-            self.get_spine(skip_resize=True)
-        if self.angle is None:
-            self.find_symmetry()
-        spine_mean = np.mean(np.nonzero(self.spine_wvs), 1)
-        rldst = np.ones(self.orig_shape, dtype=np.int16)
-
     def dist_coronal(self, return_in_working_voxelsize=False):
         if self.spine_wvs is None:
             self.get_spine(skip_resize=True)
@@ -416,6 +445,7 @@ class BodyNavigation:
         # print 'dia level ', self.diaphragm_mask_level
 
         axdst = scipy.ndimage.morphology.distance_transform_edt(axdst) - int(self.diaphragm_mask_level)
+        axdst = axdst * self.working_vs[0]
         return resize_to_shape(axdst, self.orig_shape)
 
 
@@ -433,6 +463,8 @@ class BodyNavigation:
                scipy.ndimage.morphology.distance_transform_edt(
                 1 - self.diaphragm_mask)#, sampling=self.voxelsize_mm)
               )
+
+        dst = dst * self.working_vs[0]
         return resize_to_shape(dst, self.orig_shape)
 
     def _get_ia_ib_ic(self, axis):
@@ -596,12 +628,6 @@ class BodyNavigation:
         #
         # flat_copy = scipy.ndimage.filters.gaussian_filter(flat_copy, sigma=sigma)
         # flat = flat_copy
-
-
-
-
-
-
         return flat
 
     def get_diaphragm_profile_image_orig_shape_mm(self, axis=0, preprocessing=True, return_preprocessed_image=False):
@@ -655,7 +681,6 @@ class BodyNavigation:
             return retval[0]
         else:
             return tuple(retval)
-
 
     def __filter_diaphragm_profile_image(self, profile, axis=0):
         """
@@ -720,16 +745,6 @@ class BodyNavigation:
             return self.diaphragm_mask
         return resize_to_shape(self.diaphragm_mask, self.orig_shape)
 
-    def get_center(self):
-        self.get_diaphragm_mask(skip_resize=True)
-        self.get_spine(skip_resize=True)
-
-        self.center = np.array([self.diaphragm_mask_level, self.spine_center_wvs[0], self.spine_center_wvs[1]])
-        self.center_mm = self.center * self.working_vs
-        self.center_orig = self.center * self.voxelsize_mm / self.working_vs.astype(np.double)
-
-        return self.center_orig
-
     def remove_pizza(self, flat, zero_stripe_width=10, alpha0=-20, alpha1=40 ):
         """
         Remove circular sector from the image with center in spine
@@ -758,7 +773,7 @@ class BodyNavigation:
         return flat
 
 
-def prepare_images(imin0, pivot):
+def prepare_images_for_symmetry_analysis(imin0, pivot):
     imin1 = imin0[:,::-1]
     img=imin0
 
@@ -777,23 +792,15 @@ def find_symmetry_parameters(imin0, trax, tray, angles):
     vals = np.zeros([len(trax), len(tray), len(angles)])
 #     angles_vals = []
 
-
-
     for i, x in enumerate(trax):
-#         print 'x ', x
         for j, y in enumerate(tray):
             try:
                 pivot=[x,y]
-                imgP0, imgP1 = prepare_images(imin0, pivot)
+                imgP0, imgP1 = prepare_images_for_symmetry_analysis(imin0, pivot)
 
     #             print 'y ', y
                 for k, angle in enumerate(angles):
 
-    #             print angle
-#                 print imin0.shape, imin.shape, angle, x, y
-#                     imr=rotateImage(imin.astype(int), angle, [imin0.shape[0] - x, y])
-#                     dif = (imr-imin0)**2
-#                     sm = np.sum(dif)
                     imr = scipy.ndimage.rotate(imgP1, angle, reshape=False)
                     dif = (imgP0-imr)**2
                     sm = np.sum(dif)
@@ -807,6 +814,7 @@ def find_symmetry_parameters(imin0, trax, tray, angles):
     # print am, ' min ', np.min(vals)
 
     return trax[am[0]], tray[am[1]], angles[am[2]]
+
 
 def find_symmetry(img, degrad=5):
     imin0r = scipy.misc.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
