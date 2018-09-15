@@ -294,7 +294,6 @@ class BodyNavigation:
         """ Compute, where are the ribs in CT data.
             :return: binary array
         """
-        # TODO: upravit kody
         if self.body is None:
             self.get_body(skip_resize=True)
         if self.lungs is None:

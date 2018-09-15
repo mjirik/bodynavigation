@@ -309,11 +309,15 @@ class ChestLocalization:
         return lungs_mask
     
     
-    def clear_body(self, body):
+    def clear_body(self, body, minimum_object_size_px=2400):
         """ Vycisti obraz od stolu a ostatnich veci okolo tela a zanecha pouze a jen telo """
-        
         body = scipy.ndimage.filters.gaussian_filter(copy.copy(body).astype(float), sigma=[15, 0, 0]) > 0.7
-        body = morphology.remove_small_objects(body, 2400)
+
+        # fallowing lines are here to supress warning "Only one label was provided to `remove_small_objects`. "
+        blabeled = morphology.label(body)
+        if np.max(blabeled) > 1:
+            body = morphology.remove_small_objects(morphology.label(blabeled), minimum_object_size_px)
+        del blabeled
         
         body[0] = False
         body[-1] = False
