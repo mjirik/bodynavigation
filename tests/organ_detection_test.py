@@ -43,7 +43,7 @@ class OrganDetectionTest(unittest.TestCase):
         "lungs": 0.95,
         "bones": 0.75, # test data don't have segmented whole bones, missing center volumes
         "vessels": 0.50, # used test data has smaller vessels connected to aorta/venacava => that's why the big error margin
-        "kidneys": 0.75,
+        "kidneys": 0.70,
         "liver": 0.75,
         "spleen": 0.75
     }
