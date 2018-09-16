@@ -55,17 +55,19 @@ class VisualizationTest(unittest.TestCase):
         self.assertGreater(img.width, 100)
         self.assertGreater(img.height, 100)
 
-    # def basic_drawer_complex_test(self):
-    #     # datap = io3d.read(
-    #     #     io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
-    #     #     dataplus_format=True)
-    #     data3d, metadata = io3d.datareader.read(io3d.datasets.join_path(DATA_PATH), dataplus_format=False)
-    #     voxelsize = metadata["voxelsize_mm"]
-    #     obj = OrganDetection(data3d, voxelsize)
-    #     masks = [ obj.getPart(p) for p in ["bones","lungs","kidneys"] ]
-    #     bones_stats = obj.analyzeBones()
-    #     points = [bones_stats["spine"], bones_stats["hips_start"]]
-    #
-    #     rd = ResultsDrawer(default_volume_alpha=100)
-    #     img = rd.drawImageAutocolor(data3d, voxelsize, volumes=masks, points=points)
-    #     img.show()
+    def basic_drawer_complex_test(self):
+        # datap = io3d.read(
+        #     io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
+        #     dataplus_format=True)
+        data3d, metadata = io3d.datareader.read(io3d.datasets.join_path(DATA_PATH), dataplus_format=False)
+        voxelsize = metadata["voxelsize_mm"]
+        obj = OrganDetection(data3d, voxelsize)
+        masks = [ obj.getPart(p) for p in ["bones","lungs","kidneys"] ]
+        bones_stats = obj.analyzeBones()
+        points = [bones_stats["spine"], bones_stats["hips_start"]]
+        print(points)
+        logger.debug(points)
+
+        rd = ResultsDrawer(default_volume_alpha=100)
+        img = rd.drawImageAutocolor(data3d, voxelsize, volumes=masks, points=points)
+        # img.show()
