@@ -184,7 +184,7 @@ class ResultsDrawer(object): # TODO - custom resolution by setting target voxels
         elif axis == 2:
             points_2d = zip(y, z)
 
-        return points_2d
+        return list(points_2d)
 
     def _drawView(self, view, axis, point_sets = [], volume_sets = []):
         """
@@ -348,12 +348,16 @@ class ResultsDrawer(object): # TODO - custom resolution by setting target voxels
 
     def drawImageAutocolor(self, data3d, voxelsize, points = [], volumes = []):
         """
-        points = [points, ...]
-        volumes = [mask, ...]
         Returns RGB Image object
 
         Automatically adds colors to point_sets and volume_sets
 
+
+        :param points: List of list of 3D points. Every point is emphasized with defined point size
+        points = [points, ...],
+        points = [[(10, 10, 10), (10,10,11), ...]]
+        :param volumes: List of 3D binar ndarray. volumes = [mask, ...]
+        :return: Image object from PIL.
         Save with: img.save(os.path.join(outputdir, "%s.png" % name))
         Open with: img.show()
         """
