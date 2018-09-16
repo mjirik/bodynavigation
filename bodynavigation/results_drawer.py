@@ -81,7 +81,7 @@ class ResultsDrawer(object): # TODO - custom resolution by setting target voxels
         img - 2D array
         points - 2D coordinates
         """
-        if len(points) == 0: return img
+        if len(list(points)) == 0: return img
         color = (255,0,0,self.default_point_alpha) if ("color" not in meta) else meta["color"]
         color = self._validateColor(color, self.default_point_alpha)
         border = self.default_point_border if ("border" not in meta) else meta["border"]
