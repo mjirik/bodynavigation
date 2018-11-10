@@ -18,7 +18,6 @@ import json
 import pandas as pd
 
 import io3d
-import sed3
 
 sys.path.append("..")
 import bodynavigation.organ_detection

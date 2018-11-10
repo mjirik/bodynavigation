@@ -21,7 +21,6 @@ from bodynavigation.tools import readCompoundMask
 import bodynavigation.metrics as metrics
 from bodynavigation.files import loadDatasetsInfo, joinDatasetPaths
 
-import sed3 # for testing
 
 # http://www.ircad.fr/softwares/3Dircadb/3Dircadb1/3Dircadb1.1.zip
 ROOT_PATH = io3d.datasets.dataset_path()

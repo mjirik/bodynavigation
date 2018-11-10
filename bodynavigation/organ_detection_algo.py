@@ -23,8 +23,6 @@ import skimage.morphology
 import skimage.segmentation
 import skimage.feature
 
-import sed3
-
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import getSphericalMask, getDiskMask, binaryClosing, binaryFillHoles, getDataPadding, \
     cropArray, padArray, polyfit3D, regionGrowing, getDataFractions, getBiggestObjects, firstNonzero

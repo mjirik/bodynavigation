@@ -13,8 +13,6 @@ logger = logging.getLogger(__name__)
 import numpy as np
 import scipy.ndimage
 
-import sed3
-
 from .tools import getDataPadding, cropArray
 
 """

@@ -21,7 +21,6 @@ import scipy
 import scipy.ndimage
 
 import io3d
-import sed3
 
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import NumpyEncoder, compressArray, decompressArray, toMemMap, delMemMap
@@ -715,6 +714,7 @@ if __name__ == "__main__":
         img.show()
 
     if args.show is not None:
+        import sed3
         seg = obj.getPart(args.show)
         ed = sed3.sed3(data3d, contour=seg); ed.show()
 

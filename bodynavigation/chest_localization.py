@@ -58,7 +58,6 @@ except:
 
 
 # import imtools
-import sed3
 from io3d.misc import resize_to_shape, resize_to_mm
 #from lisa import volumetry_evaluation
 #import tiled_liver_statistics as lst
@@ -82,7 +81,8 @@ def read_data(orig_fname, ref_fname):
 
 def make_data(pattern):
     """ Vrati CT data jednoho obrazku (pattern), a to jak orig, tak i seg """
-    
+
+    import sed3
     reload(bodynavigation.body_navigation)
     reload(sed3)
     
@@ -133,7 +133,8 @@ def print_it_all(ss, data3dr_tmp, seg, pattern):
           zpracovavame
         - obrazek seg - vysledek segmentace, tedy vystup metody get_ribs(lungs, ...)) 
         - dalsi parametry jako jsou krok po rezech, osa, atd."""
-        
+
+    import sed3
     fig = plt.figure(figsize = (25,25))
     sed3.show_slices(
         data3dr_tmp,                                 # vychozi obrazek
@@ -152,7 +153,8 @@ def print_it_all_front(ss, data3dr_tmp, seg, pattern):
           zpracovavame
         - obrazek seg - vysledek segmentace, tedy vystup metody get_ribs(lungs, ...)) 
         - dalsi parametry jako jsou krok po rezech, osa, atd."""
-        
+
+    import sed3
     fig = plt.figure(figsize = (25,25))
     sed3.show_slices(
         data3dr_tmp,                                 # vychozi obrazek
@@ -178,7 +180,8 @@ class ChestLocalization:
               zpracovavame
             - obrazek seg - vysledek segmentace, tedy vystup metody get_ribs(lungs, ...)) 
             - dalsi parametry jako jsou krok po rezech, osa, atd."""
-            
+
+        import sed3
         fig = plt.figure(figsize = (25,25))
         sed3.show_slices(
             data3dr_tmp,                                 # vychozi obrazek
@@ -197,7 +200,8 @@ class ChestLocalization:
               zpracovavame
             - obrazek seg - vysledek segmentace, tedy vystup metody get_ribs(lungs, ...)) 
             - dalsi parametry jako jsou krok po rezech, osa, atd."""
-            
+
+        import sed3
         fig = plt.figure(figsize = (25,25))
         sed3.show_slices(
             data3dr_tmp,                                 # vychozi obrazek

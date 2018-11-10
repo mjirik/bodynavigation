@@ -19,7 +19,7 @@ def loadDatasetsInfo():
     datasets = {}
     for fn in DATASETS_FILENAMES:
         with pkg_resources.resource_stream("bodynavigation.files", fn) as fp:
-            datasets.update( json.load(fp, encoding="utf-8") )
+            datasets.update(json.load(fp, encoding="utf-8"))
     return datasets
 
 def joinDatasetPaths(dataset, root_path=""):

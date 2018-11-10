@@ -17,7 +17,6 @@ import copy
 import numpy as np
 
 import io3d
-import sed3
 
 from .tools import compressArray, decompressArray, NumpyEncoder, readCompoundMask, useDatasetMod
 from .transformation import Transformation

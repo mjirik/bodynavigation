@@ -25,7 +25,6 @@ from bodynavigation.organ_detection import OrganDetection
 from bodynavigation.results_drawer import ResultsDrawer
 
 import io3d
-import sed3
 
 """
 /usr/bin/time -v python batch_organ_detection.py -d -o ./batch_output/ -i ../test_data_3Dircadb1/ --dump ../READY_DIR_NEW/ -p "lungs,bones,bones_stats,kidneys" -t 3

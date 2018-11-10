@@ -77,7 +77,7 @@ class BodyNavigationTest(unittest.TestCase):
 
         self.assertGreater(np.nanmax(profile) - np.nanmin(profile), 5, "Low and high diaphragm level should be at least 5 slices")
         import matplotlib.pyplot as plt
-        import sed3
+        # import sed3
         # ed = sed3.sed3(gradient)
         # ed.show()
         # plt.imshow(profile)
