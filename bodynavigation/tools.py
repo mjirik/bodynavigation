@@ -201,7 +201,7 @@ def getSphericalMask(size=5, spacing=[1,1,1]):
     shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
     shape[shape < 1] = 1
     mask = skimage.morphology.ball(51, dtype=np.float)
-    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
+    mask = resizeSkimage(mask, shape, order=1, mode="edge", cval=0) > 0.001
     return mask
 
 def getDiskMask(size=5, spacing=[1,1,1]):
@@ -209,7 +209,7 @@ def getDiskMask(size=5, spacing=[1,1,1]):
     shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
     shape[shape < 1] = 1; shape[0] = 1
     mask = np.expand_dims(skimage.morphology.disk(51, dtype=np.bool), axis=0)
-    mask = resizeSkimage(mask, shape, order=1, mode="nearest", cval=0) > 0.001
+    mask = resizeSkimage(mask, shape, order=1, mode="edge", cval=0) > 0.001
     return mask
 
 def binaryClosing(data, structure, cval=0):
