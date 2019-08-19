@@ -9,8 +9,9 @@ python: 2.7
 # dist: trusty
 
 env:
-    - CONDA_PYTHON_VERSION=2.7
+#    - CONDA_PYTHON_VERSION=2.7
     - CONDA_PYTHON_VERSION=3.6
+    - CONDA_PYTHON_VERSION=3.7
 
 before_install:
     # We do this conditionally because it saves us some downloading if the
@@ -37,7 +38,7 @@ install:
     - conda config --add channels SimpleITK
     - conda config --add channels mjirik
     - conda update --yes conda
-    - conda create --yes -n travis nose coverage pip python=$CONDA_PYTHON_VERSION
+    - conda create --yes -n travis pip python=$CONDA_PYTHON_VERSION pytest-cov
     - source activate travis
     - conda install --yes --file requirements_conda.txt python=$CONDA_PYTHON_VERSION
     - pip install -r requirements_pip.txt
@@ -46,6 +47,7 @@ install:
 # command to run tests
 # using "travis_wait MIN" to stop travis from terminating after 10min of no output.
 # Note: travis_wait time is shared between different python versions!
-script: travis_wait 180 nosetests -v -s --with-coverage --cover-package=bodynavigation
+script: # travis_wait 180 nosetests -v -s --with-coverage --cover-package=bodynavigation
+    - travis_wait 180 python -m pytest --cov=bodynavigation/
 after_success:
     - coveralls
