@@ -57,6 +57,7 @@ requirements:
     - sed3
     - astropy
     - imma
+    - dill
 
 test:
   # Python imports
@@ -76,9 +77,9 @@ test:
     # - nose
 
 about:
-  home: https://github.com/mjirik/io3d
+  home: https://github.com/mjirik/bodynavigation
   license: BSD License
-  summary: '3D data read and write'
+  summary: '3D medical data analysis and orientation in body'
 
 # See
 # http://docs.continuum.io/conda/build.html for
