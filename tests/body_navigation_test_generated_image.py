@@ -44,7 +44,7 @@ class BodyNavigationOnGeneratedDataTest(unittest.TestCase):
         except:
             print("Deprecated of pyseg_base as submodule")
             from seed_editor_qt import QTSeedEditor
-        from PyQt4.QtGui import QApplication
+        from PyQt5.QtWidget import QApplication
         import numpy as np
         img3d = (np.random.rand(30, 30, 30)*10).astype(np.int16)
         seeds = (np.zeros(img3d.shape)).astype(np.int8)
