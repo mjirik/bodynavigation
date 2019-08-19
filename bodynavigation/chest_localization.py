@@ -58,7 +58,7 @@ except:
 
 
 # import imtools
-from io3d.misc import resize_to_shape, resize_to_mm
+from imma.image import resize_to_shape, resize_to_mm
 #from lisa import volumetry_evaluation
 #import tiled_liver_statistics as lst
 # from scipy.ndimage.filters import sobel as sobel
