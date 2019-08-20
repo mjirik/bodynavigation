@@ -15,6 +15,7 @@ import numpy as np
 import scipy
 import scipy.ndimage
 import skimage.measure
+import skimage.transform
 from . import chest_localization
 import copy
 
@@ -795,6 +796,7 @@ def prepare_images_for_symmetry_analysis(imin0, pivot):
     imgP1 = np.pad(img, [padY1, padX1], 'constant')
     return imgP0, imgP1
 
+
 def find_symmetry_parameters(imin0, trax, tray, angles):
     vals = np.zeros([len(trax), len(tray), len(angles)])
 #     angles_vals = []
@@ -824,7 +826,10 @@ def find_symmetry_parameters(imin0, trax, tray, angles):
 
 
 def find_symmetry(img, degrad=5):
-    imin0r = scipy.misc.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
+    # imin0r = scipy.misc.pilutil.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
+    imin0r = skimage.transform.resize(
+        img, (np.asarray(img.shape)/degrad).astype(np.int), anti_aliasing=False, order=1, preserve_range=True)
+
 
     angles = range(-180,180,15)
     trax = range(1, imin0r.shape[0],10)
