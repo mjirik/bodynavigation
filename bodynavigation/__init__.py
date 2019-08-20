@@ -1,2 +1,2 @@
-__all__ = ['body_navigation']
+__all__ = ["body_navigation"]
 from .body_navigation import BodyNavigation

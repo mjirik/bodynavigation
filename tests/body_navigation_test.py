@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import unittest
@@ -12,6 +13,7 @@ import pytest
 
 import io3d
 import bodynavigation
+
 # from lisa import organ_segmentation
 # import pysegbase.dcmreaddata as dcmr
 # import lisa.data
@@ -22,6 +24,7 @@ ircad1_spine_center_idx = [120, 350, 260]
 ircad1_liver_center_idx = [25, 220, 180]
 # nosetests tests/organ_segmentation_test.py:OrganSegmentationTest.test_create_iparams # noqa
 
+
 class BodyNavigationTest(unittest.TestCase):
     interactiveTest = False
     verbose = False
@@ -30,7 +33,8 @@ class BodyNavigationTest(unittest.TestCase):
     def setUpClass(cls):
         datap = io3d.read(
             io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
-            dataplus_format=True)
+            dataplus_format=True,
+        )
         cls.obj = bodynavigation.BodyNavigation(datap["data3d"], datap["voxelsize_mm"])
         cls.data3d = datap["data3d"]
         cls.shape = datap["data3d"].shape
@@ -64,19 +68,35 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertLessEqual(err, 100)
 
         spine_dst = self.obj.dist_to_spine()
-        self.assertGreater(spine_dst[60,10,10], spine_dst[60, 124, 101])
+        self.assertGreater(spine_dst[60, 10, 10], spine_dst[60, 124, 101])
 
     def test_get_dists(self):
         dst_lungs = self.obj.dist_to_lungs()
+
     # @unittest.skipIf(not interactiveTest, "interactive test")
 
     def test_diaphragm_profile_image(self):
-        profile, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(return_gradient_image=True)
-        self.assertGreater(np.max(gradient), self.obj.GRADIENT_THRESHOLD, "Gradient threshold is too low")
-        self.assertLess(np.min(gradient), -self.obj.GRADIENT_THRESHOLD, "Gradient threshold is to low")
+        profile, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(
+            return_gradient_image=True
+        )
+        self.assertGreater(
+            np.max(gradient),
+            self.obj.GRADIENT_THRESHOLD,
+            "Gradient threshold is too low",
+        )
+        self.assertLess(
+            np.min(gradient),
+            -self.obj.GRADIENT_THRESHOLD,
+            "Gradient threshold is to low",
+        )
 
-        self.assertGreater(np.nanmax(profile) - np.nanmin(profile), 5, "Low and high diaphragm level should be at least 5 slices")
+        self.assertGreater(
+            np.nanmax(profile) - np.nanmin(profile),
+            5,
+            "Low and high diaphragm level should be at least 5 slices",
+        )
         import matplotlib.pyplot as plt
+
         # import sed3
         # ed = sed3.sed3(gradient)
         # ed.show()
@@ -85,25 +105,52 @@ class BodyNavigationTest(unittest.TestCase):
         # plt.show()
         # grt = gradient > self.obj.GRADIENT_THRESHOLD
 
-
     def test_diaphragm(self):
         # import sed3
         # ed = sed3.sed3(self.data3d, contour=self.obj.get_lungs())
         # ed.show()
         import matplotlib.pyplot as plt
-        profile_with_nan, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(return_gradient_image=True)
-        self.assertGreater(np.sum(np.isnan(profile_with_nan)), np.prod(profile_with_nan.shape) * 0.10,
-                           "Expected at least 10% NaN's in profile image")
 
-        self.assertGreater(np.nanmean(profile_with_nan), 5, "The diaphragm is expected to be more than 5 slices in the data")
-        self.assertLess(np.nanmean(profile_with_nan), self.obj.lungs.shape[0] - 5, "The diaphragm is expected to be more than 5 slices in the data")
+        profile_with_nan, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(
+            return_gradient_image=True
+        )
+        self.assertGreater(
+            np.sum(np.isnan(profile_with_nan)),
+            np.prod(profile_with_nan.shape) * 0.10,
+            "Expected at least 10% NaN's in profile image",
+        )
+
+        self.assertGreater(
+            np.nanmean(profile_with_nan),
+            5,
+            "The diaphragm is expected to be more than 5 slices in the data",
+        )
+        self.assertLess(
+            np.nanmean(profile_with_nan),
+            self.obj.lungs.shape[0] - 5,
+            "The diaphragm is expected to be more than 5 slices in the data",
+        )
         # plt.imshow(profile_with_nan)
         # plt.colorbar()
         # plt.show()
-        profile, preprocessed_profile = self.obj.get_diaphragm_profile_image(return_preprocessed_image=True)
-        self.assertEqual(np.sum(np.isnan(profile)), 0, "Expected 0 NaN's in postprocessed profile image")
-        self.assertGreater(np.nanmean(profile), 5, "The diaphragm is expected to be more than 5 slices in the data")
-        self.assertLess(np.nanmean(profile), self.obj.lungs.shape[0] - 5, "The diaphragm is expected to be more than 5 slices in the data")
+        profile, preprocessed_profile = self.obj.get_diaphragm_profile_image(
+            return_preprocessed_image=True
+        )
+        self.assertEqual(
+            np.sum(np.isnan(profile)),
+            0,
+            "Expected 0 NaN's in postprocessed profile image",
+        )
+        self.assertGreater(
+            np.nanmean(profile),
+            5,
+            "The diaphragm is expected to be more than 5 slices in the data",
+        )
+        self.assertLess(
+            np.nanmean(profile),
+            self.obj.lungs.shape[0] - 5,
+            "The diaphragm is expected to be more than 5 slices in the data",
+        )
         # plt.imshow(preprocessed_profile)
         # plt.colorbar()
         # plt.show()
@@ -128,7 +175,11 @@ class BodyNavigationTest(unittest.TestCase):
         # plt.imshow(dst_diaphragm[:,250,:])
         # plt.colorbar()
         # plt.show()
-        self.assertGreater(dst_diaphragm[0, 500, 10], 2, "Diaphragm should be at least few mm from the top of the image")
+        self.assertGreater(
+            dst_diaphragm[0, 500, 10],
+            2,
+            "Diaphragm should be at least few mm from the top of the image",
+        )
         # unter diaphragm
         self.assertLess(dst_diaphragm[120, 250, 250], -20)
 
@@ -144,7 +195,6 @@ class BodyNavigationTest(unittest.TestCase):
         # ed.show()
         self.assertGreater(dst_coronal[60, 10, 10], 50)
         self.assertLess(dst_coronal[60, 500, 10], -50)
-
 
     def test_dist_axial(self):
         dst = self.obj.dist_axial()
@@ -169,13 +219,15 @@ class BodyNavigationTest(unittest.TestCase):
         # ed = sed3.sed3(self.dst, contour=(dst > 0))
         # ed.show()
 
-
         self.assertLess(dst[10, 10, 10], -10)
-        self.assertGreater(dst[
-                               ircad1_liver_center_idx[0],
-                               ircad1_liver_center_idx[1],
-                               ircad1_liver_center_idx[2],
-                           ], 10)
+        self.assertGreater(
+            dst[
+                ircad1_liver_center_idx[0],
+                ircad1_liver_center_idx[1],
+                ircad1_liver_center_idx[2],
+            ],
+            10,
+        )
 
     # @unittest.skip("problem with brodcast together different shapes")
     def test_ribs(self):
@@ -188,16 +240,19 @@ class BodyNavigationTest(unittest.TestCase):
         # ed.show()
 
         self.assertGreater(dst[10, 10, 10], 10)
-        self.assertGreater(dst[
-                               ircad1_liver_center_idx[0],
-                               ircad1_liver_center_idx[1],
-                               ircad1_liver_center_idx[2],
-                           ], 10)
+        self.assertGreater(
+            dst[
+                ircad1_liver_center_idx[0],
+                ircad1_liver_center_idx[1],
+                ircad1_liver_center_idx[2],
+            ],
+            10,
+        )
         # import sed3
 
     def test_diaphragm_martin(self):
         # bn = bodynavigation.BodyNavigation(use_new_get_lungs_setup=True)
-        self.obj.use_new_get_lungs_setup=True
+        self.obj.use_new_get_lungs_setup = True
         binary_lungs = self.obj.get_lungs_martin()
         dst_diaphragm = self.obj.dist_diaphragm()
         # import sed3
@@ -207,7 +262,8 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertGreater(dst_diaphragm[0, 500, 10], 0)
         # unter diaphragm
         self.assertLess(dst_diaphragm[120, 250, 250], -20)
-        self.obj.use_new_get_lungs_setup=False
+        self.obj.use_new_get_lungs_setup = False
+
 
 if __name__ == "__main__":
     unittest.main()

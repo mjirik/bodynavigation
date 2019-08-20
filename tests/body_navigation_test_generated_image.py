@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import unittest
@@ -17,22 +18,23 @@ import pytest
 
 # nosetests tests/organ_segmentation_test.py:OrganSegmentationTest.test_create_iparams # noqa
 
+
 class BodyNavigationOnGeneratedDataTest(unittest.TestCase):
     interactiveTest = False
     verbose = False
 
     def generate_data(self):
 
-        img3d = (np.random.rand(30, 30, 30)*10).astype(np.int16)
+        img3d = (np.random.rand(30, 30, 30) * 10).astype(np.int16)
         seeds = (np.zeros(img3d.shape)).astype(np.int8)
         segmentation = (np.zeros(img3d.shape)).astype(np.int8)
         segmentation[10:25, 4:24, 2:16] = 1
-        img3d = img3d + segmentation*20
+        img3d = img3d + segmentation * 20
         seeds[12:18, 9:16, 3:6] = 1
         seeds[19:22, 21:27, 19:21] = 2
 
         voxelsize_mm = [5, 5, 5]
-        metadata = {'voxelsize_mm': voxelsize_mm}
+        metadata = {"voxelsize_mm": voxelsize_mm}
         return img3d, metadata, seeds, segmentation
 
     # @unittest.skipIf(not interactiveTest, "interactive test")
@@ -46,7 +48,8 @@ class BodyNavigationOnGeneratedDataTest(unittest.TestCase):
             from seed_editor_qt import QTSeedEditor
         from PyQt5.QtWidget import QApplication
         import numpy as np
-        img3d = (np.random.rand(30, 30, 30)*10).astype(np.int16)
+
+        img3d = (np.random.rand(30, 30, 30) * 10).astype(np.int16)
         seeds = (np.zeros(img3d.shape)).astype(np.int8)
         seeds[3:6, 12:18, 9:16] = 1
         seeds[3:6, 19:22, 21:27] = 2
@@ -62,6 +65,7 @@ class BodyNavigationOnGeneratedDataTest(unittest.TestCase):
         # pyed.exec_()
 
         app.exit()
+
     # @unittest.skip("demonstrating skipping")
 
     # @attr("interactive")
@@ -75,6 +79,7 @@ class BodyNavigationOnGeneratedDataTest(unittest.TestCase):
     #     )
     #         # path_to_script,
     #         # './../sample_data/matlab/examples/sample_data/DICOM/digest_article/') # noqa
+
 
 if __name__ == "__main__":
     unittest.main()

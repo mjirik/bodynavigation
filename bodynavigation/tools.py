@@ -2,12 +2,15 @@
 # -*- coding: utf-8 -*-
 
 # Enable Python3 code in Python2 - Must be first in file!
-from __future__ import print_function   # print("text")
-from __future__ import division         # 2/3 == 0.666; 2//3 == 0
-from __future__ import absolute_import  # 'import submodule2' turns into 'from . import submodule2'
-from builtins import range              # replaces range with xrange
+from __future__ import print_function  # print("text")
+from __future__ import division  # 2/3 == 0.666; 2//3 == 0
+from __future__ import (
+    absolute_import,
+)  # 'import submodule2' turns into 'from . import submodule2'
+from builtins import range  # replaces range with xrange
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import io, os
@@ -25,11 +28,13 @@ import io3d
 
 # dont display some anoying warnings
 import warnings
-warnings.filterwarnings('ignore', '.* scipy .* output shape of zoom.*')
+
+warnings.filterwarnings("ignore", ".* scipy .* output shape of zoom.*")
 
 ###########################################
 # Crop/Pad/Fraction
 ###########################################
+
 
 def getDataPadding(data):
     """
@@ -38,51 +43,60 @@ def getDataPadding(data):
     """
     ret_l = []
     for dim in range(len(data.shape)):
-        widths = []; s = []
+        widths = []
+        s = []
         for dim_s in range(len(data.shape)):
-            s.append(slice(0,data.shape[dim_s]))
+            s.append(slice(0, data.shape[dim_s]))
         for i in range(data.shape[dim]):
-            s[dim] = i; widths.append(np.sum(data[tuple(s)]))
+            s[dim] = i
+            widths.append(np.sum(data[tuple(s)]))
         widths = np.asarray(widths).astype(np.bool)
-        pad = [np.argmax(widths), np.argmax(widths[::-1])] # [pad_before, pad_after]
+        pad = [np.argmax(widths), np.argmax(widths[::-1])]  # [pad_before, pad_after]
         ret_l.append(pad)
     return ret_l
 
-def cropArray(data, pads, padding_value=0): # TODO - skimage.util.crop; convergent programming is funny
+
+def cropArray(
+    data, pads, padding_value=0
+):  # TODO - skimage.util.crop; convergent programming is funny
     """
     Removes/Adds specified number of values at start and end of every axis of N-dim array
 
     Input: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
     Positive values crop, Negative values pad.
     """
-    pads = [ [-p[0],-p[1]] for p in pads ]
+    pads = [[-p[0], -p[1]] for p in pads]
     return padArray(data, pads, padding_value=padding_value)
 
-def padArray(data, pads, padding_value=0): # TODO - skimage.util.pad
+
+def padArray(data, pads, padding_value=0):  # TODO - skimage.util.pad
     """
     Removes/Adds specified number of values at start and end of every axis of N-dim array
 
     Input: [ [pad_start,pad_end], [pad_start,pad_end], [pad_start,pad_end] ]
     Positive values pad, Negative values crop.
     """
-    crops = [ [-min(0,p[0]),-min(0,p[1])] for p in pads ]
-    pads = [ [max(0,p[0]),max(0,p[1])] for p in pads ]
+    crops = [[-min(0, p[0]), -min(0, p[1])] for p in pads]
+    pads = [[max(0, p[0]), max(0, p[1])] for p in pads]
 
     # cropping
     s = []
     for dim in range(len(data.shape)):
-        s.append( slice(crops[dim][0],data.shape[dim]-crops[dim][1]) )
+        s.append(slice(crops[dim][0], data.shape[dim] - crops[dim][1]))
     data = data[tuple(s)]
 
     # padding
-    full_shape = np.asarray(data.shape) + np.asarray([ np.sum(pads[dim]) for dim in range(len(pads))])
+    full_shape = np.asarray(data.shape) + np.asarray(
+        [np.sum(pads[dim]) for dim in range(len(pads))]
+    )
     out = (np.zeros(full_shape, dtype=data.dtype) + padding_value).astype(data.dtype)
     s = []
     for dim in range(len(data.shape)):
-        s.append( slice( pads[dim][0], out.shape[dim]-pads[dim][1] ) )
+        s.append(slice(pads[dim][0], out.shape[dim] - pads[dim][1]))
     out[tuple(s)] = data
 
     return out
+
 
 def getDataFractions(data2d, fraction_defs=[], mask=None, return_slices=False):
     """
@@ -92,37 +106,50 @@ def getDataFractions(data2d, fraction_defs=[], mask=None, return_slices=False):
     return_slices - if True returns slice() tuples instead of views into array
     """
     if mask is None:
-        height = data2d.shape[0]; height_offset = 0
-        width = data2d.shape[1]; width_offset = 0
+        height = data2d.shape[0]
+        height_offset = 0
+        width = data2d.shape[1]
+        width_offset = 0
     elif np.sum(mask) == 0:
-        height = 0; height_offset = 0
-        width = 0; width_offset = 0
+        height = 0
+        height_offset = 0
+        width = 0
+        width_offset = 0
     else:
         pads = getDataPadding(mask)
-        height = data2d.shape[0]-pads[0][1]-pads[0][0]; height_offset = pads[0][0]
-        width = data2d.shape[1]-pads[1][1]-pads[1][0]; width_offset = pads[1][0]
+        height = data2d.shape[0] - pads[0][1] - pads[0][0]
+        height_offset = pads[0][0]
+        width = data2d.shape[1] - pads[1][1] - pads[1][0]
+        width_offset = pads[1][0]
 
     def get_index(length, offset, percent):
-        return offset + int(np.round(length*percent))
+        return offset + int(np.round(length * percent))
 
-    fractions = []; slices = [];
+    fractions = []
+    slices = []
     for fd in fraction_defs:
-        h_s = slice(get_index(height, height_offset, fd["h"][0]), \
-            get_index(height, height_offset, fd["h"][1])+1)
-        w_s = slice(get_index(width, width_offset, fd["w"][0]), \
-            get_index(width, width_offset, fd["w"][1])+1)
-        slices.append((h_s,w_s))
-        fractions.append(data2d[(h_s,w_s)])
+        h_s = slice(
+            get_index(height, height_offset, fd["h"][0]),
+            get_index(height, height_offset, fd["h"][1]) + 1,
+        )
+        w_s = slice(
+            get_index(width, width_offset, fd["w"][0]),
+            get_index(width, width_offset, fd["w"][1]) + 1,
+        )
+        slices.append((h_s, w_s))
+        fractions.append(data2d[(h_s, w_s)])
 
     r = slices if return_slices else fractions
-    if len(r)==1:
+    if len(r) == 1:
         return r[0]
     else:
         return tuple(r)
 
+
 ###########################################
 # Resize
 ###########################################
+
 
 def resizeScipy(data, toshape, order=1, mode="reflect", cval=0):
     """
@@ -136,37 +163,44 @@ def resizeScipy(data, toshape, order=1, mode="reflect", cval=0):
     https://github.com/scipy/scipy/issues/7324
     https://github.com/scipy/scipy/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3Ascipy.ndimage%20zoom
     """
-    order = 0 if (data.dtype == np.bool) else order # for masks
+    order = 0 if (data.dtype == np.bool) else order  # for masks
     zoom = np.asarray(toshape, dtype=np.float) / np.asarray(data.shape, dtype=np.float)
     data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode, cval=cval)
     if np.any(data.shape != toshape):
-        logger.error("Wrong output shape of zoom: %s != %s" % (str(data.shape), str(toshape)))
+        logger.error(
+            "Wrong output shape of zoom: %s != %s" % (str(data.shape), str(toshape))
+        )
     return data
+
 
 def resizeSkimage(data, toshape, order=1, mode="reflect", cval=0):
     """
     Resize array to shape with skimage.transform.resize
     Eats memory like crazy (many times size of input array), but very good results.
     """
-    dtype = data.dtype # remember correct dtype
+    dtype = data.dtype  # remember correct dtype
 
-    data = skimage.transform.resize(data, toshape, order=order, mode=mode, cval=cval, clip=True, \
-        preserve_range=True)
+    data = skimage.transform.resize(
+        data, toshape, order=order, mode=mode, cval=cval, clip=True, preserve_range=True
+    )
 
     # fix dtype after skimage.transform.resize
-    if (data.dtype != dtype) and (dtype in [np.bool,np.integer]):
+    if (data.dtype != dtype) and (dtype in [np.bool, np.integer]):
         data = np.round(data).astype(dtype)
-    elif (data.dtype != dtype):
+    elif data.dtype != dtype:
         data = data.astype(dtype)
 
     return data
+
 
 # TODO - test resize version with RegularGridInterpolator, (only linear and nn order)
 # https://scipy.github.io/devdocs/generated/scipy.interpolate.RegularGridInterpolator.html
 # https://stackoverflow.com/questions/30056577/correct-usage-of-scipy-interpolate-regulargridinterpolator
 
+
 def resize(data, toshape, order=1, mode="reflect", cval=0):
     return resizeScipy(data, toshape, order=order, mode=mode, cval=cval)
+
 
 def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", cval=0):
     """
@@ -178,9 +212,12 @@ def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", cval=0):
     # calc both resize shapes
     scale = np.asarray(data.shape, dtype=np.float) / np.asarray(toshape, dtype=np.float)
     downscale_shape = np.asarray(toshape, dtype=np.int).copy()
-    if scale[0] > 1.0: downscale_shape[0] = data.shape[0]
-    if scale[1] > 1.0: downscale_shape[1] = data.shape[1]
-    if scale[2] > 1.0: downscale_shape[2] = data.shape[2]
+    if scale[0] > 1.0:
+        downscale_shape[0] = data.shape[0]
+    if scale[1] > 1.0:
+        downscale_shape[1] = data.shape[1]
+    if scale[2] > 1.0:
+        downscale_shape[2] = data.shape[2]
     upscale_shape = np.asarray(toshape, dtype=np.int).copy()
 
     # downscale with given interpolation order
@@ -192,25 +229,34 @@ def resizeWithUpscaleNN(data, toshape, order=1, mode="reflect", cval=0):
 
     return data
 
+
 ###########################################
 # Segmentation
 ###########################################
 
-def getSphericalMask(size=5, spacing=[1,1,1]):
+
+def getSphericalMask(size=5, spacing=[1, 1, 1]):
     """ Size is in mm """
-    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
+    shape = (
+        np.asarray([size] * 3, dtype=np.float) / np.asarray(spacing, dtype=np.float)
+    ).astype(np.int)
     shape[shape < 1] = 1
     mask = skimage.morphology.ball(51, dtype=np.float)
     mask = resizeSkimage(mask, shape, order=1, mode="edge", cval=0) > 0.001
     return mask
 
-def getDiskMask(size=5, spacing=[1,1,1]):
+
+def getDiskMask(size=5, spacing=[1, 1, 1]):
     """ Size is in mm """
-    shape = (np.asarray([size,]*3, dtype=np.float)/np.asarray(spacing, dtype=np.float)).astype(np.int)
-    shape[shape < 1] = 1; shape[0] = 1
+    shape = (
+        np.asarray([size] * 3, dtype=np.float) / np.asarray(spacing, dtype=np.float)
+    ).astype(np.int)
+    shape[shape < 1] = 1
+    shape[0] = 1
     mask = np.expand_dims(skimage.morphology.disk(51, dtype=np.bool), axis=0)
     mask = resizeSkimage(mask, shape, order=1, mode="edge", cval=0) > 0.001
     return mask
+
 
 def binaryClosing(data, structure, cval=0):
     """
@@ -218,10 +264,13 @@ def binaryClosing(data, structure, cval=0):
     Big sized structures can make this take a long time
     """
     padding = np.max(structure.shape)
-    tmp = (np.zeros(np.asarray(data.shape)+padding*2, dtype=data.dtype) + cval).astype(np.bool)
-    tmp[padding:-padding,padding:-padding,padding:-padding] = data
+    tmp = (
+        np.zeros(np.asarray(data.shape) + padding * 2, dtype=data.dtype) + cval
+    ).astype(np.bool)
+    tmp[padding:-padding, padding:-padding, padding:-padding] = data
     tmp = scipy.ndimage.morphology.binary_closing(tmp, structure=structure)
-    return tmp[padding:-padding,padding:-padding,padding:-padding]
+    return tmp[padding:-padding, padding:-padding, padding:-padding]
+
 
 def binaryFillHoles(data, z_axis=False, y_axis=False, x_axis=False):
     """
@@ -233,26 +282,27 @@ def binaryFillHoles(data, z_axis=False, y_axis=False, x_axis=False):
 
     # fill holes on z-axis
     if z_axis:
-        tmp = np.ones((data.shape[0]+2, data.shape[1], data.shape[2]))
-        tmp[1:-1,:,:] = data;
+        tmp = np.ones((data.shape[0] + 2, data.shape[1], data.shape[2]))
+        tmp[1:-1, :, :] = data
         tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
-        data = tmp[1:-1,:,:]
+        data = tmp[1:-1, :, :]
 
     # fill holes on y-axis
     if y_axis:
-        tmp = np.ones((data.shape[0], data.shape[1]+2, data.shape[2]))
-        tmp[:,1:-1,:] = data;
+        tmp = np.ones((data.shape[0], data.shape[1] + 2, data.shape[2]))
+        tmp[:, 1:-1, :] = data
         tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
-        data = tmp[:,1:-1,:]
+        data = tmp[:, 1:-1, :]
 
     # fill holes on x-axis
     if x_axis:
-        tmp = np.ones((data.shape[0], data.shape[1], data.shape[2]+2))
-        tmp[:,:,1:-1] = data;
+        tmp = np.ones((data.shape[0], data.shape[1], data.shape[2] + 2))
+        tmp[:, :, 1:-1] = data
         tmp = scipy.ndimage.morphology.binary_fill_holes(tmp)
-        data = tmp[:,:,1:-1]
+        data = tmp[:, :, 1:-1]
 
     return data
+
 
 def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershed"):
     """
@@ -284,45 +334,63 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
 
     # limit max segmentation distance
     if max_dist > 0:
-        mask[scipy.ndimage.morphology.distance_transform_edt(seeds==0, sampling=spacing) > max_dist] = 0
+        mask[
+            scipy.ndimage.morphology.distance_transform_edt(
+                seeds == 0, sampling=spacing
+            )
+            > max_dist
+        ] = 0
 
     # remove sections in mask that are not connected to any seeds # TODO - test if this lowers memory requirements
     mask = skimage.measure.label(mask, background=0)
-    tmp = mask.copy(); tmp[ seeds == 0 ] = 0
+    tmp = mask.copy()
+    tmp[seeds == 0] = 0
     for l in np.unique(tmp)[1:]:
-        mask[ mask == l ] = -1
-    mask = (mask == -1); del(tmp)
+        mask[mask == l] = -1
+    mask = mask == -1
+    del tmp
 
     # if only one seed, return everything connected to it (done in last step).
     unique = np.unique(seeds)[1:]
     if len(unique) == 1:
-        return mask.astype(np.int8)*unique[0]
+        return mask.astype(np.int8) * unique[0]
 
     # segmentation
     if mode not in ["random_walker", "watershed"]:
-        logger.warning("Invalid region growing mode '%s', defaulting to 'random_walker'" % str(mode))
+        logger.warning(
+            "Invalid region growing mode '%s', defaulting to 'random_walker'"
+            % str(mode)
+        )
         mode = "random_walker"
 
     if mode == "random_walker":
         seeds[mask == 0] = -1
-        seeds = skimage.segmentation.random_walker(data3d, seeds, mode='cg_mg', copy=False, spacing=spacing)
+        seeds = skimage.segmentation.random_walker(
+            data3d, seeds, mode="cg_mg", copy=False, spacing=spacing
+        )
         seeds[seeds == -1] = 0
 
-    elif mode == "watershed": # TODO - maybe more useful if edge filter is done first, when using grayscale data??
+    elif (
+        mode == "watershed"
+    ):  # TODO - maybe more useful if edge filter is done first, when using grayscale data??
         # resize data to cube spacing
         if spacing is not None:
             shape_orig = data3d.shape
-            shape_cube = np.asarray(data3d.shape, dtype=np.float)*np.asarray(spacing, dtype=np.float) # 1x1x1mm
-            shape_cube = (shape_cube/np.min(spacing)).astype(np.int) # upscale target size, so there is no loss in quality
+            shape_cube = np.asarray(data3d.shape, dtype=np.float) * np.asarray(
+                spacing, dtype=np.float
+            )  # 1x1x1mm
+            shape_cube = (shape_cube / np.min(spacing)).astype(
+                np.int
+            )  # upscale target size, so there is no loss in quality
 
-            order = 0 if (data3d.dtype == np.bool) else 1 # for masks
+            order = 0 if (data3d.dtype == np.bool) else 1  # for masks
             data3d = resize(data3d, shape_cube, order=order, mode="reflect")
             mask = resize(mask, shape_cube, order=0, mode="reflect")
             tmp = seeds
             seeds = np.zeros(shape_cube, dtype=seeds.dtype)
             for s in np.unique(tmp)[1:]:
                 seeds[resize(tmp == s, shape_cube, order=0, mode="reflect")] = s
-            del(tmp)
+            del tmp
 
         seeds = skimage.morphology.watershed(data3d, seeds, mask=mask)
 
@@ -335,9 +403,11 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
 
     return seeds
 
+
 ###################
 # Memory saving
 ###################
+
 
 def compressArray(mask):
     """ Compresses numpy array from RAM to RAM """
@@ -345,10 +415,12 @@ def compressArray(mask):
     np.savez_compressed(mask_comp, mask)
     return mask_comp
 
+
 def decompressArray(mask_comp):
     """ Decompresses numpy array from RAM to RAM """
     mask_comp.seek(0)
-    return np.load(mask_comp)['arr_0']
+    return np.load(mask_comp)["arr_0"]
+
 
 def toMemMap(data3d, filepath):
     """
@@ -357,18 +429,21 @@ def toMemMap(data3d, filepath):
     can even crash without error.
     """
     data3d_tmp = data3d
-    data3d = np.memmap(filepath, dtype=data3d.dtype, mode='w+', shape=data3d.shape)
-    data3d[:] = data3d_tmp[:]; del(data3d_tmp)
+    data3d = np.memmap(filepath, dtype=data3d.dtype, mode="w+", shape=data3d.shape)
+    data3d[:] = data3d_tmp[:]
+    del data3d_tmp
     data3d.flush()
     return data3d
+
 
 def delMemMap(data3d):
     """ Deletes file used for memmap. Trying to use array after this runs will crash Python """
     filename = copy.deepcopy(data3d.filename)
     data3d.flush()
     data3d._mmap.close()
-    del(data3d)
+    del data3d
     os.remove(filename)
+
 
 def concatenateMemMap(A, B):
     """
@@ -377,18 +452,20 @@ def concatenateMemMap(A, B):
     B - must be same dtype as A, but does not need to be memmap
     """
     old_shape = tuple(A.shape)
-    new_shape = tuple([A.shape[0]+B.shape[0],]+list(A.shape)[1:])
-    A = np.memmap(A.filename, dtype=A.dtype, mode='r+', shape=new_shape, order='C')
-    A[old_shape[0]:,:] = B
+    new_shape = tuple([A.shape[0] + B.shape[0]] + list(A.shape)[1:])
+    A = np.memmap(A.filename, dtype=A.dtype, mode="r+", shape=new_shape, order="C")
+    A[old_shape[0] :, :] = B
     return A
+
 
 ###################
 # Misc
 ###################
 
+
 def polyfit3D(points, dtype=np.int, deg=3):
     z, y, x = zip(*points)
-    z_new = list(range(z[0], z[-1]+1))
+    z_new = list(range(z[0], z[-1] + 1))
 
     zz1 = np.polyfit(z, y, deg)
     f1 = np.poly1d(zz1)
@@ -398,8 +475,12 @@ def polyfit3D(points, dtype=np.int, deg=3):
     f2 = np.poly1d(zz2)
     x_new = f2(z_new)
 
-    points = [ tuple(np.asarray([z_new[i], y_new[i], x_new[i]]).astype(dtype)) for i in range(len(z_new)) ]
+    points = [
+        tuple(np.asarray([z_new[i], y_new[i], x_new[i]]).astype(dtype))
+        for i in range(len(z_new))
+    ]
     return points
+
 
 class NumpyEncoder(json.JSONEncoder):
     """
@@ -409,10 +490,12 @@ class NumpyEncoder(json.JSONEncoder):
     a = np.array([1, 2, 3])
     print(json.dumps({'aa': [2, (2, 3, 4), a], 'bb': [2]}, cls=NumpyEncoder))
     """
+
     def default(self, obj):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
+
 
 def firstNonzero(data3d, axis, invalid_val=-1):
     """
@@ -421,20 +504,25 @@ def firstNonzero(data3d, axis, invalid_val=-1):
     mask = data3d != 0
     return np.where(mask.any(axis=axis), mask.argmax(axis=axis), invalid_val)
 
-def flip(m, axis): # TODO - replace with np.flip when there are no dependency problems with numpy>=1.12
+
+def flip(
+    m, axis
+):  # TODO - replace with np.flip when there are no dependency problems with numpy>=1.12
     """
     Copy of numpy.flip, which was added in numpy 1.12.0
     (Had to create copy of this, because I got problems with dependencies)
     """
-    if not hasattr(m, 'ndim'):
+    if not hasattr(m, "ndim"):
         m = np.asarray(m)
     indexer = [slice(None)] * m.ndim
     try:
         indexer[axis] = slice(None, None, -1)
     except IndexError:
-        raise ValueError("axis=%i is invalid for the %i-dimensional input array"
-                         % (axis, m.ndim))
+        raise ValueError(
+            "axis=%i is invalid for the %i-dimensional input array" % (axis, m.ndim)
+        )
     return m[tuple(indexer)]
+
 
 def useDatasetMod(data3d, misc):
     """
@@ -450,20 +538,23 @@ def useDatasetMod(data3d, misc):
 
     return data3d
 
+
 def readCompoundMask(path_list):
     # load masks
     mask, mask_metadata = io3d.datareader.read(path_list[0], dataplus_format=False)
-    mask = mask > 0 # to np.bool
+    mask = mask > 0  # to np.bool
     for p in path_list[1:]:
         tmp, _ = io3d.datareader.read(p, dataplus_format=False)
-        tmp = tmp > 0 # to np.bool
+        tmp = tmp > 0  # to np.bool
         mask[tmp] = 1
     return mask, mask_metadata
 
+
 def naturalSort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
-    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
-    return sorted(l, key = alphanum_key)
+    alphanum_key = lambda key: [convert(c) for c in re.split("([0-9]+)", key)]
+    return sorted(l, key=alphanum_key)
+
 
 def getBiggestObjects(mask, N=1):
     if np.sum(mask) == 0:
@@ -472,17 +563,18 @@ def getBiggestObjects(mask, N=1):
     # get labels and counts of objects
     mask_label = skimage.measure.label(mask, background=0)
     unique, counts = np.unique(mask_label, return_counts=True)
-    unique = list(unique[1:]); counts = list(counts[1:])
+    unique = list(unique[1:])
+    counts = list(counts[1:])
 
     # get labels of biggest objects
     biggest_labels = []
     for n in range(N):
         biggest_idx = list(counts).index(max(counts))
         biggest_labels.append(unique[biggest_idx])
-        del(unique[biggest_idx], counts[biggest_idx])
+        del (unique[biggest_idx], counts[biggest_idx])
 
     # return only biggest N objects
     mask[:] = 0
     for l in biggest_labels:
-        mask[mask_label==l] = 1
+        mask[mask_label == l] = 1
     return mask

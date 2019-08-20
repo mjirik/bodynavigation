@@ -2,15 +2,19 @@
 # -*- coding: utf-8 -*-
 
 # Enable Python3 code in Python2 - Must be first in file!
-from __future__ import print_function   # print("text")
-from __future__ import division         # 2/3 == 0.666; 2//3 == 0
-from __future__ import absolute_import  # 'import submodule2' turns into 'from . import submodule2'
-from builtins import range              # replaces range with xrange
+from __future__ import print_function  # print("text")
+from __future__ import division  # 2/3 == 0.666; 2//3 == 0
+from __future__ import (
+    absolute_import,
+)  # 'import submodule2' turns into 'from . import submodule2'
+from builtins import range  # replaces range with xrange
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import unittest
+
 # from nose.tools import nottest
 import pytest
 
@@ -26,6 +30,7 @@ from bodynavigation.files import loadDatasetsInfo, joinDatasetPaths
 ROOT_PATH = io3d.datasets.dataset_path()
 DATASET_NAME = "3Dircadb1.1"
 
+
 class OrganDetectionTest(unittest.TestCase):
     """
     Run only this test class:
@@ -40,11 +45,11 @@ class OrganDetectionTest(unittest.TestCase):
     DICE = {
         "body": 0.95,
         "lungs": 0.95,
-        "bones": 0.75, # test data don't have segmented whole bones, missing center volumes
-        "vessels": 0.50, # used test data has smaller vessels connected to aorta/venacava => that's why the big error margin
+        "bones": 0.75,  # test data don't have segmented whole bones, missing center volumes
+        "vessels": 0.50,  # used test data has smaller vessels connected to aorta/venacava => that's why the big error margin
         "kidneys": 0.70,
         "liver": 0.75,
-        "spleen": 0.75
+        "spleen": 0.75,
     }
 
     @classmethod
@@ -95,5 +100,3 @@ class OrganDetectionTest(unittest.TestCase):
 
     def getSpleen_test(self):
         self._genericMaskTest("spleen")
-
-
