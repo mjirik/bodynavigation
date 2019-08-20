@@ -4,3 +4,4 @@
 
 * [Changed] Python 2 support leaved
 * [Changed] Update API call from `imma`
+* [Changed] Update API call from `scipy`
