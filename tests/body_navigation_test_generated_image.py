@@ -8,7 +8,7 @@ import unittest
 import sys
 
 import numpy as np
-from nose.plugins.attrib import attr
+import pytest
 
 # from lisa import organ_segmentation
 # import pysegbase.dcmreaddata as dcmr
@@ -36,7 +36,7 @@ class BodyNavigationOnGeneratedDataTest(unittest.TestCase):
         return img3d, metadata, seeds, segmentation
 
     # @unittest.skipIf(not interactiveTest, "interactive test")
-    @attr("interactive")
+    @pytest.mark.interactive
     def test_viewer_seeds(self):
 
         try:

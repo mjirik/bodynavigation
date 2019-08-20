@@ -8,7 +8,7 @@ import unittest
 import sys
 
 import numpy as np
-from nose.plugins.attrib import attr
+import pytest
 
 import io3d
 import bodynavigation

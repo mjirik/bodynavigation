@@ -11,8 +11,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 import unittest
-from nose.tools import nottest
-from nose.plugins.attrib import attr
+# from nose.tools import nottest
+import pytest
 
 import io3d
 import io3d.datasets
@@ -64,7 +64,7 @@ class OrganDetectionTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.obj = None
 
-    @nottest
+    @pytest.mark.skip()
     def _genericMaskTest(self, part):
         # get segmented data
         mask = self.obj.getPart(part)
