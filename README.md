@@ -9,6 +9,12 @@ sion of liver segmentation based on Bayes classifier is shown in this paper and 
 compared with state of the art methods using SLIVER07 dataset.
 
 
+Spine rotation
+![spine_rotation](doc/bn-spine-rotation-005.png)
+Diaphragm segmentation
+![diaphragm](doc/bn-diaphragm-segmentation-001.png)
+
+
 # Install
 
     conda install -c mjirik bodynavigation
