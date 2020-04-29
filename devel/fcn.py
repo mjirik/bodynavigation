@@ -101,6 +101,8 @@ def show(img):
     plt.show()
 
 def loadscan(scannum):
+    # TODO k číslu série se v jiné části kódu příčítá jednička, takže to pracuje s pacientem 2 a 3 zároveň
+    #
     pth = io3d.datasets.join_path('medical/orig/3Dircadb1.{}/PATIENT_DICOM/'.format(scannum), get_root=True)
     datap = io3d.read(pth)
     data3d = datap['data3d']
@@ -164,6 +166,8 @@ def augmentscan(scan):
     return augmented
 
 def save():
+    # TODO co takhle počítat od jedné?
+    # for i in range(1,21): # number of scans in the dataset
     for i in range(20): # number of scans in the dataset
         scan = loadscan(i+1)
         print("Scan {} loaded : {} slices".format(i+1,len(scan)))
