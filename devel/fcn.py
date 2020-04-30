@@ -17,8 +17,10 @@ def annotate(number_of_scans): #annotation starting from scan 1
 
     for i in range(number_of_scans):
         dr = io3d.DataReader()
-        datap = dr.Get3DData('data/medical/orig/3Dircadb1.{}/PATIENT_DICOM/'.format(i+1), dataplus_format=True)
-        datap_labelled = dr.Get3DData('data/medical/orig/3Dircadb1.{}/MASKS_DICOM/liver'.format(i+1), dataplus_format=True)
+       
+        pth = io3d.datasets.join_path('medical/orig/3Dircadb1.{}/'.format(i+1), get_root=True)
+        datap = dr.Get3DData(pth + "PATIENT_DICOM/", dataplus_format=True)
+        datap_labelled = dr.Get3DData(pth + 'MASKS_DICOM/liver', dataplus_format=True)
 
         ed = sed3.sed3(datap['data3d'], contour = datap_labelled['data3d'], windowW = 400, windowC = 40)
         ed.show()
@@ -40,7 +42,8 @@ def getsliceid(scannum, slicenum): # Ircad ID, index of wanted slice
     df = pd.read_excel('tabulka.xlsx', sheet_name='List1') # getting data from excel
     scan = df.iloc[scannum-1] # selecting the specific row from the table
 
-    list = os.listdir('data/medical/orig/3Dircadb1.{}/PATIENT_DICOM/'.format(scannum))
+    pth = io3d.datasets.join_path('medical/orig/3Dircadb1.{}/'.format(scannum), get_root=True)
+    list = os.listdir(pth + '/PATIENT_DICOM/')
     total_slices = len(list)-1 # getting the total number of slices in this scan
     if slicenum > total_slices:
         raise ValueError('Slice ID is bigger than the number of slices in this scan.')
@@ -91,7 +94,7 @@ def show(img):
     plt.show()
 
 def loadscan(scannum):
-    pth = 'data/medical/orig/3Dircadb1.{}/PATIENT_DICOM/'.format(scannum)
+    pth = io3d.datasets.join_path('medical/orig/3Dircadb1.{}/PATIENT_DICOM/'.format(scannum), get_root=True)
     datap = io3d.read(pth)
     data3d = datap['data3d']
     scan = []
@@ -154,25 +157,28 @@ def augmentscan(scan):
     return augmented
 
 def save():
-    for i in range(20): # number of scans in the dataset
-        scan = loadscan(i+1)
-        print("Scan {} loaded : {} slices".format(i+1,len(scan)))
+    for i in range(1,21): # number of scans in the dataset
+        scan = loadscan(i)
+        print("Scan {} loaded : {} slices".format(i,len(scan)))
     
         augmented = augmentscan(scan)
-        print("Scan {} augmented: {} slices".format(i+1, len(augmented)))
+        print("Scan {} augmented: {} slices".format(i, len(augmented)))
     
         normalized = normalizescan(augmented)
-        print("Scan {} normalized : {} slices".format(i+1,len(normalized)))
+        print("Scan {} normalized : {} slices".format(i,len(normalized)))
     
         labels = np.zeros(len(normalized))
-        slices = np.empty((len(normalized),), dtype=object)
-        slices[:] = [[] * len(slices)]
+        #slices = np.empty((len(normalized),), dtype=object)
+        #slices[:] = [[] * len(slices)]
+        sh = normalized[0][0].shape
+        slices = np.empty([len(normalized), sh[0], sh[1]])
 
-        for i in range(len(normalized)):
-            labels[i] = normalized[i][1]
-            slices[i] = np.asarray(normalized[i][0])
+        for j in range(len(normalized)):
+            labels[j] = normalized[j][1]
+            slices[j] = np.asarray(normalized[j][0])
+            slices[j, :,:] = np.asarray(normalized[j][0])
 
-        with h5py.File('data.h5', 'w') as h5f:
-            h5f.create_dataset('scan_{}'.format(i+1), data=slices)
-            h5f.create_dataset('label_{}'.format(i+1), data=labels)
+        with h5py.File('data.h5', 'a') as h5f:
+            h5f.create_dataset('scan_{}'.format(i), data=slices)
+            h5f.create_dataset('label_{}'.format(i), data=labels)
         print('saved')

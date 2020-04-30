@@ -12,10 +12,14 @@ from keras.layers import Dense
 from keras.models import Sequential
 import h5py
 
-scan = fcn.loadscan(3)
-fcn.normalize(scan[5][0])
+#fcn.save()
 
-fcn.save()
+with h5py.File('data.h5', 'r') as h5f:
+    print(h5f.keys())
+    fcn.show(h5f['scan_2'][110*4])
+    fcn.show(h5f['scan_2'][110*4+1])
+    fcn.show(h5f['scan_2'][110*4+2])
+    print(h5f['label_2'][110*4])
 
 #model = Sequential()
  
