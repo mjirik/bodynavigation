@@ -237,7 +237,7 @@ def loadscan2(scannum):
     scan = []
     i = 1
     for slice in data3d:
-        id = getsliceid(scannum, i)
+        id = getsliceid2(scannum, i)
         scan.append([slice, id])
         i += 1
     return scan
@@ -335,10 +335,10 @@ def save():
         logger.info(f"Scan {i} loaded : {len(scan)} slices")
     
         augmented = augmentscan(scan)
-        logger.info(f"Scan {i} augmented: {len(scan)} slices")
+        logger.info(f"Scan {i} augmented: {len(augmented)} slices")
     
         normalized = normalizescan(augmented)
-        logger.info(f"Scan {i} normalized : {len(scan)} slices")
+        logger.info(f"Scan {i} normalized : {len(normalized)} slices")
     
         labels = np.zeros(len(normalized))
         sh = normalized[0][0].shape
@@ -370,10 +370,10 @@ def save2():
         logger.info(f"Scan {i} loaded : {len(scan)} slices")
     
         augmented = augmentscan(scan)
-        logger.info(f"Scan {i} augmented: {len(scan)} slices")
+        logger.info(f"Scan {i} augmented: {len(augmented)} slices")
     
         normalized = normalizescan(augmented)
-        logger.info(f"Scan {i} normalized : {len(scan)} slices")
+        logger.info(f"Scan {i} normalized : {len(normalized)} slices")
     
         labels = np.zeros(len(normalized))
         sh = normalized[0][0].shape
@@ -435,11 +435,12 @@ def eval(model, X_test, Y_test):
     plt.legend()
     plt.show()
 
-def modelcreation1(fromscan, toscan):
+def modelcreation1(dataset, fromscan, toscan):
     '''
-    Creates a convolutional keras neural network, training it with data from ct scans from Ircad dataset.
+    Creates a convolutional keras neural network, training it with data from ct scans dataset.
 
     Parameters
+    dataset - 1 = Ircad, 2 = medical
     fromscan - the first scan used to train the model
     toscan - last scan used to train the model
 
@@ -447,7 +448,49 @@ def modelcreation1(fromscan, toscan):
     Returns the model
     '''
 
-    X_train, Y_train = loadfromh5(1, fromscan, toscan)
+    X_train, Y_train = loadfromh5(dataset, fromscan, toscan)
+    X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 64, 64, 1)
+
+    model = Sequential()
+ 
+    model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(64,64,1)))
+    model.add(Convolution2D(32, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+    model.add(Dropout(0.25))
+ 
+    model.add(Flatten())
+    model.add(Dense(128, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(1))
+    model.summary()
+
+    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
+    model.fit(X_train, Y_train, batch_size=32, epochs=10, verbose=1)
+    return model
+
+def modelcreation2():
+    '''
+    Creates a convolutional keras neural network, training it with data from ct scans from Ircad dataset.
+
+    Parameters
+    dataset - 1 = Ircad, 2 = medical
+    fromscan - the first scan used to train the model
+    toscan - last scan used to train the model
+
+    ----
+    Returns the model
+    '''
+
+    X_train, Y_train = loadfromh5(1, 2, 19)
+    X_train1, Y_train1 = loadfromh5(2, 2, 19)
+    #print(f'{len(X_train)} + {len(X_train1)} = {len(X_train)+len(X_train1)}')
+    #print(f'{len(Y_train)} + {len(Y_train1)} = {len(Y_train)+len(Y_train1)}')
+
+    X_train.extend(X_train1)
+    Y_train.extend(Y_train1)
+    #print(f'{len(X_train)}')
+    #print(f'{len(Y_train)}')
+
     X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 64, 64, 1)
 
     model = Sequential()

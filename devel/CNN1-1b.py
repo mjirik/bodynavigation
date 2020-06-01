@@ -1,7 +1,7 @@
 import CT_regression_tools
 import numpy as np
 
-#model = CT_regression_tools.modelcreation1(4, 20)
+#model = CT_regression_tools.modelcreation1(1, 4, 20)
 #model.save('model2.h5')
 model = CT_regression_tools.load_model('model2.h5') #load model from h5 file
 
