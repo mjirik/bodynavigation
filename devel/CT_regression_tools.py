@@ -288,9 +288,14 @@ def eval(model, X_test, Y_test):
         logger.info(f'Truth: {Y_test[i]}')
         dif.append(abs(predictions[i]- Y_test[i]))
         logger.info(f'Error: {dif[i]}')
-        if dif[i] >= 1:
-            show(X_test[i].squeeze()) #show any slices, where prediction error reached 1
+        #if dif[i] > 1:
+            #show(X_test[i].squeeze()) #show any slices, where prediction error reached 1
     logger.info(f'Average error = {sum(dif)/len(dif)}')
+    plt.plot(predictions, label='Predictions')
+    plt.plot(Y_test, label='Truth')
+    plt.plot(dif, label='error')
+    plt.legend()
+    plt.show()
 
 def modelcreation1(fromscan, toscan):
     '''
@@ -304,7 +309,7 @@ def modelcreation1(fromscan, toscan):
     Returns the model
     '''
 
-    X_train, Y_train = fcn.loadfromh5(fromscan, toscan)
+    X_train, Y_train = loadfromh5(fromscan, toscan)
     X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 64, 64, 1)
 
     model = Sequential()
