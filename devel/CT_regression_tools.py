@@ -470,12 +470,7 @@ def modelcreation1(dataset, fromscan, toscan):
 
 def modelcreation2():
     '''
-    Creates a convolutional keras neural network, training it with data from ct scans from Ircad dataset.
-
-    Parameters
-    dataset - 1 = Ircad, 2 = medical
-    fromscan - the first scan used to train the model
-    toscan - last scan used to train the model
+    Creates a convolutional keras neural network, training it with data from ct scans from both datasets.
 
     ----
     Returns the model
