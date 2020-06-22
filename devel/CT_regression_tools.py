@@ -16,9 +16,11 @@ import keras
 import SimpleITK as sitk
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, MaxPooling2D
+from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
 from keras.models import load_model
 from keras.utils import np_utils
+from keras.optimizers import SGD
+from pathlib import Path
 
 def annotate(number_of_scans): #annotation starting from scan 1
     '''
@@ -71,8 +73,6 @@ def annotate2(number_of_scans): #annotation starting from scan 1
         ids = np.unique(nz[0])
         df = df.append({'ID' : i+1,'Mark 1 slice id' : ids[0], 'Mark 2 slice id' : ids[1], 'Mark 3 slice id' : ids[2],'Mark 4 slice id' : ids[3]}, ignore_index = True)
     df.to_excel('tabulka2.xlsx', sheet_name='List1', index = False)
-
-
 
 def getsliceid(scannum, slicenum): 
     ''' 
@@ -403,7 +403,10 @@ def loadfromh5(dataset, first, last):
     '''
     X_train = []
     Y_train = []
-    with h5py.File(f'data{dataset}.h5', 'r') as h5f:
+
+    pth = Path(__file__).parent
+
+    with h5py.File(pth / f'data{dataset}.h5', 'r') as h5f:
         for i in range(first,last+1):
             logger.info('Loading...')
             X_train.extend(np.asarray(h5f['scan_{}'.format(i)]))
@@ -503,4 +506,77 @@ def modelcreation2():
 
     model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
     model.fit(X_train, Y_train, batch_size=32, epochs=10, verbose=1)
+    return model
+
+def VGG_16(weights_path=None):
+    '''
+    Creates a convolutional keras neural network, training it with data from ct scans from both datasets.
+    Using the VGG-16 architecture.
+
+    ----
+    Returns the model
+    '''
+
+    X_train, Y_train = loadfromh5(1, 2, 19)
+    X_train1, Y_train1 = loadfromh5(2, 2, 19)
+
+    X_train.extend(X_train1)
+    Y_train.extend(Y_train1)
+
+    X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 64, 64, 1)
+    #X_train = np.transpose(X_train, (0,3,1,2))
+
+    print(X_train.shape)
+
+    model = Sequential()
+    model.add(ZeroPadding2D((1,1),input_shape=(64,64,1)))
+    model.add(Convolution2D(64, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(64, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(128, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(128, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(256, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(256, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(256, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(Flatten())
+    model.add(Dense(4096, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(4096, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(1))
+
+    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
+    model.fit(X_train, Y_train, batch_size=32, epochs=10, verbose=1)
+
+
+    if weights_path:
+        model.load_weights(weights_path)
+
     return model
