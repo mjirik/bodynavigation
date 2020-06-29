@@ -568,8 +568,8 @@ def VGG_16(weights_path=None):
     model.add(Flatten())
     model.add(Dense(4096, activation='relu'))
     model.add(Dropout(0.5))
-    model.add(Dense(4096, activation='relu'))
-    model.add(Dropout(0.5))
+    #model.add(Dense(4096, activation='relu'))
+    #model.add(Dropout(0.5))
     model.add(Dense(1))
 
     model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
