@@ -20,6 +20,7 @@ from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
 from keras.models import load_model
 from keras.utils import np_utils
 from keras.optimizers import SGD
+from keras import backend as K
 from pathlib import Path
 
 def annotate(number_of_scans): #annotation starting from scan 1
@@ -568,11 +569,12 @@ def VGG_16(weights_path=None):
     model.add(Flatten())
     model.add(Dense(4096, activation='relu'))
     model.add(Dropout(0.5))
-    #model.add(Dense(4096, activation='relu'))
-    #model.add(Dropout(0.5))
+    model.add(Dense(4096, activation='relu'))
+    model.add(Dropout(0.5))
     model.add(Dense(1))
 
-    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
+    model.compile(loss='mean_squared_error', optimizer='sgd', metrics=['mse'])
+    K.set_value(model.optimizer.learning_rate, 0.001)
     model.fit(X_train, Y_train, batch_size=32, epochs=10, verbose=1)
 
 
