@@ -1,7 +1,7 @@
+import numpy as np
 import io3d
 import sed3
 import io3d.datareaderqt
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from loguru import logger
@@ -33,7 +33,6 @@ def annotate(number_of_scans): #annotation starting from scan 1
 
     for i in range(number_of_scans):
         dr = io3d.DataReader()
-       
         pth = io3d.datasets.join_path('medical/orig/3Dircadb1.{}/'.format(i+1), get_root=True)
         datap = dr.Get3DData(pth + "PATIENT_DICOM/", dataplus_format=True)
         datap_labelled = dr.Get3DData(pth + 'MASKS_DICOM/liver', dataplus_format=True)
@@ -50,7 +49,7 @@ def annotate(number_of_scans): #annotation starting from scan 1
             df = df.append({'Ircad ID' : i+1,'Mark 1 slice id' : ids[0], 'Mark 2 slice id' : ids[2], 'Mark 3 slice id' : ids[1],'Mark 4 slice id' : ids[3]}, ignore_index = True)
         else:
             print("ERROR")
-            break;
+            break
     df.to_excel('tabulka.xlsx', sheet_name='List1', index = False)
 
 def annotate2(number_of_scans): #annotation starting from scan 1
@@ -65,12 +64,15 @@ def annotate2(number_of_scans): #annotation starting from scan 1
         print(f'Showing scan n. {str(i+1).zfill(2)}')
         dr = io3d.DataReader()
        
-        datap = dr.Get3DData(f'data2/training/liver-orig0{str(i+1).zfill(2)}.mhd', dataplus_format=True)
+        datap = dr.Get3DData(f'data/medical/orig/sliver07/training/liver-orig0{str(i+1).zfill(2)}.mhd', dataplus_format=True)
 
         ed = sed3.sed3(datap['data3d'][::-1,:,:], windowW = 400, windowC = 40)
         ed.show()
 
         nz = np.nonzero(ed.seeds)
+        az = 
+        
+        
         ids = np.unique(nz[0])
         df = df.append({'ID' : i+1,'Mark 1 slice id' : ids[0], 'Mark 2 slice id' : ids[1], 'Mark 3 slice id' : ids[2],'Mark 4 slice id' : ids[3]}, ignore_index = True)
     df.to_excel('tabulka2.xlsx', sheet_name='List1', index = False)
@@ -129,7 +131,7 @@ def getsliceid(scannum, slicenum):
         corner1 = scan[4]
         corner2 = total_slices # getting corners and bases for labeling
     else:
-        raise Error('Error getting slice label')
+        raise Exception('Error getting slice label')
     return base + (1 / (corner2 - corner1)) * (slicenum - corner1)
 
 def getsliceid2(scannum, slicenum): 
@@ -147,7 +149,7 @@ def getsliceid2(scannum, slicenum):
     df = pd.read_excel('tabulka2.xlsx', sheet_name='List1') # getting data from excel
     scan = df.iloc[scannum-1] # selecting the specific row from the table
 
-    with open(f'data2/training/liver-orig0{str(scannum).zfill(2)}.mhd', 'r') as f:
+    with open(f'data/medical/orig/sliver07/training/liver-orig0{str(scannum).zfill(2)}.mhd', 'r') as f:
         lines = f.read().splitlines()
         shape = lines[5].split(' ')[-1] # getting the total number of slices in this scan from .mhd file
     total_slices = int(shape)
@@ -188,7 +190,7 @@ def getsliceid2(scannum, slicenum):
         corner1 = scan[4]
         corner2 = total_slices # getting corners and bases for labeling
     else:
-        raise Error('Error getting slice label')
+        raise Exception('Error getting slice label')
     return base + (1 / (corner2 - corner1)) * (slicenum - corner1)
 
 def show(img):
@@ -233,7 +235,7 @@ def loadscan2(scannum):
     ----
     returns [[slice, label], [slice, label], ...]
     '''
-    datap = io3d.read(f'data2/training/liver-orig0{str(scannum).zfill(2)}.mhd')
+    datap = io3d.read(f'data/medical/orig/sliver07/training/liver-orig0{str(scannum).zfill(2)}.mhd')
     data3d = datap['data3d']
     scan = []
     i = 1
