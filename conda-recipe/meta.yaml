@@ -1,10 +1,10 @@
 package:
   name: bodynavigation 
-  version: "0.3.4"
+  version: "0.3.5"
 
 source:
 # this is used for build from git hub
-  git_rev: 0.3.4
+  git_rev: 0.3.5
   git_url: https://github.com/mjirik/bodynavigation.git
 
 # this is used for pypi 
@@ -15,7 +15,8 @@ source:
    # List any patch files here
    # - fix.patch
 
-# build:
+build:
+  noarch: python
   # noarch_python: True
   # preserve_egg_dir: True
   # entry_points:

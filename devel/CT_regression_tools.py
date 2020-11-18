@@ -1,7 +1,7 @@
+import numpy as np
 import io3d
 import sed3
 import io3d.datareaderqt
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from loguru import logger
@@ -13,11 +13,15 @@ import random
 import h5py
 import tensorflow as tf
 import keras
+import SimpleITK as sitk
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, MaxPooling2D
+from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
 from keras.models import load_model
 from keras.utils import np_utils
+from keras.optimizers import SGD
+from keras import backend as K
+from pathlib import Path
 
 def annotate(number_of_scans): #annotation starting from scan 1
     '''
@@ -29,7 +33,6 @@ def annotate(number_of_scans): #annotation starting from scan 1
 
     for i in range(number_of_scans):
         dr = io3d.DataReader()
-       
         pth = io3d.datasets.join_path('medical/orig/3Dircadb1.{}/'.format(i+1), get_root=True)
         datap = dr.Get3DData(pth + "PATIENT_DICOM/", dataplus_format=True)
         datap_labelled = dr.Get3DData(pth + 'MASKS_DICOM/liver', dataplus_format=True)
@@ -46,14 +49,37 @@ def annotate(number_of_scans): #annotation starting from scan 1
             df = df.append({'Ircad ID' : i+1,'Mark 1 slice id' : ids[0], 'Mark 2 slice id' : ids[2], 'Mark 3 slice id' : ids[1],'Mark 4 slice id' : ids[3]}, ignore_index = True)
         else:
             print("ERROR")
-            break;
+            break
     df.to_excel('tabulka.xlsx', sheet_name='List1', index = False)
 
+def annotate2(number_of_scans): #annotation starting from scan 1
+    '''
+    Annotate the data form our medical dataset, starting from scan 1, up to scan passed in param.
+    
+    Save the labels to an excel file 'tabulka2.xlsx'.
+    '''
+    df = pd.DataFrame(columns = ['ID' , 'Mark 1 slice id', 'Mark 2 slice id' , 'Mark 3 slice id', 'Mark 4 slice id']) 
 
+    for i in range(number_of_scans):
+        print(f'Showing scan n. {str(i+1).zfill(2)}')
+        dr = io3d.DataReader()
+       
+        datap = dr.Get3DData(f'data/medical/orig/sliver07/training/liver-orig0{str(i+1).zfill(2)}.mhd', dataplus_format=True)
+
+        ed = sed3.sed3(datap['data3d'][::-1,:,:], windowW = 400, windowC = 40)
+        ed.show()
+
+        nz = np.nonzero(ed.seeds)
+        az = 
+        
+        
+        ids = np.unique(nz[0])
+        df = df.append({'ID' : i+1,'Mark 1 slice id' : ids[0], 'Mark 2 slice id' : ids[1], 'Mark 3 slice id' : ids[2],'Mark 4 slice id' : ids[3]}, ignore_index = True)
+    df.to_excel('tabulka2.xlsx', sheet_name='List1', index = False)
 
 def getsliceid(scannum, slicenum): 
     ''' 
-    Get the label of a scan slice from xls table.
+    Get the label of a scan slice from xls table (from Ircad dataset).
     
     Parameters
 
@@ -105,7 +131,66 @@ def getsliceid(scannum, slicenum):
         corner1 = scan[4]
         corner2 = total_slices # getting corners and bases for labeling
     else:
-        raise Error('Error getting slice label')
+        raise Exception('Error getting slice label')
+    return base + (1 / (corner2 - corner1)) * (slicenum - corner1)
+
+def getsliceid2(scannum, slicenum): 
+    ''' 
+    Get the label of a scan slice from xls table (from second dataset).
+    
+    Parameters
+
+    scannum - Ircad ID
+    slicenum - index of wanted slice
+
+    ----
+    returns the label as a float value
+    '''
+    df = pd.read_excel('tabulka2.xlsx', sheet_name='List1') # getting data from excel
+    scan = df.iloc[scannum-1] # selecting the specific row from the table
+
+    with open(f'data/medical/orig/sliver07/training/liver-orig0{str(scannum).zfill(2)}.mhd', 'r') as f:
+        lines = f.read().splitlines()
+        shape = lines[5].split(' ')[-1] # getting the total number of slices in this scan from .mhd file
+    total_slices = int(shape)
+
+    if slicenum > total_slices:
+        raise ValueError('Slice ID is bigger than the number of slices in this scan.')
+    
+    if slicenum == scan[1]:
+        return 1
+    elif slicenum == scan[2]:
+        return 2
+    elif slicenum == scan[3]:
+        return 3
+    elif slicenum == scan[4]:
+        return 4
+    elif slicenum == 1:
+        return 0
+    elif slicenum == total_slices:
+        return 5
+    elif slicenum < scan[1]:
+        base = 0
+        corner1 = 1
+        corner2 = scan[1]
+    elif slicenum > scan[1] and slicenum < scan[2]:
+        base = 1
+        corner1 = scan[1]
+        corner2 = scan[2]
+    elif slicenum > scan[2] and slicenum < scan[3]:
+        base = 2
+        corner1 = scan[2]
+        corner2 = scan[3]
+    elif slicenum > scan[3] and slicenum < scan[4]:
+        base = 3
+        corner1 = scan[3]
+        corner2 = scan[4]
+    elif slicenum > scan[4]:
+        base = 4
+        corner1 = scan[4]
+        corner2 = total_slices # getting corners and bases for labeling
+    else:
+        raise Exception('Error getting slice label')
     return base + (1 / (corner2 - corner1)) * (slicenum - corner1)
 
 def show(img):
@@ -121,7 +206,7 @@ def show(img):
 
 def loadscan(scannum):
     '''
-    Load a scan along with its labels.
+    Load a scan along with its labels (from Ircad dataset).
     
     Parameters
     scannum - id of the loaded scan
@@ -138,7 +223,27 @@ def loadscan(scannum):
         id = getsliceid(scannum, i)
         scan.append([slice, id])
         i += 1
-    return scan #  ...
+    return scan
+
+def loadscan2(scannum):
+    '''
+    Load a scan along with its labels (from second dataset).
+    
+    Parameters
+    scannum - id of the loaded scan
+
+    ----
+    returns [[slice, label], [slice, label], ...]
+    '''
+    datap = io3d.read(f'data/medical/orig/sliver07/training/liver-orig0{str(scannum).zfill(2)}.mhd')
+    data3d = datap['data3d']
+    scan = []
+    i = 1
+    for slice in data3d:
+        id = getsliceid2(scannum, i)
+        scan.append([slice, id])
+        i += 1
+    return scan
 
 def resize(img):
     '''
@@ -233,10 +338,10 @@ def save():
         logger.info(f"Scan {i} loaded : {len(scan)} slices")
     
         augmented = augmentscan(scan)
-        logger.info(f"Scan {i} augmented: {len(scan)} slices")
+        logger.info(f"Scan {i} augmented: {len(augmented)} slices")
     
         normalized = normalizescan(augmented)
-        logger.info(f"Scan {i} normalized : {len(scan)} slices")
+        logger.info(f"Scan {i} normalized : {len(normalized)} slices")
     
         labels = np.zeros(len(normalized))
         sh = normalized[0][0].shape
@@ -252,11 +357,47 @@ def save():
             h5f.create_dataset('label_{}'.format(i), data=labels)
         logger.info('Scan saved')
 
-def loadfromh5(first, last):
+def save2():
+    '''
+    Completely prepare the data for usage in keras models.
+    
+    Including:
+    1) Extraction from original directory.
+    2) Pairing slices with their labels.
+    3) Augmenting all scans, quadrupling the total number of slices.
+    4) Normalizing all data
+    5) Saving all scans to a single .h5 file with a separate datasets for images and their labels
+    '''
+    for i in range(1,21): # number of scans in the dataset
+        scan = loadscan2(i)
+        logger.info(f"Scan {i} loaded : {len(scan)} slices")
+    
+        augmented = augmentscan(scan)
+        logger.info(f"Scan {i} augmented: {len(augmented)} slices")
+    
+        normalized = normalizescan(augmented)
+        logger.info(f"Scan {i} normalized : {len(normalized)} slices")
+    
+        labels = np.zeros(len(normalized))
+        sh = normalized[0][0].shape
+        slices = np.empty([len(normalized), sh[0], sh[1]])
+
+        for j in range(len(normalized)):
+            labels[j] = normalized[j][1]
+            slices[j] = np.asarray(normalized[j][0])
+            slices[j, :,:] = np.asarray(normalized[j][0])
+
+        with h5py.File('data2.h5', 'a') as h5f:
+            h5f.create_dataset('scan_{}'.format(i), data=slices)
+            h5f.create_dataset('label_{}'.format(i), data=labels)
+        logger.info('Scan saved')
+
+def loadfromh5(dataset, first, last):
     '''
     Load a selected set scans from a .h5 file to the workspace.
 
     Parameters
+    dataset = 1 = Ircad, 2 = medical
     first = first scan you want to load
     last = last scan you want to load
 
@@ -265,7 +406,10 @@ def loadfromh5(first, last):
     '''
     X_train = []
     Y_train = []
-    with h5py.File('data.h5', 'r') as h5f:
+
+    pth = Path(__file__).parent
+
+    with h5py.File(pth / f'data{dataset}.h5', 'r') as h5f:
         for i in range(first,last+1):
             logger.info('Loading...')
             X_train.extend(np.asarray(h5f['scan_{}'.format(i)]))
@@ -300,15 +444,21 @@ def eval(model, X_test, Y_test):
         logger.info(f'Truth: {Y_test[i]}')
         dif.append(abs(predictions[i]- Y_test[i]))
         logger.info(f'Error: {dif[i]}')
-        if dif[i] >= 1:
-            show(X_test[i].squeeze()) #show any slices, where prediction error reached 1
+        #if dif[i] > 1:
+            #show(X_test[i].squeeze()) #show any slices, where prediction error reached 1
     logger.info(f'Average error = {sum(dif)/len(dif)}')
+    plt.plot(predictions, label='Predictions')
+    plt.plot(Y_test, label='Truth')
+    plt.plot(dif, label='error')
+    plt.legend()
+    plt.show()
 
-def modelcreation1(fromscan, toscan):
+def modelcreation1(dataset, fromscan, toscan):
     '''
-    Creates a convolutional keras neural network, training it with data from ct scans.
+    Creates a convolutional keras neural network, training it with data from ct scans dataset.
 
     Parameters
+    dataset - 1 = Ircad, 2 = medical
     fromscan - the first scan used to train the model
     toscan - last scan used to train the model
 
@@ -316,7 +466,7 @@ def modelcreation1(fromscan, toscan):
     Returns the model
     '''
 
-    X_train, Y_train = fcn.loadfromh5(fromscan, toscan)
+    X_train, Y_train = loadfromh5(dataset, fromscan, toscan)
     X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 64, 64, 1)
 
     model = Sequential()
@@ -334,4 +484,115 @@ def modelcreation1(fromscan, toscan):
 
     model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
     model.fit(X_train, Y_train, batch_size=32, epochs=10, verbose=1)
+    return model
+
+def modelcreation2():
+    '''
+    Creates a convolutional keras neural network, training it with data from ct scans from both datasets.
+
+    ----
+    Returns the model
+    '''
+
+    X_train, Y_train = loadfromh5(1, 2, 19)
+    X_train1, Y_train1 = loadfromh5(2, 2, 19)
+    #print(f'{len(X_train)} + {len(X_train1)} = {len(X_train)+len(X_train1)}')
+    #print(f'{len(Y_train)} + {len(Y_train1)} = {len(Y_train)+len(Y_train1)}')
+
+    X_train.extend(X_train1)
+    Y_train.extend(Y_train1)
+    #print(f'{len(X_train)}')
+    #print(f'{len(Y_train)}')
+
+    X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 64, 64, 1)
+
+    model = Sequential()
+ 
+    model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(64,64,1)))
+    model.add(Convolution2D(32, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+    model.add(Dropout(0.25))
+ 
+    model.add(Flatten())
+    model.add(Dense(128, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(1))
+    model.summary()
+
+    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
+    model.fit(X_train, Y_train, batch_size=32, epochs=10, verbose=1)
+    return model
+
+def VGG_16(weights_path=None):
+    '''
+    Creates a convolutional keras neural network, training it with data from ct scans from both datasets.
+    Using the VGG-16 architecture.
+
+    ----
+    Returns the model
+    '''
+
+    X_train, Y_train = loadfromh5(1, 2, 19)
+    X_train1, Y_train1 = loadfromh5(2, 2, 19)
+
+    X_train.extend(X_train1)
+    Y_train.extend(Y_train1)
+
+    X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 64, 64, 1)
+    #X_train = np.transpose(X_train, (0,3,1,2))
+
+    print(X_train.shape)
+
+    model = Sequential()
+    model.add(ZeroPadding2D((1,1),input_shape=(64,64,1)))
+    model.add(Convolution2D(64, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(64, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(128, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(128, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(256, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(256, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(256, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(ZeroPadding2D((1,1)))
+    model.add(Convolution2D(512, 3, 3, activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+
+    model.add(Flatten())
+    model.add(Dense(4096, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(4096, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(1))
+
+    model.compile(loss='mean_squared_error', optimizer='sgd', metrics=['mse'])
+    K.set_value(model.optimizer.learning_rate, 0.001)
+    model.fit(X_train, Y_train, batch_size=32, epochs=10, verbose=1)
+
+
+    if weights_path:
+        model.load_weights(weights_path)
+
     return model
