@@ -18,6 +18,19 @@ import bodynavigation
 # import pysegbase.dcmreaddata as dcmr
 # import lisa.data
 
+from pathlib import Path
+import sys
+import matplotlib.pyplot as plt
+import glob
+
+import io3d
+# import sed3
+# import SimpleITK as sitk
+# sys.path.append(Path("~/projects/bodynavigation").expanduser())
+import bodynavigation
+
+import matplotlib.pyplot as plt
+
 TEST_DATA_DIR = "3Dircadb1.1"
 spine_center_working = [60, 124, 101]
 ircad1_spine_center_idx = [120, 350, 260]
@@ -165,7 +178,7 @@ class BodyNavigationTest(unittest.TestCase):
         # ed.show()
         # ed = sed3.sed3(self.data3d, contour=self.obj.get_diaphragm_mask())
         # ed.show()
-        dst_diaphragm = self.obj.dist_diaphragm()
+        dst_diaphragm = self.obj.dist_to_diaphragm()
         # above diaphragm it should be positive
         # plt.imshow(self.data3d[0,:,:])
         # plt.show()
@@ -184,12 +197,12 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertLess(dst_diaphragm[120, 250, 250], -20)
 
     def test_dist_sagital(self):
-        dst_sagittal = self.obj.dist_sagittal()
+        dst_sagittal = self.obj.dist_to_sagittal()
         self.assertGreater(dst_sagittal[60, 10, 10], 10)
         self.assertLess(dst_sagittal[60, 10, 500], -10)
 
     def test_dist_coronal(self):
-        dst_coronal = self.obj.dist_coronal()
+        dst_coronal = self.obj.dist_to_coronal()
         # import sed3
         # ed = sed3.sed3(dst_coronal)
         # ed.show()
@@ -197,7 +210,7 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertLess(dst_coronal[60, 500, 10], -50)
 
     def test_dist_axial(self):
-        dst = self.obj.dist_axial()
+        dst = self.obj.dist_to_axial()
         # import sed3
         # ed = sed3.sed3(dst_coronal)
         # ed.show()
@@ -254,7 +267,7 @@ class BodyNavigationTest(unittest.TestCase):
         # bn = bodynavigation.BodyNavigation(use_new_get_lungs_setup=True)
         self.obj.use_new_get_lungs_setup = True
         binary_lungs = self.obj.get_lungs_martin()
-        dst_diaphragm = self.obj.dist_diaphragm()
+        dst_diaphragm = self.obj.dist_to_diaphragm()
         # import sed3
         # ed = sed3.sed3(dst_diaphragm)
         # ed.show()
@@ -264,6 +277,120 @@ class BodyNavigationTest(unittest.TestCase):
         self.assertLess(dst_diaphragm[120, 250, 250], -20)
         self.obj.use_new_get_lungs_setup = False
 
+
+
+def test_sagital():
+
+    datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', 1)
+    data3d = datap["data3d"][:110]
+    voxelsize_mm = datap["voxelsize_mm"]
+
+    def show_dists(dist, i=100, j=200):
+        fig, axs = plt.subplots(
+            2, 2,
+            #         sharey=True,
+            figsize=[15, 12])
+        axs = axs.flatten()
+        axs[0].imshow(data3d[i, :, :], cmap='gray')
+
+        axs[1].imshow(dist[i, :, :])
+        axs[1].contour(dist[i, :, :] > 0)
+        axs[2].imshow(data3d[:, j, :], cmap='gray')
+        axs[3].imshow(dist[:, j, :])
+        axs[3].contour(dist[:, j, :] > 0)
+
+        for ax in axs:
+            ax.axis('off')
+
+    ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
+    # dist = ss.dist_sagittal()
+    dist = ss.dist_coronal()
+    # dist = ss.dist_to_surface()
+    # show_dists(dist)
+    # plt.show()
+    assert dist[0, 255, 255] > 0
+    assert dist[0, 400, 400] < 0
+
+def test_spine_all_spines_in_dataset():
+    # for i in range(1, 21):
+    one_i = 4
+    for i in range(one_i, one_i + 1):
+        # datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
+        datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
+        # data3d = datap["data3d"][:110]
+        data3d = datap["data3d"][:110]
+        voxelsize_mm = datap["voxelsize_mm"]
+
+        def show_dists(dist, i=63, j=200):
+            fig, axs = plt.subplots(
+                2, 2,
+                #         sharey=True,
+                figsize=[15, 12])
+            axs = axs.flatten()
+            axs[0].imshow(data3d[i, :, :], cmap='gray')
+
+            axs[1].imshow(dist[i, :, :])
+            axs[1].contour(dist[i, :, :] > 0)
+            axs[2].imshow(data3d[:, j, :], cmap='gray')
+            axs[3].imshow(dist[:, j, :])
+            axs[3].contour(dist[:, j, :] > 0)
+
+            for ax in axs:
+                ax.axis('off')
+
+        ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
+        # dist = ss.dist_sagittal()
+        dist = ss.dist_to_spine()
+        # dist = ss.dist_to_surface()
+        # show_dists(dist)
+        # plt.show()
+        # check standard deviation of spine pixels coordinates in voxelsize_mm. It should be less than 10 px along x,y
+        spine_coords_std = np.std(np.nonzero(ss.spine), 1)
+        assert spine_coords_std[0] > 10, "Pixels should be wide spread alogn Z axis"
+        assert spine_coords_std[1] < 10
+        assert spine_coords_std[2] < 10
+        # assert dist[0, 255, 255] > 0
+        # assert dist[0, 400, 400] < 0
+
+def test_bone():
+
+    for i in range(1, 1):
+        datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
+        # datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
+        # data3d = datap["data3d"][:110]
+        data3d = datap["data3d"][:110]
+        voxelsize_mm = datap["voxelsize_mm"]
+
+        def show_dists(dist, i=100, j=200):
+            fig, axs = plt.subplots(
+                2, 2,
+                #         sharey=True,
+                figsize=[15, 12])
+            axs = axs.flatten()
+            axs[0].imshow(data3d[i, :, :], cmap='gray')
+
+            axs[1].imshow(dist[i, :, :])
+            axs[1].contour(dist[i, :, :] > 0)
+            axs[2].imshow(data3d[:, j, :], cmap='gray')
+            axs[3].imshow(dist[:, j, :])
+            axs[3].contour(dist[:, j, :] > 0)
+
+            for ax in axs:
+                ax.axis('off')
+
+        ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
+        # dist = ss.dist_sagittal()
+        dist = ss.dist_to_spine()
+        # dist = ss.dist_to_surface()
+        # show_dists(dist)
+        # plt.show()
+        # check standard deviation of spine pixels coordinates in voxelsize_mm. It should be less than 10 px along x,y
+        spine_coords_std = np.std(np.nonzero(ss.spine), 1)
+        assert spine_coords_std[0] > 10, "Pixels should be wide spread alogn z axis"
+        assert spine_coords_std[1] < 10
+        assert spine_coords_std[2] < 10
+        # assert dist[0, 255, 255] > 0
+        # assert dist[0, 400, 400] < 0
 
 if __name__ == "__main__":
     unittest.main()

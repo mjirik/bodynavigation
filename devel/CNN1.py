@@ -1,4 +1,4 @@
-import CT_regression_tools
+from . import CT_regression_tools
 import numpy as np
 
 #model = CT_regression_tools.modelcreation1(1, 17)

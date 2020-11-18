@@ -273,6 +273,18 @@ def loadfromh5(first, last):
             logger.info('Scan {} loaded'.format(i))
     return X_train, Y_train
 
+
+def predict(model, img:np.ndarray):
+    if img.ndim == 2:
+        imgn = np.asarray([normalize(img)])
+
+    else:
+        imgn = np.asarray(normalizescan(img))
+    X_test = imgn
+    predictions = model.predict(X_test, batch_size = 500)
+
+    return predictions
+
 def eval(model, X_test, Y_test):
     '''
     Evaluate the prediction results of the model.

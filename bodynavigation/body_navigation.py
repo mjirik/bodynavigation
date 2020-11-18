@@ -44,14 +44,17 @@ class BodyNavigation:
 
         # this drasticaly downscales data, but is faster
         self.working_vs = np.asarray([1.5] * 3)
+        self._spine_filter_size_mm = np.array([45, 15, 15])
+        self._spine_min_bone_voxels_ratio = 0.15
         if voxelsize_mm is None:
             self.data3dr = data3d
         else:
             self.data3dr = resize_to_mm(data3d, voxelsize_mm, self.working_vs)
 
         self.lungs = None
-        self.spine_wvs = None
+        self.spine = None
         self.body = None
+        self.bones = None
         self.body_width = None
         self.body_height = None
         self.diaphragm_mask = None
@@ -62,6 +65,9 @@ class BodyNavigation:
         self.head_first = head_first
         self.use_new_get_lungs_setup = use_new_get_lungs_setup
         self.set_parameters()
+        self.dist_sagittal = self.dist_to_sagittal
+        self.dist_coronal = self.dist_to_coronal
+        self.dist_axial = self.dist_to_axial
 
     def set_parameters(self, version=1):
         if version == 0:
@@ -119,7 +125,7 @@ class BodyNavigation:
         else:
             return resize_to_shape(self.body, self.orig_shape)
 
-    def get_spine(self, skip_resize=False):
+    def get_bones(self, skip_resize=False):
         """ Should have been named get_bones() """
         # prepare required data
         if self.body is None:
@@ -140,28 +146,64 @@ class BodyNavigation:
         bones = scipy.ndimage.morphology.binary_closing(
             bones, structure=np.ones((3, 3, 3))
         )  # TODO - fix removal of data on edge slices
+        self.bones = bones
+        if skip_resize:
+            return bones
+        else:
+            return resize_to_shape(bones, self.orig_shape)
+
+    def get_spine(self, skip_resize=False):
+        # prepare required data
+        if self.body is None:
+            self.get_body(skip_resize=True)  # self.body
+        if self.bones is None:
+            self.get_bones(skip_resize=True)
+
+        # filter out noise in data
+        spine_filter_size_px = self._spine_filter_size_mm / self.working_vs
+        data3dr = scipy.ndimage.filters.gaussian_filter(self.bones.astype(float), spine_filter_size_px)
+
+        import matplotlib.pyplot as plt
+        plt.imshow(np.max(data3dr, 0))
+        plt.show()
+        # tresholding
+        bones = data3dr > self._spine_min_bone_voxels_ratio
+        del data3dr
+        bones[self.body == 0] = 0  # cut out anything not inside body
+
+
+        # close holes in data
+        # bones = scipy.ndimage.morphology.binary_closing(
+        #     bones, structure=np.ones((3, 3, 3))
+        # )  # TODO - fix removal of data on edge slices
 
         # compute center
         self.spine_center_wvs = np.mean(np.nonzero(bones), 1)
         self.spine_center_mm = (
             self.spine_center_wvs
             * self.working_vs
-            / self.voxelsize_mm.astype(np.double)
+            # / self.voxelsize_mm.astype(np.double)
         )
+        self.spine_center_orig_px = (
+                self.spine_center_wvs
+                * self.working_vs
+                / self.voxelsize_mm.astype(np.double)
+        )
+
         # self.center2 = np.mean(np.nonzero(bones), 2)
 
-        self.spine_wvs = bones
+        self.spine = bones
         if skip_resize:
             return bones
         else:
             return resize_to_shape(bones, self.orig_shape)
 
     def get_coronal(self):
-        if self.spine_wvs is None:
+        if self.spine is None:
             self.get_spine(skip_resize=True)
         if self.angle is None:
             self.find_symmetry()
-        spine_mean = np.mean(np.nonzero(self.spine_wvs), 1)
+        spine_mean = np.mean(np.nonzero(self.spine), 1)
         rldst = np.ones(self.orig_shape, dtype=np.int16)
 
     def get_lungs(self, skip_resize=False):
@@ -340,7 +382,7 @@ class BodyNavigation:
         )
 
         body = chloc.clear_body(self.body)
-        coronal = self.dist_coronal(return_in_working_voxelsize=True)
+        coronal = self.dist_to_coronal(return_in_working_voxelsize=True)
 
         final_area_filter = chloc.area_filter(self.data3dr, body, self.lungs, coronal)
         location_filter = chloc.dist_hull(final_area_filter)
@@ -428,9 +470,9 @@ class BodyNavigation:
         return resize_to_shape(ld, self.orig_shape)
 
     def dist_to_spine(self):
-        if self.spine_wvs is None:
+        if self.spine is None:
             self.get_spine(skip_resize=True)
-        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine_wvs)
+        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine)
         ld = ld * float(self.working_vs[0])  # convert distances to mm
         return resize_to_shape(ld, self.orig_shape)
 
@@ -439,10 +481,12 @@ class BodyNavigation:
         tr0, tr1, angle = find_symmetry(img, degrad)
         self.angle = angle
         self.symmetry_point_wvs = np.array([tr0, tr1])
+        # self.symmetry_point_mm = self.symmetry_point_wvs * self.working_vs[:2]
+        # self.symmetry_point_mm = self.symmetry_point_wvs * self.voxelsize_mm[:2]
         if return_img:
             return img
 
-    def dist_sagittal(self, degrad=5):
+    def dist_to_sagittal(self, degrad=5):
         if self.angle is None:
             self.find_symmetry()
         rldst = np.ones(self.orig_shape, dtype=np.int16)
@@ -452,18 +496,20 @@ class BodyNavigation:
             / self.voxelsize_mm[1:].astype(np.double)
         )
 
-        z = split_with_line(symmetry_point_orig_res, self.angle, self.orig_shape[1:])
+        z = split_with_line(symmetry_point_orig_res, self.angle, self.orig_shape[1:], voxelsize_0=self.working_vs[1])
         # print 'z  ', np.max(z), np.min(z)
+
 
         for i in range(self.orig_shape[0]):
             rldst[i, :, :] = z
 
         # rldst = scipy.ndimage.morphology.distance_transform_edt(rldst) - int(spine_mean[2])
         # return resize_to_shape(rldst, self.orig_shape)
+
         return rldst
 
-    def dist_coronal(self, return_in_working_voxelsize=False):
-        if self.spine_wvs is None:
+    def dist_to_coronal(self, return_in_working_voxelsize=False):
+        if self.spine is None:
             self.get_spine(skip_resize=True)
         if self.angle is None:
             self.find_symmetry()
@@ -473,16 +519,17 @@ class BodyNavigation:
             spine_center = self.spine_center_wvs
         else:
             shape = self.orig_shape
-            spine_center = self.spine_center_mm
+            spine_center = self.spine_center_orig_px
         rldst = np.ones(shape, dtype=np.int16)
 
-        z = split_with_line(spine_center, self.angle + 90, shape[1:])
+        z = split_with_line(spine_center[1:], self.angle + 90, shape[1:], voxelsize_0=self.working_vs[1])
+        z = z * self.working_vs[1]
         for i in range(self.orig_shape[0]):
             rldst[i, :, :] = z
 
         return rldst
 
-    def dist_axial(self):
+    def dist_to_axial(self):
         if self.diaphragm_mask is None:
             self.get_diaphragm_mask(skip_resize=True)
         axdst = np.ones(self.data3dr.shape, dtype=np.int16)
@@ -496,7 +543,7 @@ class BodyNavigation:
         axdst = axdst * self.working_vs[0]
         return resize_to_shape(axdst, self.orig_shape)
 
-    def dist_diaphragm(self):
+    def dist_to_diaphragm(self):
         """
         Get positive values in superior to (above) diaphragm and negative values inferior (under) diaphragm.
         :return:
@@ -560,7 +607,7 @@ class BodyNavigation:
         """
         if self.lungs is None:
             self.get_lungs(skip_resize=True)
-        if self.spine_wvs is None:
+        if self.spine is None:
             self.get_spine(skip_resize=True)
         if self.angle is None:
             self.find_symmetry()
@@ -823,7 +870,7 @@ class BodyNavigation:
         :param alpha1: Additional end angle relative to detected orientation
         :return:
         """
-        spine_mean = np.mean(np.nonzero(self.spine_wvs), 1)
+        spine_mean = np.mean(np.nonzero(self.spine), 1)
         spine_mean = spine_mean[1:]
 
         z1 = split_with_line(spine_mean, self.angle + alpha1, flat.shape)
@@ -914,7 +961,7 @@ def find_symmetry(img, degrad=5):
 
 
 # Rozděl obraz na půl
-def split_with_line(point, orientation, imshape, degrees=True):
+def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1.):
     """
     :arg point:
     :arg orientation: angle or oriented vector
@@ -933,9 +980,9 @@ def split_with_line(point, orientation, imshape, degrees=True):
         # print np.degrees(angle)
         if (angle > (0.5 * np.pi)) and (angle < (1.5 * np.pi)):
 
-            zn = -1
+            zn = -voxelsize_0
         else:
-            zn = 1
+            zn = voxelsize_0
 
         vector = [np.tan(angle), 1]
         # vector = [np.tan(angle), 1]
