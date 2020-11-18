@@ -44,8 +44,9 @@ class BodyNavigation:
 
         # this drasticaly downscales data, but is faster
         self.working_vs = np.asarray([1.5] * 3)
-        self._spine_filter_size_mm = np.array([45, 15, 15])
+        self._spine_filter_size_mm = np.array([100, 15, 15])
         self._spine_min_bone_voxels_ratio = 0.15
+        self._spine_2nd_iter_dist_threshold_mm = 50
         if voxelsize_mm is None:
             self.data3dr = data3d
         else:
@@ -68,6 +69,7 @@ class BodyNavigation:
         self.dist_sagittal = self.dist_to_sagittal
         self.dist_coronal = self.dist_to_coronal
         self.dist_axial = self.dist_to_axial
+        self.debug = False
 
     def set_parameters(self, version=1):
         if version == 0:
@@ -153,32 +155,80 @@ class BodyNavigation:
             return resize_to_shape(bones, self.orig_shape)
 
     def get_spine(self, skip_resize=False):
+        """
+        Find voxels roughly representing spine. Use the binary bones,
+        make filtration with with oblong object to remove smaller objects. Calculate XY center. Remove bones far from
+        the center to remove hips and recalculate XY center again.
+        :param skip_resize:
+        :return:
+        """
+        # not used: Remove all woxels too far to remove hips and recalculate XY.
         # prepare required data
         if self.body is None:
             self.get_body(skip_resize=True)  # self.body
         if self.bones is None:
             self.get_bones(skip_resize=True)
+        # dist_sag = self.dist_to_sagittal(return_in_working_voxelsize=True)
+
 
         # filter out noise in data
         spine_filter_size_px = self._spine_filter_size_mm / self.working_vs
-        data3dr = scipy.ndimage.filters.gaussian_filter(self.bones.astype(float), spine_filter_size_px)
-
-        import matplotlib.pyplot as plt
-        plt.imshow(np.max(data3dr, 0))
-        plt.show()
-        # tresholding
-        bones = data3dr > self._spine_min_bone_voxels_ratio
-        del data3dr
+        bones = self.bones.astype(float)
+        # remove things far from sagittal to remove hips
+        # bones[dist_sag > self._spine_max_dist_from_sagittal_mm] = 0
+        # bones[dist_sag < -self._spine_max_dist_from_sagittal_mm] = 0
         bones[self.body == 0] = 0  # cut out anything not inside body
+        data3dr = scipy.ndimage.filters.gaussian_filter(bones, spine_filter_size_px)
 
+        # tresholding
+        thr = min(0.9 * np.max(data3dr), self._spine_min_bone_voxels_ratio)
+        spine = data3dr > thr
+
+        # compute temporary center
+        spine_center_wvs = np.mean(np.nonzero(spine), 1)
+        xx, yy = np.meshgrid(
+            np.arange(0, data3dr.shape[1]),
+            np.arange(0, data3dr.shape[2]),
+            sparse=True
+        )
+
+        spine_mask_2d = np.sqrt(
+            ((xx - spine_center_wvs[2]) * self.working_vs[2]) ** 2 +
+            ((yy - spine_center_wvs[1]) * self.working_vs[1]) ** 2
+        )
+        no_spine_mask_2d = spine_mask_2d > self._spine_2nd_iter_dist_threshold_mm
+        # spine_mask_2d = np.zeros(data3dr.shape[1:])
+        no_spine_mask = zcopy(no_spine_mask_2d, data3dr.shape)
+        spine[no_spine_mask] = 0
+
+        if self.debug:
+            import matplotlib.pyplot as plt
+            fig, axsss = plt.subplots(2,2)
+            axs = axsss.flatten()
+            axs[0].imshow(np.max(data3dr, 0))
+            axs[0].contour(np.max(
+                bones +
+                # (dist_sag > 0).astype(np.uint8) +
+                spine.astype(np.uint8) + no_spine_mask.astype(np.uint8)
+                , 0))
+            axs[1].imshow(np.mean(data3dr, 0))
+            axs[2].imshow(np.max(data3dr, 1))
+            axs[3].imshow(np.mean(data3dr, 1))
+            # axs[1].imshow(np.)
+            plt.show()
+
+        del bones
+        del data3dr
+
+        # compute center
+        self.spine_center_wvs = np.mean(np.nonzero(spine), 1)
 
         # close holes in data
         # bones = scipy.ndimage.morphology.binary_closing(
         #     bones, structure=np.ones((3, 3, 3))
         # )  # TODO - fix removal of data on edge slices
 
-        # compute center
-        self.spine_center_wvs = np.mean(np.nonzero(bones), 1)
+
         self.spine_center_mm = (
             self.spine_center_wvs
             * self.working_vs
@@ -192,11 +242,11 @@ class BodyNavigation:
 
         # self.center2 = np.mean(np.nonzero(bones), 2)
 
-        self.spine = bones
+        self.spine = spine
         if skip_resize:
-            return bones
+            return spine
         else:
-            return resize_to_shape(bones, self.orig_shape)
+            return resize_to_shape(spine, self.orig_shape)
 
     def get_coronal(self):
         if self.spine is None:
@@ -472,9 +522,33 @@ class BodyNavigation:
     def dist_to_spine(self):
         if self.spine is None:
             self.get_spine(skip_resize=True)
-        ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine)
-        ld = ld * float(self.working_vs[0])  # convert distances to mm
-        return resize_to_shape(ld, self.orig_shape)
+        # ld = scipy.ndimage.morphology.distance_transform_edt(1 - self.spine)
+        # ld = ld * float(self.working_vs[0])  # convert distances to mm
+
+        # working vs
+        # shape = self.data3dr.shape
+        # vs = self.working_vs
+        # center = self.spine_center_wvs
+
+        # orig size
+        shape = self.orig_shape
+        vs = self.voxelsize_mm
+        center = self.spine_center_mm
+        # spine_center_wvs = np.mean(np.nonzero(spine), 1)
+        xx, yy = np.meshgrid(
+            np.arange(0, shape[1]) * vs[1],
+            np.arange(0, shape[2]) * vs[2],
+            sparse=True
+        )
+
+        spine_dist_2d = np.sqrt(
+            ((xx - center[2])) ** 2 +
+            ((yy - center[1])) ** 2
+        )
+        # spine_mask_2d = np.zeros(data3dr.shape[1:])
+        spine_dist_3d = zcopy(spine_dist_2d, shape)
+        # return resize_to_shape(ld, self.orig_shape)
+        return spine_dist_3d
 
     def find_symmetry(self, degrad=5, return_img=False):
         img = np.sum(self.data3dr > 430, axis=0)
@@ -486,21 +560,29 @@ class BodyNavigation:
         if return_img:
             return img
 
-    def dist_to_sagittal(self, degrad=5):
+    def dist_to_sagittal(self, return_in_working_voxelsize=False):
         if self.angle is None:
             self.find_symmetry()
-        rldst = np.ones(self.orig_shape, dtype=np.int16)
-        symmetry_point_orig_res = (
-            self.symmetry_point_wvs
-            * self.working_vs[1:]
-            / self.voxelsize_mm[1:].astype(np.double)
-        )
+        if return_in_working_voxelsize:
+            symmetry_point = np.asarray(self.symmetry_point_wvs)
+            shape = self.data3dr.shape
+            vs0 = self.working_vs[1]
+        else:
+            symmetry_point_orig_res = (
+                    self.symmetry_point_wvs
+                    * self.working_vs[1:]
+                    / self.voxelsize_mm[1:].astype(np.double)
+            )
+            symmetry_point = symmetry_point_orig_res
+            shape = self.orig_shape
+            vs0 = self.voxelsize_mm
 
-        z = split_with_line(symmetry_point_orig_res, self.angle, self.orig_shape[1:], voxelsize_0=self.working_vs[1])
+        rldst = np.ones(shape, dtype=np.int16)
+        z = split_with_line(symmetry_point, self.angle, shape[1:], voxelsize_0=vs0)
         # print 'z  ', np.max(z), np.min(z)
 
 
-        for i in range(self.orig_shape[0]):
+        for i in range(shape[0]):
             rldst[i, :, :] = z
 
         # rldst = scipy.ndimage.morphology.distance_transform_edt(rldst) - int(spine_mean[2])
@@ -1097,6 +1179,13 @@ def main():
 
     # output = segmentation.vesselSegmentation(oseg.data3d, oseg.orig_segmentation)
 
+def zcopy(slice, shape, dtype=None):
+    if dtype is None:
+        dtype = slice.dtype
+    im3d = np.empty(shape, dtype=dtype)
+    for i in range(shape[0]): 
+        im3d[i, :, :] = slice
+    return im3d
 
 if __name__ == "__main__":
     main()
