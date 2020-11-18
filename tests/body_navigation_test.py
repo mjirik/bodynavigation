@@ -313,7 +313,8 @@ def test_sagital():
 
 def test_spine_all_spines_in_dataset():
     one_i = None
-    for i in range(1, 21):
+    for i in range(1, 2):
+    # for i in range(1, 21):
     # one_i = 8
     # for i in range(one_i, one_i + 1):
         # datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
