@@ -552,7 +552,13 @@ class BodyNavigation:
 
     def find_symmetry(self, degrad=5, return_img=False):
         img = np.sum(self.data3dr > 430, axis=0)
-        tr0, tr1, angle = find_symmetry(img, degrad)
+
+        if self.debug:
+            import matplotlib.pyplot as plt
+            plt.imshow(img)
+            plt.colorbar()
+            plt.show()
+        tr0, tr1, angle = find_symmetry(img, degrad, debug=self.debug)
         self.angle = angle
         self.symmetry_point_wvs = np.array([tr0, tr1])
         # self.symmetry_point_mm = self.symmetry_point_wvs * self.working_vs[:2]
@@ -575,15 +581,15 @@ class BodyNavigation:
             )
             symmetry_point = symmetry_point_orig_res
             shape = self.orig_shape
-            vs0 = self.voxelsize_mm
+            vs0 = self.voxelsize_mm[1]
 
-        rldst = np.ones(shape, dtype=np.int16)
+        # rldst = np.ones(shape, dtype=np.int16)
         z = split_with_line(symmetry_point, self.angle, shape[1:], voxelsize_0=vs0)
         # print 'z  ', np.max(z), np.min(z)
 
-
-        for i in range(shape[0]):
-            rldst[i, :, :] = z
+        rldst = zcopy(z, shape, dtype=np.int16)
+        # for i in range(shape[0]):
+        #     rldst[i, :, :] = z
 
         # rldst = scipy.ndimage.morphology.distance_transform_edt(rldst) - int(spine_mean[2])
         # return resize_to_shape(rldst, self.orig_shape)
@@ -986,10 +992,23 @@ def prepare_images_for_symmetry_analysis(imin0, pivot):
     return imgP0, imgP1
 
 
-def find_symmetry_parameters(imin0, trax, tray, angles):
+def find_symmetry_parameters(imin0, trax, tray, angles, debug=False):
+    """
+
+    :param imin0:
+    :param trax:
+    :param tray:
+    :param angles:
+    :param debug:
+    :return:
+    """
     vals = np.zeros([len(trax), len(tray), len(angles)])
     #     angles_vals = []
-
+    minval = np.inf
+    minimg = None
+    minim0 = None
+    minim1 = None
+    # mindif = None
     for i, x in enumerate(trax):
         for j, y in enumerate(tray):
             try:
@@ -1003,6 +1022,13 @@ def find_symmetry_parameters(imin0, trax, tray, angles):
                     dif = (imgP0 - imr) ** 2
                     sm = np.sum(dif)
                     vals[i, j, k] = sm
+                    if debug:
+                        if sm < minval:
+                            minval = sm
+                            mindif = dif
+                            minim0 = imgP0
+                            minim1 = imr
+                            # minimg =
             except:
                 vals[i, j, :] = np.inf
     #             angles_vals.append(sm)
@@ -1010,11 +1036,21 @@ def find_symmetry_parameters(imin0, trax, tray, angles):
     # am = np.argmin(angles_vals)
     am = np.unravel_index(np.argmin(vals), vals.shape)
     # print am, ' min ', np.min(vals)
+    if debug:
+
+        from matplotlib import pyplot as plt
+        fig, axs = plt.subplots(1,3, sharey=True)
+        axs = axs.flatten()
+        axs[0].imshow(mindif)
+        axs[1].imshow(minim0)
+        axs[2].imshow(minim1)
+        fig.suptitle(f"angle={angles[am[2]]}, point=[{trax[am[0]]}, {tray[am[1]]}]")
+        plt.show()
 
     return trax[am[0]], tray[am[1]], angles[am[2]]
 
 
-def find_symmetry(img, degrad=5):
+def find_symmetry(img, degrad=5, debug=False, sigma=3):
     # imin0r = scipy.misc.pilutil.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
     imin0r = skimage.transform.resize(
         img,
@@ -1023,19 +1059,25 @@ def find_symmetry(img, degrad=5):
         order=1,
         preserve_range=True,
     )
+    if sigma is not None:
+        from scipy.ndimage.filters import gaussian_filter
+        imin0r = gaussian_filter(imin0r, sigma)
 
     angles = range(-180, 180, 15)
     trax = range(1, imin0r.shape[0], 10)
     tray = range(1, imin0r.shape[1], 10)
 
-    tr0, tr1, ang = find_symmetry_parameters(imin0r, trax, tray, angles)
+    tr0, tr1, ang = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug)
 
     # fine measurement
-    angles = range(ang - 20, ang + 20, 3)
+    # the offset is limited to positive values (not really sure why)
     trax = range(np.max([tr0 - 20, 1]), tr0 + 20, 3)
     tray = range(np.max([tr1 - 20, 1]), tr1 + 20, 3)
+    angles = list(range(ang - 20, ang + 20, 3))
+    angles += list(range(ang + 180 - 20, ang + 180 + 20, 3))
+    # check also the 90 degrees symmetry plane for sure
 
-    tr0, tr1, ang = find_symmetry_parameters(imin0r, trax, tray, angles)
+    tr0, tr1, ang = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug)
 
     angle = 90 - ang / 2.0
 

@@ -72,7 +72,11 @@ class BodyNavigationTest(unittest.TestCase):
 
     def test_get_spine(self):
         seg_spine = self.obj.get_spine()
-        self.assertEqual(np.max(seg_spine[30:40, 100:150, 50:150]), 1)
+
+        # import sed3
+        # ed = sed3.sed3(seg_spine)
+        # ed.show()
+        self.assertEqual(np.max(seg_spine[30:40, 300:400, 200:300]), 1)
         self.assertEqual(seg_spine[64, 10, 10], 0)
         spine_center = self.obj.get_center()[1:]
         spine_center_expected = [27, 47]
@@ -360,16 +364,63 @@ def test_spine_all_spines_in_dataset():
         # assert dist[0, 255, 255] > 0
         # assert dist[0, 400, 400] < 0
 
-def test_bone():
+# def test_bone():
+#
+#     for i in range(1, 1):
+#         datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
+#         # datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
+#         # data3d = datap["data3d"][:110]
+#         data3d = datap["data3d"][:110]
+#         voxelsize_mm = datap["voxelsize_mm"]
+#
+#         def show_dists(dist, i=100, j=200):
+#             fig, axs = plt.subplots(
+#                 2, 2,
+#                 #         sharey=True,
+#                 figsize=[15, 12])
+#             axs = axs.flatten()
+#             axs[0].imshow(data3d[i, :, :], cmap='gray')
+#
+#             axs[1].imshow(dist[i, :, :])
+#             axs[1].contour(dist[i, :, :] > 0)
+#             axs[2].imshow(data3d[:, j, :], cmap='gray')
+#             axs[3].imshow(dist[:, j, :])
+#             axs[3].contour(dist[:, j, :] > 0)
+#
+#             for ax in axs:
+#                 ax.axis('off')
+#
+#         ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
+#         # dist = ss.dist_sagittal()
+#         dist = ss.dist_to_spine()
+#         # dist = ss.dist_to_surface()
+#         # show_dists(dist)
+#         # plt.show()
+#         # check standard deviation of spine pixels coordinates in voxelsize_mm. It should be less than 10 px along x,y
+#         spine_coords_std = np.std(np.nonzero(ss.spine), 1)
+#         assert spine_coords_std[0] > 10, "Pixels should be wide spread alogn z axis"
+#         assert spine_coords_std[1] < 10
+#         assert spine_coords_std[2] < 10
+#         # assert dist[0, 255, 255] > 0
+#         # assert dist[0, 400, 400] < 0
 
-    for i in range(1, 1):
+def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
+    r_spine_mm = 10
+    one_i = None
+    debug = False
+    for i in range(1, 2):
+    # for i in range(1, 21):
+    # one_i = 1
+    # for i in range(one_i, one_i + 1):
         datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
         # datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
+        data3d = datap["data3d"]
         # data3d = datap["data3d"][:110]
-        data3d = datap["data3d"][:110]
         voxelsize_mm = datap["voxelsize_mm"]
 
-        def show_dists(dist, i=100, j=200):
+        def show_dists(dist, i=63, j=200, contour=None):
+            if contour is None:
+                contour = dist > 0
             fig, axs = plt.subplots(
                 2, 2,
                 #         sharey=True,
@@ -378,27 +429,56 @@ def test_bone():
             axs[0].imshow(data3d[i, :, :], cmap='gray')
 
             axs[1].imshow(dist[i, :, :])
-            axs[1].contour(dist[i, :, :] > 0)
+            axs[1].contour(contour[i, :, :])
             axs[2].imshow(data3d[:, j, :], cmap='gray')
             axs[3].imshow(dist[:, j, :])
-            axs[3].contour(dist[:, j, :] > 0)
+            axs[3].contour(contour[:, j, :])
 
             for ax in axs:
                 ax.axis('off')
 
         ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
-        # dist = ss.dist_sagittal()
-        dist = ss.dist_to_spine()
+        ss.debug = debug
+        distsp = ss.dist_to_spine()
+        dist = ss.dist_to_sagittal()
         # dist = ss.dist_to_surface()
-        # show_dists(dist)
-        # plt.show()
-        # check standard deviation of spine pixels coordinates in voxelsize_mm. It should be less than 10 px along x,y
-        spine_coords_std = np.std(np.nonzero(ss.spine), 1)
-        assert spine_coords_std[0] > 10, "Pixels should be wide spread alogn z axis"
-        assert spine_coords_std[1] < 10
-        assert spine_coords_std[2] < 10
-        # assert dist[0, 255, 255] > 0
-        # assert dist[0, 400, 400] < 0
+        if debug:
+            print(ss.spine.dtype)
+            r_spine_mm = 10
+            show_dists(distsp - 10,
+                       contour=(dist > 0).astype(np.uint8) + (distsp > r_spine_mm).astype(np.uint8)
+                       )
+            plt.suptitle(f"i={i}")
+            plt.show()
+
+        # check if spine is on both sides of sagittal plane
+        sagittal_dists_in_spine = dist[distsp < r_spine_mm]
+        assert np.max(sagittal_dists_in_spine) > 0
+        assert np.min(sagittal_dists_in_spine) < 0
+
+def test_sagittal_on_augmented_data():
+    import scipy
+    angle = 30
+    debug = False
+    i = 1
+    # datap = io3d.datasets.read_dataset("sliver07", 'data3d', i)
+    datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
+    data3d = datap["data3d"][50:,:,:]
+    voxelsize_mm = datap["voxelsize_mm"]
+    # data3d = datap["data3d"][:110]
+    imr = scipy.ndimage.rotate(data3d, angle, axes=[1,2], cval=-1000, reshape=False)
+    # import sed3
+    # ed = sed3.sed3(imr)
+    # ed.show()
+    ss = bodynavigation.body_navigation.BodyNavigation(imr, voxelsize_mm)
+    ss.debug = debug
+    dist = ss.dist_to_sagittal()
+    translated_angle = 90 - angle
+    # plt.imshow(imr[20, :, :], cmap='gray')
+    # plt.contour((dist>0)[20, :, :])
+    # plt.suptitle(f"set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
+    # plt.show()
+    assert ss.angle == pytest.approx(translated_angle, 10)
 
 if __name__ == "__main__":
     unittest.main()
