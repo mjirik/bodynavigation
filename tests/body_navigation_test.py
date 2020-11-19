@@ -321,8 +321,8 @@ def test_spine_all_spines_in_dataset():
     # for i in range(1, 21):
     # one_i = 8
     # for i in range(one_i, one_i + 1):
-        # datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
-        datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
+        datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
+        # datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
         data3d = datap["data3d"]
         # data3d = datap["data3d"][:110]
         voxelsize_mm = datap["voxelsize_mm"]
