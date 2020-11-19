@@ -38,11 +38,11 @@ requirements:
     - setuptools
     - numpy
     - scipy
-    - imtools
+#    - imtools
     - scikit-image
     - io3d
     - pandas
-    - sed3
+#    - sed3
     - astropy
     - imma
 
@@ -52,10 +52,10 @@ requirements:
     - scipy
     - astropy
     - scikit-image
-    - imtools
+#    - imtools
     - io3d
     - pandas
-    - sed3
+#    - sed3
     - astropy
     - imma
     - dill
