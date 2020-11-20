@@ -44,7 +44,7 @@ requirements:
     - pandas
 #    - sed3
     - astropy
-    - imma
+#    - imma
 
   run:
     - python

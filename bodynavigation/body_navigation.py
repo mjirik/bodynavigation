@@ -23,13 +23,21 @@ import copy
 # import sed3
 
 from imtools import misc, qmisc  # https://github.com/mjirik/imtools
-from imma.image import resize_to_mm, resize_to_shape
+# from imma.image import resize_to_mm, resize_to_shape
 
 from .organ_detection_algo import OrganDetectionAlgo
 
+def resize_to_mm(*args, **kwargs):
+    import imma.image
+    return imma.image.resize_to_mm(*args, **kwargs)
+
+def resize_to_shape(*args, **kwargs):
+    import imma.image
+    return imma.image.resize_to_shape(*args, **kwargs)
 
 class BodyNavigation:
     """ Range of values in input data must be <-1024;intmax> """
+
 
     def __init__(
         self, data3d, voxelsize_mm, use_new_get_lungs_setup=False, head_first=True
