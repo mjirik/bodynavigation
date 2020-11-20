@@ -40,7 +40,7 @@ requirements:
     - scipy
 #    - imtools
     - scikit-image
-    - io3d
+#    - io3d
     - pandas
 #    - sed3
     - astropy

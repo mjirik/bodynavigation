@@ -23,7 +23,6 @@ import numpy as np
 import scipy
 import scipy.ndimage
 
-import io3d
 
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import NumpyEncoder, compressArray, decompressArray, toMemMap, delMemMap
@@ -244,6 +243,7 @@ class OrganDetection(object):
 
     @classmethod
     def fromDirectory(cls, path):
+        import io3d
         logger.info("Loading already processed data from directory: %s" % path)
 
         data3d_p = os.path.join(path, "data3d.dcm")

@@ -32,7 +32,6 @@ import pickle
 
 import copy
 import glob
-import io3d
 
 # import pandas as pd
 import scipy
@@ -84,6 +83,7 @@ from skimage import morphology
 
 def read_data(orig_fname, ref_fname):
     """ Pomoci io3d nacte 3D obrazek """
+    import io3d
 
     data3d_orig, metadata = io3d.datareader.read(orig_fname)
     vs_mm1 = metadata["voxelsize_mm"]

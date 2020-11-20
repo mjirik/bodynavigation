@@ -19,7 +19,6 @@ import json
 import copy
 import numpy as np
 
-import io3d
 
 from .tools import (
     compressArray,
@@ -146,6 +145,7 @@ def buildPAtlas(datasets, target_name, readydirs=None, parts=None):
 
 
 def savePAtlas(PA, PA_info, path):
+    import io3d
     PA_info["data_multiplication"] = 10000.0  # save resolution is 0.01%
 
     for key in PA:
@@ -171,6 +171,7 @@ def savePAtlas(PA, PA_info, path):
 
 
 def loadPAtlas(path):  # TODO - almost duplicated in OrganDetection
+    import io3d
     with open(os.path.join(path, "PA_info.json"), "r") as fp:
         PA_info = json.load(fp, encoding="utf-8")
 
@@ -194,6 +195,7 @@ def loadPAtlas(path):  # TODO - almost duplicated in OrganDetection
 if __name__ == "__main__":
     import argparse
     from .files import loadDatasetsInfo, joinDatasetPaths, addDatasetRegPoints
+    import io3d
 
     logging.basicConfig(stream=sys.stdout)
     logger = logging.getLogger()

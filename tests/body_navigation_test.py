@@ -11,7 +11,6 @@ import sys
 import numpy as np
 import pytest
 
-import io3d
 import bodynavigation
 
 # from lisa import organ_segmentation
