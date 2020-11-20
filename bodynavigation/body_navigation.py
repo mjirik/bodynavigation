@@ -22,7 +22,7 @@ import copy
 
 # import sed3
 
-from imtools import misc, qmisc  # https://github.com/mjirik/imtools
+# from imtools import misc, qmisc  # https://github.com/mjirik/imtools
 # from imma.image import resize_to_mm, resize_to_shape
 
 from .organ_detection_algo import OrganDetectionAlgo
