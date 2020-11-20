@@ -17,7 +17,7 @@ import scipy
 import scipy.ndimage
 import skimage.measure
 
-from imtools import misc, qmisc  # https://github.com/mjirik/imtools
+# from imtools import misc, qmisc  # https://github.com/mjirik/imtools
 
 # sys.path.append("/home/mjirik/projects/pysegbase")
 # sys.path.append("/home/mjirik/projects/lisa")
