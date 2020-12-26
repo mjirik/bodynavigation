@@ -518,7 +518,7 @@ class BodyNavigation:
         # return self._resize_and_dist(self.body)
         ld = scipy.ndimage.morphology.distance_transform_edt(self.body)
         ld = ld * float(self.working_vs[0])  # convert distances to mm
-        return resize_to_shape(ld, self.orig_shape)
+        return resize_to_shape(ld, self.orig_shape, mode="wrap")
 
     def dist_to_lungs(self):
         if self.lungs is None:
