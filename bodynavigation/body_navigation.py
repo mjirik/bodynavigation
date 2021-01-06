@@ -518,7 +518,7 @@ class BodyNavigation:
         # return self._resize_and_dist(self.body)
         ld = scipy.ndimage.morphology.distance_transform_edt(self.body)
         ld = ld * float(self.working_vs[0])  # convert distances to mm
-        return resize_to_shape(ld, self.orig_shape, mode="wrap")
+        return resize_to_shape(ld, self.orig_shape, mode="mirror")
 
     def dist_to_lungs(self):
         if self.lungs is None:
@@ -603,6 +603,12 @@ class BodyNavigation:
         # return resize_to_shape(rldst, self.orig_shape)
 
         return rldst
+
+    def dist_to_top_diaphragm(self, return_in_working_voxelsize=False):
+        if self.spine is None:
+            self.get_spine(skip_resize=True)
+        if self.angle is None:
+            self.find_symmetry()
 
     def dist_to_coronal(self, return_in_working_voxelsize=False):
         if self.spine is None:
