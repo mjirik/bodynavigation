@@ -1,6 +1,6 @@
 # Changelog
 
-Latest version: 0.4.12
+Latest version: 0.5.0
 
 ## 0.5
 * [Added] Diaphragm level detection
