@@ -1,5 +1,10 @@
 # Changelog
 
+Latest version: 0.4.12
+
+## 0.5
+* [Added] Diaphragm level detection
+
 ## 0.3
 
 * [Changed] Python 2 support leaved
