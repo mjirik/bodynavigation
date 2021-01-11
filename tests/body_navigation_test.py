@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import glob
 
 import io3d
+import io3d.datasets
 # import sed3
 # import SimpleITK as sitk
 # sys.path.append(Path("~/projects/bodynavigation").expanduser())
@@ -30,7 +31,8 @@ import bodynavigation
 
 import matplotlib.pyplot as plt
 
-TEST_DATA_DIR = "3Dircadb1.1"
+# TEST_DATA_DIR = "3Dircadb1.1"
+dataset = "3Dircadb1"
 spine_center_working = [60, 124, 101]
 ircad1_spine_center_idx = [120, 350, 260]
 ircad1_liver_center_idx = [25, 220, 180]
@@ -42,18 +44,22 @@ class BodyNavigationTest(unittest.TestCase):
     verbose = False
 
     @classmethod
-    def setUpClass(cls):
-        datap = io3d.read(
-            io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
-            dataplus_format=True,
-        )
-        cls.obj = bodynavigation.BodyNavigation(datap["data3d"], datap["voxelsize_mm"])
-        cls.data3d = datap["data3d"]
-        cls.shape = datap["data3d"].shape
+    def setUpClass(self):
+        # datap = io3d.read(
+        #     io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
+        #     dataplus_format=True,
+        # )
+        # pth = io3d.datasets.get_dataset_path(dataset, 'data3d', 1)
+        # print(f"pth={pth}")
+        datap = io3d.read_dataset(dataset, 'data3d', 1, orientation_axcodes='SPL')
+
+        self.obj:bodynavigation.BodyNavigation = bodynavigation.BodyNavigation(datap["data3d"], datap["voxelsize_mm"])
+        self.data3d = datap["data3d"]
+        self.shape = datap["data3d"].shape
 
     @classmethod
-    def tearDownClass(cls):
-        cls.obj = None
+    def tearDownClass(self):
+        self.obj = None
 
     def test_get_body(self):
         seg_body = self.obj.get_body()
@@ -85,6 +91,31 @@ class BodyNavigationTest(unittest.TestCase):
 
         spine_dst = self.obj.dist_to_spine()
         self.assertGreater(spine_dst[60, 10, 10], spine_dst[60, 124, 101])
+
+    def test_get_diapghragm_axial(self):
+        max_error_mm = 5
+        i, mask = self.obj.get_diaphragm_axial_position_index(return_in_working_voxelsize=False, return_mask=True)
+        assert self.obj.data3dr.shape[0] == mask.shape[0], "Shape of mask should be always in resized size"
+
+        dst = self.obj.dist_to_diaphragm_axial()
+        randi = np.random.randint(1, mask.shape[0])
+        assert dst[randi, 0, 0] == dst[randi, -1, -1], "Distances in one slide should be equal"
+        assert dst[0, 0, 0] != dst[randi, -1, -1], "Distances in neighboring slides should be different"
+        datap2 = io3d.datasets.read_dataset(dataset, "liver", 1, orientation_axcodes='SPL')
+        ii_liver = np.min(np.nonzero(datap2.data3d)[0])
+        max_error_px = max_error_mm / datap2.voxelsize_mm[0]
+
+        assert pytest.approx(ii_liver, max_error_px) == i, "Index of end of the liver should be close to the detected diaphragm level index"
+
+        assert dst.shape[0] == self.obj.orig_shape[0], "shape is in orig shape"
+
+        assert pytest.approx(dst[int(i),0,0], max_error_mm) == 0, "Distance in detected liver slide should be zero"
+        assert pytest.approx(dst[ii_liver,0,0], max_error_mm) == 0, "Distance in annotated liver slide should be close to zero"
+
+
+        dst_wvs = self.obj.dist_to_diaphragm_axial(return_in_working_voxelsize=True)
+        assert dst_wvs.shape[0] == self.obj.data3dr.shape[0]
+
 
     def test_get_dists(self):
         dst_lungs = self.obj.dist_to_lungs()

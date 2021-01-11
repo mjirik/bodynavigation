@@ -40,7 +40,7 @@ class BodyNavigation:
 
 
     def __init__(
-        self, data3d, voxelsize_mm, use_new_get_lungs_setup=False, head_first=True
+        self, data3d, voxelsize_mm, use_new_get_lungs_setup=False, head_first=True, orientation_axcodes=None
     ):
         # temporary fix for io3d <-512;511> value range bug
         if np.min(data3d) >= -512:
@@ -55,6 +55,14 @@ class BodyNavigation:
         self._spine_filter_size_mm = np.array([100, 15, 15])
         self._spine_min_bone_voxels_ratio = 0.15
         self._spine_2nd_iter_dist_threshold_mm = 50
+        self._cache_diaphragm_axial_i_vxsz = None # this will be caluclated if necessary
+        self.axcodes = orientation_axcodes if orientation_axcodes else "SPL"
+
+        self._diaphragm_level_flat_area_proportion = 0.9 # check also local maxima
+        self._lungs_max_density = -200
+        self._diaphragm_level_min_dist_to_surface_mm = 1
+        self._diaphragm_level_min_dist_to_sagittal_mm = 30
+
         if voxelsize_mm is None:
             self.data3dr = data3d
         else:
@@ -508,7 +516,7 @@ class BodyNavigation:
         return resize_to_shape(ld, self.orig_shape)
         # return self._resize_and_dist(1 - self.ribs)
 
-    def dist_to_surface(self):
+    def dist_to_surface(self, return_in_working_voxelsize=False):
         """
         Positive values in mm inside of body.
         :return:
@@ -518,7 +526,10 @@ class BodyNavigation:
         # return self._resize_and_dist(self.body)
         ld = scipy.ndimage.morphology.distance_transform_edt(self.body)
         ld = ld * float(self.working_vs[0])  # convert distances to mm
-        return resize_to_shape(ld, self.orig_shape, mode="mirror")
+        if return_in_working_voxelsize:
+            return ld
+        else:
+            return resize_to_shape(ld, self.orig_shape, mode="mirror")
 
     def dist_to_lungs(self):
         if self.lungs is None:
@@ -604,11 +615,94 @@ class BodyNavigation:
 
         return rldst
 
-    def dist_to_top_diaphragm(self, return_in_working_voxelsize=False):
+    def get_diaphragm_axial_position_index(self, return_in_working_voxelsize=False, return_mask=False, return_areas=False):
+        """
+
+        :param return_in_working_voxelsize: return position index in working voxelsize
+        :param return_mask:  mask in working voxelsize
+        :param return_areas: Areas of lungs (without a middle around sagittal plane) in mm^2 for all slices
+        :return:
+        """
+        if self._cache_diaphragm_axial_i_vxsz and not return_mask:
+            return self._cache_diaphragm_axial_i_vxsz
         if self.spine is None:
             self.get_spine(skip_resize=True)
         if self.angle is None:
             self.find_symmetry()
+
+        # self = bodynavigation.body_navigation.BodyNavigation(datap.data3d, datap.voxelsize_mm)
+        dst_surf = self.dist_to_surface(return_in_working_voxelsize=True)
+        dst_sagi = self.dist_sagittal(return_in_working_voxelsize=True)
+        #     dst_coro = bn.dist_coronal()
+        mns = []
+
+        maska = dst_surf > self._diaphragm_level_min_dist_to_surface_mm
+        maskb = np.abs(dst_sagi) > self._diaphragm_level_min_dist_to_sagittal_mm
+        mask = maska & maskb
+        mask_val = (mask & (self.data3dr < self._lungs_max_density)).astype(np.int8)
+
+        #     maskc = mask & (dst_coro < thr_dist_to_coronal_mm)
+        #     mask_val_c = (maskc & (datap.data3d < max_density)).astype(np.int8)
+
+        #     voxel_axial_surface_mm2 = datap.voxelsize_mm[1] * datap.voxelsize_mm[2]
+        voxel_axial_surface_mm2 = self.working_vs[1] * self.working_vs[2]
+        # print(mask.shape, np.unique(mask), scipy.stats.describe(dst_surf.flatten()),
+        #       scipy.stats.describe(dst_sagi.flatten()))
+        for i in range(0, self.data3dr.shape[0]):
+            mn = np.sum(mask_val[i, :, :])
+            mns.append(mn * voxel_axial_surface_mm2)
+
+        #         mnc = np.sum(mask_val_c[i,:,:])
+        #         mnsc.append(mnc * voxel_axial_surface_mm2)
+        ii_max = np.nanargmax(mns)
+
+        # concider points of local extrema
+        ids = scipy.signal.argrelextrema(np.asarray(mns), np.greater)
+
+        # add to the absolute maximum to concidered points
+        ids = set(ids[0])
+        ids.add(ii_max)
+        ids = np.asarray(list(ids))
+        mnsa = np.asarray(mns)
+
+        # take just indexes with value above some intensity level
+        ids2 = ids[mnsa[ids] > (self._diaphragm_level_flat_area_proportion * mns[ii_max])]
+        if self.axcodes[0] == "S":
+            ii = np.max(ids2)  # if axcode is "SPL"
+        elif self.axcodes[0] == "I":
+            ii = np.min(ids2)  # if axcode is "IPL"
+        else:
+            raise ValueError(f"Unsupported orientation_axcodes {self.axcodes}")
+
+        self._cache_diaphragm_axial_i_vxsz = ii
+
+        if not return_in_working_voxelsize:
+            ii = ii * self.orig_shape[0] / self.data3dr.shape[0]
+
+        if return_mask:
+            return ii, mask
+        return ii
+
+        # ----------------
+
+    def dist_to_diaphragm_axial(self, return_in_working_voxelsize=False):
+        ii = self.get_diaphragm_axial_position_index(return_in_working_voxelsize)
+
+        if return_in_working_voxelsize:
+            output_shape = self.data3dr.shape
+            voxelsize_0 = self.working_vs[0]
+        else:
+            output_shape = self.orig_shape
+            voxelsize_0 = self.voxelsize_mm[0]
+
+        height_mm =  voxelsize_0 * output_shape[0]
+
+        data = np.ones(output_shape)
+        mul = np.linspace(0, height_mm, output_shape[0]).reshape([output_shape[0], 1, 1])
+        return data * mul
+
+
+
 
     def dist_to_coronal(self, return_in_working_voxelsize=False):
         if self.spine is None:
