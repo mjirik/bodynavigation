@@ -1,12 +1,12 @@
-import seg
+from . import seg
 import numpy as np
 from loguru import logger
 import h5py
-import lines
+from . import lines
 import skimage.io
 import skimage
 import skimage.transform
-import CT_regression_tools
+from . import CT_regression_tools
 c=0
 
 for i in range(40):
