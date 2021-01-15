@@ -679,10 +679,13 @@ class BodyNavigation:
         if not return_in_working_voxelsize:
             ii = ii * self.orig_shape[0] / self.data3dr.shape[0]
 
+        out = [ii]
         if return_mask:
-            return ii, mask
-        return ii
-
+            out.append(mask)
+        if return_areas:
+            out.append(mnsa)
+        # return ii
+        return out[0] if len(out) == 1 else tuple(out)
         # ----------------
 
     def dist_to_diaphragm_axial(self, return_in_working_voxelsize=False):
