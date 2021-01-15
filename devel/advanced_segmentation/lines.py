@@ -1,5 +1,6 @@
 import math
 import numpy as np
+# TODO odstranit závislost na sympy
 from sympy import symbols, Eq, solve
 import bodynavigation
 
@@ -24,6 +25,7 @@ def standard_from_slopeintercept(angle, point):
     t = a2/a1
     a2 = t*a2
     x0 = t*x0
+    # TODO Tohle dokážeme spočítat i na papíře bez bez balíku sympy.
     x, y = symbols('x y')
     eq = Eq((-1*y) + (-1*x*t) + (x0) + (y0), 0)
     result = solve(eq)

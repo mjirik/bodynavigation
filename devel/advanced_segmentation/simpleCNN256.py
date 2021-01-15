@@ -7,14 +7,16 @@ import lines
 import CT_regression_tools
 
 import tensorflow as tf
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
-from keras.models import load_model
-from keras.utils import np_utils
-from keras.optimizers import SGD
-from keras import backend as K
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
+from tensorflow.keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
+from tensorflow.keras.models import load_model
+# from tensorflow.keras.utils import np_utils
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras import backend as K
 # tf.debugging.set_log_device_placement(True)
+
+size = 256
 
 X_train = []
 Y_train = []
@@ -22,7 +24,7 @@ validation = []
 validation_y = []
 
 
-with h5py.File('sagittal256s.h5', 'r') as h5f:
+with h5py.File(f'sagittal{size}s.h5', 'r') as h5f:
     for i in range(18):
             logger.info('Loading...')
             X_train.extend(np.asarray(h5f[f'scan_{i}']))
@@ -42,8 +44,8 @@ with h5py.File('sagittal256s.h5', 'r') as h5f:
     for j in range(len(np.asarray(h5f[f'scan_{38}']))):
         validation_y.extend([np.asarray(h5f[f'label_{38}'])])
 
-X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 256, 256, 1)
-validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256, 256, 1)
+X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], size, size, 1)
+validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], size, size, 1)
 
 # for i in range(5):
 #     k = 150
@@ -59,7 +61,7 @@ validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256
 
 model = Sequential()
 
-model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(256,256,1)))
+model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(size,size,1)))
 model.add(Convolution2D(32, 3, 3, activation='relu'))
 model.add(MaxPooling2D(pool_size=(2,2)))
 model.add(Dropout(0.25))
@@ -73,4 +75,4 @@ model.summary()
 model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
 model.fit(X_train, np.asarray(Y_train), batch_size=32, epochs=50, validation_data=(validation, np.asarray(validation_y)), verbose=1)
 
-model.save("simpleCNNgpu256s.h5")
+model.save(f"simpleCNNgpu{size}s.h5")

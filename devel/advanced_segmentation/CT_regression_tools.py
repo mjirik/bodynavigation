@@ -12,15 +12,15 @@ import skimage.transform
 import random
 import h5py
 import tensorflow as tf
-import keras
-import SimpleITK as sitk
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
-from keras.models import load_model
-from keras.utils import np_utils
-from keras.optimizers import SGD
-from keras import backend as K
+import tensorflow.keras
+# import SimpleITK as sitk
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
+from tensorflow.keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
+from tensorflow.keras.models import load_model
+# from tensorflow.keras.utils import np_utils
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras import backend as K
 from pathlib import Path
 
 def annotate(number_of_scans): #annotation starting from scan 1

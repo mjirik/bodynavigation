@@ -1,12 +1,16 @@
-from . import seg
 import numpy as np
 from loguru import logger
 import h5py
-from . import lines
 import skimage.io
 import skimage
 import skimage.transform
-from . import CT_regression_tools
+import CT_regression_tools
+import seg
+import lines
+
+imsize = 256
+
+
 c=0
 
 for i in range(40):
@@ -18,7 +22,7 @@ for i in range(40):
     X_train = [[] for j in range(len(data))]
     for j in range(len(data)):
         
-            img =  CT_regression_tools.resize(data[i], 256)
+            img =  CT_regression_tools.resize(data[i], imsize)
             img = CT_regression_tools.normalize(img)
             X_train[j] = img
     
@@ -33,7 +37,7 @@ for i in range(40):
         alpha += 360
     Y_train = [alpha, round(float(delta),4)]
     
-    with h5py.File('sagittal128s.h5', 'a') as h5f:
+    with h5py.File(f'sagittal{imsize}s.h5', 'a') as h5f:
         h5f.create_dataset('scan_{}'.format(i), data=np.asarray(X_train))
         h5f.create_dataset('label_{}'.format(i), data=Y_train)
     c += 1
