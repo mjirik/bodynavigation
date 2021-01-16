@@ -1,3 +1,4 @@
+from loguru import logger
 import math
 import numpy as np
 # TODO odstranit závislost na sympy
@@ -29,9 +30,10 @@ def standard_from_slopeintercept(angle, point):
     x, y = symbols('x y')
     eq = Eq((-1*y) + (-1*x*t) + (x0) + (y0), 0)
     result = solve(eq)
-    print(result)
+    # print(result)
     
     a = 1
+    # Třeba je to správně, ale vypadá to děsivě.
     if point == [0, 0]:
         c = 0
         if angle == 90 or angle == 270:
@@ -53,8 +55,19 @@ def standard_from_slopeintercept(angle, point):
         c = -1 * result[0][x].args[0]
     
     return a, b, c
-    
-    
+
+
+def slopeintercept_from_standard(a, b, c):
+
+    x = 0
+    a = float(a)
+    b = float(b)
+    c = float(c)
+    y = -(a * x + c) / b
+    # arctan2() is the quadrant correct version of arctan()
+    angle = np.degrees(np.arctan2(-a, b))
+    point = [x, y]
+    return angle, point
 
 def normal_from_standard(a,b,c):
     """Transfer a line's standard formulation (ax + by + c = 0) to normal.
