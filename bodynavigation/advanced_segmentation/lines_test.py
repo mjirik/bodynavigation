@@ -5,7 +5,7 @@ import itertools
 import numpy as np
 
 import pytest
-import lines
+from bodynavigation.advanced_segmentation import lines
 
 def test_angle():
     """
@@ -42,21 +42,19 @@ def test_linesplit():
     point = [10,20]
     sh = [100, 100]
     alpha, delta = lines.normal_from_slopeintercept(angle, point)
-    # ls = lines.linesplit(0, -50, 128)
     ls0 = bodynavigation.body_navigation.split_with_line(point, angle, sh)
-    plt.subplot(121)
-    plt.imshow(ls0)
-    plt.contour(ls0 > 0)
+    # plt.subplot(121)
+    # plt.imshow(ls0)
+    # plt.contour(ls0 > 0)
 
     ls1 = lines.linesplit(alpha, delta, sh[0])
     logger.debug(ls1.shape)
     logger.debug(ls1.dtype)
     ls1 = ls1.astype(np.float)
-    plt.subplot(122)
-    plt.imshow(ls1)
-    plt.contour(ls1 > 0)
-
-    plt.show()
+    # plt.subplot(122)
+    # plt.imshow(ls1)
+    # plt.contour(ls1 > 0)
+    # plt.show()
 
 
 
@@ -65,4 +63,4 @@ def test_linesplit():
 
 # test_angle()
 
-test_linesplit()
+# test_linesplit()
