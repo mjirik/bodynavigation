@@ -30,7 +30,7 @@ def standard_from_slopeintercept(angle, point):
     x, y = symbols('x y')
     eq = Eq((-1*y) + (-1*x*t) + (x0) + (y0), 0)
     result = solve(eq)
-    # print(result)
+    print(result)
     
     a = 1
     # Třeba je to správně, ale vypadá to děsivě.
@@ -122,10 +122,15 @@ def linesplit(alpha, delta, imshape):
     """
     imshape = [imshape, imshape]
     orientation = alpha - 90
-    x = math.cos(alpha) * delta
-    y = math.sin(alpha) * delta
+    x = math.cos(np.radians(alpha)) * delta
+    y = math.sin(np.radians(alpha)) * delta
+    logger.debug(f"x={x}, y={y}")
     point = [x,y]
     return bodynavigation.body_navigation.split_with_line(point, orientation, imshape)
+
+
+    # -5 -4 -3 -2 -1 0 1 2 3
+    # -4 -3 -2
 
 # a, b, c = standard_from_slopeintercept(2, [11, 5])
 # print(f"Standard form: {a}x + {b}y + {c} = 0")

@@ -29,12 +29,40 @@ def test_angle():
         angle1, point1 = lines.slopeintercept_from_standard(a,b,c)
         logger.debug(f"output angle: {angle1}, point: {point1}")
         logger.debug(f'a={a}, b={b}, c={c}')
-        # assert a==0
+        # assert a==0.5
         # assert b==0
         # assert c==0
         assert pytest.approx(angle, 5) == angle1
         assert pytest.approx(0, 5) == a * point[0] + b * point[1] + c
+        assert pytest.approx(0, 5) == a * point1[0] + b * point1[1] + c
 
-# lines.standard_from_slopeintercept(40,[1,1]) # nefunguje už ani tohle
+def test_linesplit():
+    import bodynavigation.body_navigation
+    angle = 30
+    point = [10,20]
+    sh = [100, 100]
+    alpha, delta = lines.normal_from_slopeintercept(angle, point)
+    # ls = lines.linesplit(0, -50, 128)
+    ls0 = bodynavigation.body_navigation.split_with_line(point, angle, sh)
+    plt.subplot(121)
+    plt.imshow(ls0)
+    plt.contour(ls0 > 0)
 
-test_angle()
+    ls1 = lines.linesplit(alpha, delta, sh[0])
+    logger.debug(ls1.shape)
+    logger.debug(ls1.dtype)
+    ls1 = ls1.astype(np.float)
+    plt.subplot(122)
+    plt.imshow(ls1)
+    plt.contour(ls1 > 0)
+
+    plt.show()
+
+
+
+
+# lines.standard_from_slopeintercept(40,[0,0]) # nefunguje už ani tohle
+
+# test_angle()
+
+test_linesplit()
