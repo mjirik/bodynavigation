@@ -105,7 +105,7 @@ validation = []
 validation_y = []
 
 #Data loading
-with h5py.File('sdf_diaphragm_axial256.h5', 'r') as h5f:
+with h5py.File('sdf_sagittal256.h5', 'r') as h5f:
     for i in range(18):
             logger.info('Loading...')
             X_train.extend(np.asarray(h5f[f'scan_{i}']))
@@ -122,7 +122,11 @@ with h5py.File('sdf_diaphragm_axial256.h5', 'r') as h5f:
     validation_y.extend(np.asarray(h5f[f'label_{38}']))
 
 
-sed3.show_slices(X_train[0:50], Y_train[0:50], slice_step=10, axis=1)
+sed3.show_slices(np.asarray(X_train[50:100]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+sed3.show_slices(np.asarray(X_train[100:150]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+sed3.show_slices(np.asarray(X_train[150:200]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+sed3.show_slices(np.asarray(X_train[200:250]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+
 # plt.imshow(X_train[k], cmap='gray')
 # plt.contour(Y_train[k]>0)
 plt.show()
@@ -130,6 +134,9 @@ plt.show()
 #Reshaping data
 X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 256, 256, 1)
 validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256, 256, 1)
+
+Y_train = np.asarray(Y_train).reshape(np.asarray(Y_train).shape[0], 256, 256, 1)
+validation_y = np.asarray(validation_y).reshape(np.asarray(validation_y).shape[0], 256, 256, 1)
 
 model = get_unet()
 model.fit(X_train, np.asarray(Y_train), batch_size=32, epochs=50, validation_data=(validation, np.asarray(validation_y)), verbose=1)

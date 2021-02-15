@@ -32,9 +32,7 @@ for i in range(40):
     
     # logger.info("obj created")
     # Y_train = obj.getBody()
-    # Y_train = ss.dist_surface()
     Y_train = eval(f"ss.dist_to_{sdf_type}()")
-    # Y_train = ss.dist_to_diaphragm_axial()
     Y_train = skimage.transform.resize(np.asarray(Y_train), [Y_train.shape[0], imshape, imshape], preserve_range = True)
     
     sed3.show_slices(np.asarray(X_train[0:50]), np.asarray(Y_train[0:50]), slice_step=10, axis=2)
