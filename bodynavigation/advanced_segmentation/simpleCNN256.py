@@ -24,7 +24,7 @@ validation = []
 validation_y = []
 
 
-with h5py.File(f'sagittal{size}s.h5', 'r') as h5f:
+with h5py.File(f'sagittal{size}.h5', 'r') as h5f:
     for i in range(18):
             logger.info('Loading...')
             X_train.extend(np.asarray(h5f[f'scan_{i}']))
@@ -75,4 +75,4 @@ model.summary()
 model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mse'])
 model.fit(X_train, np.asarray(Y_train), batch_size=32, epochs=50, validation_data=(validation, np.asarray(validation_y)), verbose=1)
 
-model.save(f"simpleCNNgpu{size}s.h5")
+model.save(f"simpleCNN{size}.h5")
