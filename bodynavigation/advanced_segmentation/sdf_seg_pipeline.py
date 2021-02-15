@@ -2,6 +2,7 @@ import seg
 import numpy as np
 from loguru import logger
 import h5py
+import sed3
 import lines
 import skimage.io
 import skimage
@@ -29,15 +30,14 @@ for i in range(40):
     
     # logger.info("obj created")
     # Y_train = obj.getBody()
-    Y_train = ss.dist_surface()
+    Y_train = ss.dist_to_surface()
     Y_train = skimage.transform.resize(np.asarray(Y_train), [Y_train.shape[0], imshape, imshape], preserve_range = True)
     
-    plt.imshow(X_train, cmap='gray')
-    plt.contour(Y_train>0)
+    sed3.show_slices(np.asarray(X_train[0:50]), np.asarray(Y_train[0:50]), slice_step=10, axis=2)
     plt.show()
     
-    with h5py.File('sdf_diaphragm_axial256.h5', 'a') as h5f:
-        h5f.create_dataset('scan_{}'.format(i), data=np.asarray(X_train))
-        h5f.create_dataset('label_{}'.format(i), data=Y_train)
-    c += 1
-    logger.info(f'Scan n.{c} saved.')
+    # with h5py.File('sdf_diaphragm_axial256.h5', 'a') as h5f:
+    #     h5f.create_dataset('scan_{}'.format(i), data=np.asarray(X_train))
+    #     h5f.create_dataset('label_{}'.format(i), data=Y_train)
+    # c += 1
+    # logger.info(f'Scan n.{c} saved.')
