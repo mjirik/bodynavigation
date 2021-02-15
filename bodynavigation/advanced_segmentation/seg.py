@@ -8,7 +8,7 @@ import numpy as np
 
 import csv
 import os
-# import lines
+import lines
 import copy
 import glob
 import io3d
@@ -44,7 +44,8 @@ def read_scan(dataset, scannum):
     """
     data3d_orig = io3d.read_dataset(dataset, "data3d", scannum)
     ss = bodynavigation.body_navigation.BodyNavigation(data3d_orig["data3d"], data3d_orig["voxelsize_mm"])
-    return ss, data3d_orig["data3d"]
+    voxelsize = data3d_orig["voxelsize_mm"]
+    return ss, data3d_orig["data3d"], voxelsize
 
 
 def visualize(seg, data3d_orig):
