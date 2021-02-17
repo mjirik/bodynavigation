@@ -8,7 +8,7 @@ import numpy as np
 
 import csv
 import os
-import lines
+from . import lines
 import copy
 import glob
 import io3d
@@ -23,6 +23,7 @@ import sklearn.mixture
 # tohle je tu ze zoufalství, správně by se mělo používat bodynavigation.bo
 try:
     import bodynavigation.body_navigation
+    from importlib import reload
     reload(bodynavigation.body_navigation)
 
 except:

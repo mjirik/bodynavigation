@@ -3,8 +3,8 @@ import numpy as np
 from loguru import logger
 import random
 import matplotlib.pyplot as plt
-import lines
-import CT_regression_tools
+# import lines
+# import CT_regression_tools
 import sed3
 
 import tensorflow as tf
@@ -13,12 +13,12 @@ from skimage.transform import resize
 from skimage.io import imsave
 import numpy as np
 from skimage.segmentation import mark_boundaries
-from keras.models import Model
-from keras.layers import Input, concatenate, Conv2D, MaxPooling2D, Conv2DTranspose
-from keras.optimizers import Adam, SGD
-from keras.callbacks import ModelCheckpoint
-from keras import backend as K
-from keras.callbacks import History
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, concatenate, Conv2D, MaxPooling2D, Conv2DTranspose
+from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import History
 from skimage.exposure import rescale_intensity
 from skimage import io
 # from data import load_train_data, load_test_data
