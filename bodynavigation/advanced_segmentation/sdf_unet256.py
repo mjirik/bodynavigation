@@ -80,7 +80,10 @@ def train(
     skip_h5=False,
     batch_size=16,
     epochs=50,
-    filename_prefix=''
+    filename_prefix='',
+    validation_ids = [19, 39],
+    test_ids = [20, 40],
+    n_data = 40,
 ):
     X_train = []
     Y_train = []
@@ -89,20 +92,23 @@ def train(
 
     #Data loading
     with h5py.File(f'sdf_{sdf_type}{imshape}.h5', 'r') as h5f:
-        for i in range(18):
+        for i in range(n_data):
+            if i+1 in validation_ids:
+                validation.extend(np.asarray(h5f[f'scan_{i}']))
+                validation_y.extend(np.asarray(h5f[f'label_{i}']))
+                pass
+            elif i+1 in test_ids:
+                pass
+            else:
                 logger.info('Loading...')
                 X_train.extend(np.asarray(h5f[f'scan_{i}']))
                 Y_train.extend(np.asarray(h5f[f'label_{i}']))
                 logger.info(F'Scan {i+1} loaded for training')
-        validation.extend(np.asarray(h5f[f'scan_{18}']))
-        validation_y.extend(np.asarray(h5f[f'label_{18}']))
-        for i in range(20,38):
-                logger.info('Loading...')
-                X_train.extend(np.asarray(h5f[f'scan_{i}']))
-                Y_train.extend(np.asarray(h5f[f'label_{i}']))
-                logger.info(F'Scan {i+1} loaded for training')
-        validation.extend(np.asarray(h5f[f'scan_{38}']))
-        validation_y.extend(np.asarray(h5f[f'label_{38}']))
+
+
+
+
+
 
 
     # sed3.show_slices(np.asarray(X_train[50:100]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
@@ -121,12 +127,16 @@ def train(
     Y_train = np.asarray(Y_train).reshape(np.asarray(Y_train).shape[0], 256, 256, 1)
     validation_y = np.asarray(validation_y).reshape(np.asarray(validation_y).shape[0], 256, 256, 1)
 
+    logger.debug(f"train.shape = {Y_train.shape}")
+    logger.debug(f"validation.shape = {validation.shape}")
     model = get_unet()
     model.fit(X_train, np.asarray(Y_train), batch_size=batch_size, epochs=epochs, validation_data=(validation, np.asarray(validation_y)), verbose=1)
 
     if not skip_h5:
         model.save(f"{filename_prefix}sdf_unet_{sdf_type}.h5")
         logger.info(f"Model saved as {filename_prefix}sdf_unet_{sdf_type}.h5")
+
+    return model
 
 if __name__ == "__main__":
     # this will be skipped if file is imported but it will work if file is called from commandline

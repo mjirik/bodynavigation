@@ -1,23 +1,31 @@
 import unittest
 import pytest
 from bodynavigation.advanced_segmentation import sdf_seg_pipeline
+from bodynavigation.advanced_segmentation import sdf_unet256
 from pathlib import Path
 
 
-def test_sdf_prepare_data():
+def test_0_sdf_prepare_data():
     sdf_type = 'surface'
     imshape = 256
+    filename_prefix = 'testfile_'
     sdf_seg_pipeline.prepare_data(
-        n_data=1,
+        n_data=2,
         # skip_h5=True,
         imshape=imshape,
         sdf_type=sdf_type,
-        filename_prefix='testfile_', # prevent rewriting the files during test
+        filename_prefix=filename_prefix, # prevent rewriting the files during test
     )
     assert Path(f"testfile_sdf_{sdf_type}{imshape}.h5").exists()
 
-def test_sdf_training():
-    # from bodynavigation.advanced_segmentation import sdf_unet256
-    # sdf_unet256
-    assert True
+def test_1_sdf_training():
+    sdf_type = 'surface'
+    imshape = 256
+    filename_prefix = 'testfile_'
+    model = sdf_unet256.train(
+        sdf_type=sdf_type, epochs=3, filename_prefix=filename_prefix,
+        n_data=2, validation_ids=[2]
+    )
+    # model.fit()
+    assert Path(f"{filename_prefix}sdf_unet_{sdf_type}.h5").exists()
 
