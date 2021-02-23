@@ -92,6 +92,7 @@ def train(
 
     #Data loading
     with h5py.File(f'sdf_{sdf_type}{imshape}.h5', 'r') as h5f:
+        logger.debug(h5f.keys())
         for i in range(n_data):
             if i+1 in validation_ids:
                 validation.extend(np.asarray(h5f[f'scan_{i}']))
