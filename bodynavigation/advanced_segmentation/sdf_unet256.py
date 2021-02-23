@@ -24,8 +24,6 @@ from skimage import io
 # from data import load_train_data, load_test_data
 from sklearn.utils import class_weight
 
-smooth = 1.
-
 def dice_coef(y_true, y_pred):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
@@ -88,7 +86,7 @@ def get_unet(weights=None):
     conv9 = Conv2D(32, (3, 3), activation='relu', padding='same')(up9)
     conv9 = Conv2D(32, (3, 3), activation='relu', padding='same')(conv9)
 
-    conv10 = Conv2D(1, (1, 1), activation='sigmoid')(conv9)
+    conv10 = Conv2D(1, (1, 1))(conv9)
 #     conv10 = Conv2D(2, (1, 1), activation='softmax')(conv9)
 
     model = Model(inputs=[inputs], outputs=[conv10])
@@ -99,46 +97,64 @@ def get_unet(weights=None):
 
     return model
 
-X_train = []
-Y_train = []
-validation = []
-validation_y = []
+def train(
+    imshape=256,
+    sdf_type='diaphragm_axial',
+    # sdf_type='coronal',
+    # sdf_type='sagittal',
+    # sdf_type='surface',
+    skip_h5=False,
+    batch_size=16,
+    epochs=50,
+    filename_prefix=''
+):
+    smooth = 1.
+    X_train = []
+    Y_train = []
+    validation = []
+    validation_y = []
 
-#Data loading
-with h5py.File('sdf_sagittal256.h5', 'r') as h5f:
-    for i in range(18):
-            logger.info('Loading...')
-            X_train.extend(np.asarray(h5f[f'scan_{i}']))
-            Y_train.extend(np.asarray(h5f[f'label_{i}']))
-            logger.info(F'Scan {i+1} loaded for training')
-    validation.extend(np.asarray(h5f[f'scan_{18}']))
-    validation_y.extend(np.asarray(h5f[f'label_{18}']))
-    for i in range(20,38):
-            logger.info('Loading...')
-            X_train.extend(np.asarray(h5f[f'scan_{i}']))
-            Y_train.extend(np.asarray(h5f[f'label_{i}']))
-            logger.info(F'Scan {i+1} loaded for training')
-    validation.extend(np.asarray(h5f[f'scan_{38}']))
-    validation_y.extend(np.asarray(h5f[f'label_{38}']))
+    #Data loading
+    with h5py.File(f'sdf_{sdf_type}{imshape}.h5', 'r') as h5f:
+        for i in range(18):
+                logger.info('Loading...')
+                X_train.extend(np.asarray(h5f[f'scan_{i}']))
+                Y_train.extend(np.asarray(h5f[f'label_{i}']))
+                logger.info(F'Scan {i+1} loaded for training')
+        validation.extend(np.asarray(h5f[f'scan_{18}']))
+        validation_y.extend(np.asarray(h5f[f'label_{18}']))
+        for i in range(20,38):
+                logger.info('Loading...')
+                X_train.extend(np.asarray(h5f[f'scan_{i}']))
+                Y_train.extend(np.asarray(h5f[f'label_{i}']))
+                logger.info(F'Scan {i+1} loaded for training')
+        validation.extend(np.asarray(h5f[f'scan_{38}']))
+        validation_y.extend(np.asarray(h5f[f'label_{38}']))
 
 
-sed3.show_slices(np.asarray(X_train[50:100]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
-sed3.show_slices(np.asarray(X_train[100:150]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
-sed3.show_slices(np.asarray(X_train[150:200]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
-sed3.show_slices(np.asarray(X_train[200:250]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+    # sed3.show_slices(np.asarray(X_train[50:100]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+    # sed3.show_slices(np.asarray(X_train[100:150]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+    # sed3.show_slices(np.asarray(X_train[150:200]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
+    # sed3.show_slices(np.asarray(X_train[200:250]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
 
-# plt.imshow(X_train[k], cmap='gray')
-# plt.contour(Y_train[k]>0)
-plt.show()
+    # plt.imshow(X_train[k], cmap='gray')
+    # plt.contour(Y_train[k]>0)
+    plt.show()
 
-#Reshaping data
-X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 256, 256, 1)
-validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256, 256, 1)
+    #Reshaping data
+    X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 256, 256, 1)
+    validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256, 256, 1)
 
-Y_train = np.asarray(Y_train).reshape(np.asarray(Y_train).shape[0], 256, 256, 1)
-validation_y = np.asarray(validation_y).reshape(np.asarray(validation_y).shape[0], 256, 256, 1)
+    Y_train = np.asarray(Y_train).reshape(np.asarray(Y_train).shape[0], 256, 256, 1)
+    validation_y = np.asarray(validation_y).reshape(np.asarray(validation_y).shape[0], 256, 256, 1)
 
-model = get_unet()
-model.fit(X_train, np.asarray(Y_train), batch_size=32, epochs=50, validation_data=(validation, np.asarray(validation_y)), verbose=1)
+    model = get_unet()
+    model.fit(X_train, np.asarray(Y_train), batch_size=batch_size, epochs=epochs, validation_data=(validation, np.asarray(validation_y)), verbose=1)
 
-model.save("sdf_unet_sagittal.h5")
+    if not skip_h5:
+        model.save(f"{filename_prefix}sdf_unet_{sdf_type}.h5")
+        logger.info(f"Model saved as {filename_prefix}sdf_unet_{sdf_type}.h5")
+
+if __name__ == "__main__":
+    # this will be skipped if file is imported but it will work if file is called from commandline
+    train()
