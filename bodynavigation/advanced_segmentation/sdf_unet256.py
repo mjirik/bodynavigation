@@ -85,6 +85,23 @@ def train(
     test_ids = [20, 40],
     n_data = 40,
 ):
+    """Train an U-net neural network with specified parameters.
+
+    Args:
+        imshape (int, optional): Shape of dataset's images. Defaults to 256.
+        sdf_type (str, optional): Type of sdf method we train. Can be: sagittal, coronal, surface or diaphragm_axial.
+        skip_h5 (bool, optional): Specify True if you want to skip saving the model. Defaults to False.
+        batch_size (int, optional): Fitting batch size. Defaults to 16.
+        epochs (int, optional): Number of epochs for fitting. Defaults to 50.
+        filename_prefix (str, optional): Option to add a prefix to create new files when testing. Defaults to ''.
+        validation_ids (list, optional): Validation data scans' indexes. Defaults to [19, 39].
+        test_ids (list, optional): Test data scans' indexes that will be skipped when loading training data. Defaults to [20, 40].
+        n_data (int, optional): Number of scans used. Defaults to 40. 40 is the maximum.
+
+    Returns:
+        model: keras h5 file that can be loaded by keras.models.load_model()
+    """
+    
     X_train = []
     Y_train = []
     validation = []
@@ -106,22 +123,14 @@ def train(
                 Y_train.extend(np.asarray(h5f[f'label_{i}']))
                 logger.info(F'Scan {i+1} loaded for training')
 
-
-
-
-
-
-
     # sed3.show_slices(np.asarray(X_train[50:100]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
     # sed3.show_slices(np.asarray(X_train[100:150]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
     # sed3.show_slices(np.asarray(X_train[150:200]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
     # sed3.show_slices(np.asarray(X_train[200:250]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
 
-    # plt.imshow(X_train[k], cmap='gray')
-    # plt.contour(Y_train[k]>0)
     plt.show()
 
-    #Reshaping data
+    # Reshaping data
     X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 256, 256, 1)
     validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256, 256, 1)
 
@@ -130,9 +139,12 @@ def train(
 
     logger.debug(f"train.shape = {Y_train.shape}")
     logger.debug(f"validation.shape = {validation.shape}")
+    
+    # Fitting
     model = get_unet()
     model.fit(X_train, np.asarray(Y_train), batch_size=batch_size, epochs=epochs, validation_data=(validation, np.asarray(validation_y)), verbose=1)
 
+    # Saving the model to .h5 (optional)
     if not skip_h5:
         model.save(f"{filename_prefix}sdf_unet_{sdf_type}.h5")
         logger.info(f"Model saved as {filename_prefix}sdf_unet_{sdf_type}.h5")

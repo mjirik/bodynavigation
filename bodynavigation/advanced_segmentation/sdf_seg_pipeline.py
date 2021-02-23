@@ -32,14 +32,13 @@ def prepare_data(
     """
 
 
-    c=0 # není 'c' totéž co 'i' ?
+    c=0
     for i in range(n_data):
         if i <= 19:
             ss, data, voxelsize = seg.read_scan("3Dircadb1", i+1)
         else:
             ss, data, voxelsize = seg.read_scan("sliver07", i-19)
-        # logger.info("starting")
-        # X_train = [[] for j in range(len(data))]
+        
         X_train = np.empty([len(data), imshape, imshape], dtype=np.float) # more efficient
 
         # for j in range(n_data):
@@ -48,11 +47,7 @@ def prepare_data(
                 img = CT_regression_tools.resize(data[j], imshape)
                 img = CT_regression_tools.normalize(img)
                 X_train[j] = img
-        # logger.info("organdetection")
-        # obj = OrganDetection(data, voxelsize)
 
-        # logger.info("obj created")
-        # Y_train = obj.getBody()
         Y_train = eval(f"ss.dist_to_{sdf_type}()")
         Y_train = skimage.transform.resize(np.asarray(Y_train), [Y_train.shape[0], imshape, imshape], preserve_range = True)
 
@@ -62,9 +57,8 @@ def prepare_data(
         if not skip_h5:
             with h5py.File(f'{filename_prefix}sdf_{sdf_type}{imshape}.h5', 'a') as h5f:
                 logger.debug(f"X_train={X_train.dtype}")
-                # h5f.create_dataset('scan_{}'.format(i), data=np.asarray(X_train))
-                h5f.create_dataset('scan_{}'.format(i), data=X_train)
-                h5f.create_dataset('label_{}'.format(i), data=Y_train)
+                h5f.create_dataset(f'scan_{i}', data=X_train)
+                h5f.create_dataset(f'label_{i}', data=Y_train)
             c += 1
             logger.info(f'Scan n.{c} saved. i={i}')
 
