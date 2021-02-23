@@ -24,31 +24,9 @@ from skimage import io
 # from data import load_train_data, load_test_data
 from sklearn.utils import class_weight
 
-def dice_coef(y_true, y_pred):
-    y_true_f = K.flatten(y_true)
-    y_pred_f = K.flatten(y_pred)
-    intersection = K.sum(y_true_f * y_pred_f)
-    return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
-
-
-def weighted_binary_crossentropy(zero_weight, one_weight):
-
-    def weighted_binary_crossentropy(y_true, y_pred):
-
-        b_ce = K.binary_crossentropy(y_true, y_pred)
-
-        # weighted calc
-        weight_vector = y_true * one_weight + (1 - y_true) * zero_weight
-        weighted_b_ce = weight_vector * b_ce
-
-        return K.mean(weighted_b_ce)
-
-    return weighted_binary_crossentropy
-
 def get_unet(weights=None):
     if weights is None:
         weights = [0.05956, 3.11400]
-        #{0: 0.5956388648542532, 1: 3.1140000760253925}
     
     inputs = Input((256, 256, 1))
     conv1 = Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
@@ -87,13 +65,9 @@ def get_unet(weights=None):
     conv9 = Conv2D(32, (3, 3), activation='relu', padding='same')(conv9)
 
     conv10 = Conv2D(1, (1, 1))(conv9)
-#     conv10 = Conv2D(2, (1, 1), activation='softmax')(conv9)
 
     model = Model(inputs=[inputs], outputs=[conv10])
-
-    # model.compile(optimizer='adam',  loss=weighted_binary_crossentropy(weights[0], weights[1]), metrics=[dice_coef, "accuracy"])
     model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mse'])
-    #model.compile(optimizer='adam',  loss=weighted_binary_crossentropy(weights[0], weights[1]), metrics=[dice_coef, "accuracy"])  # categorical crossentropy (weighted)
 
     return model
 
@@ -108,7 +82,6 @@ def train(
     epochs=50,
     filename_prefix=''
 ):
-    smooth = 1.
     X_train = []
     Y_train = []
     validation = []
