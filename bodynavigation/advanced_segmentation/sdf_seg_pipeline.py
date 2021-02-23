@@ -42,7 +42,8 @@ def prepare_data(
         # X_train = [[] for j in range(len(data))]
         X_train = np.empty([len(data), imshape, imshape], dtype=np.float) # more efficient
 
-        for j in range(n_data):
+        # for j in range(n_data):
+        for j in range(data.shape[0]):
 
                 img = CT_regression_tools.resize(data[j], imshape)
                 img = CT_regression_tools.normalize(img)
@@ -59,13 +60,13 @@ def prepare_data(
         # plt.show()
 
         if not skip_h5:
-            with h5py.File(f'{filename_prefix}sdf_{sdf_type}{imshape}.h5', 'w') as h5f:
+            with h5py.File(f'{filename_prefix}sdf_{sdf_type}{imshape}.h5', 'a') as h5f:
                 logger.debug(f"X_train={X_train.dtype}")
                 # h5f.create_dataset('scan_{}'.format(i), data=np.asarray(X_train))
                 h5f.create_dataset('scan_{}'.format(i), data=X_train)
                 h5f.create_dataset('label_{}'.format(i), data=Y_train)
             c += 1
-            logger.info(f'Scan n.{c} saved.')
+            logger.info(f'Scan n.{c} saved. i={i}')
 
 
 if __name__ == "__main__":

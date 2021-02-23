@@ -1,8 +1,10 @@
+from loguru import logger
 import unittest
 import pytest
 from bodynavigation.advanced_segmentation import sdf_seg_pipeline
 from bodynavigation.advanced_segmentation import sdf_unet256
 from pathlib import Path
+import h5py
 
 
 def test_0_sdf_prepare_data():
@@ -21,6 +23,10 @@ def test_0_sdf_prepare_data():
         filename_prefix=filename_prefix, # prevent rewriting the files during test
     )
     assert expected_fn.exists()
+    with h5py.File(expected_fn) as h5f:
+        logger.debug(h5f.keys())
+        assert len(h5f.keys()) == 4
+
 
 def test_1_sdf_training():
     sdf_type = 'surface'
