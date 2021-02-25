@@ -7,7 +7,7 @@
 # qsub metaSDF.sh
 
 # nastaveni domovskeho adresare, v promenne $LOGNAME je ulozeno vase prihlasovaci jmeno
-DATADIR="/storage/plzen1/home/$LOGNAME/bodynavigation/advanced_segmentation"
+DATADIR="/storage/plzen1/home/$LOGNAME/bodynavigation/bodynavigation/advanced_segmentation"
 # nebo snad "/storage/plzen4-ntis/home/$LOGNAME/"  ?
 
 # nacteni aplikacniho modulu, ktery zpristupni aplikaci Gaussian verze 3
@@ -38,7 +38,7 @@ module add cuda
 activate tf_gpu
 
 # python -m scaffan set --common-spreadsheet-file /storage/plzen1/home/$LOGNAME/projects/scaffan/experiments/metacentrum/SA_experiments.xlsx
-python /storage/plzen1/home/javorek/bodynavigation/advanced_segmentation/sdf_train_all.py > /storage/plzen1/home/javorek/sdf_output.txt
+python /storage/plzen1/home/javorek/bodynavigation/bodynavigation/advanced_segmentation/sdf_train_all.py > /storage/plzen1/home/javorek/sdf_output.txt
 
 # kopirovani vystupnich dat z vypocetnicho uzlu do domovskeho adresare,
 # pokud by pri kopirovani doslo k chybe, nebude adresar SCRATCH vymazan pro moznost rucniho vyzvednuti dat
