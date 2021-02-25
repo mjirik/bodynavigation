@@ -73,9 +73,9 @@ def get_unet(weights=None):
 
 def train(
     imshape=256,
-    sdf_type='diaphragm_axial',
+    # sdf_type='diaphragm_axial',
     # sdf_type='coronal',
-    # sdf_type='sagittal',
+    sdf_type='sagittal',
     # sdf_type='surface',
     skip_h5=False,
     batch_size=16,
@@ -149,7 +149,7 @@ def train(
         model.save(f"{filename_prefix}sdf_unet_{sdf_type}.h5")
         logger.info(f"Model saved as {filename_prefix}sdf_unet_{sdf_type}.h5")
 
-    return model
+    # return model
 
 if __name__ == "__main__":
     # this will be skipped if file is imported but it will work if file is called from commandline
