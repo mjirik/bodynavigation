@@ -19,8 +19,8 @@ from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import History
-from skimage.exposure import rescale_intensity
-from skimage import io
+# from skimage.exposure import rescale_intensity
+# from skimage import io
 # from data import load_train_data, load_test_data
 # from sklearn.utils import class_weight
 
