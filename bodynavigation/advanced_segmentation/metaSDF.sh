@@ -1,4 +1,4 @@
-#PBS -l select=1:ncpus=2:ngpus=2:mem=16gb:scratch_local=20gb:cluster=adan -q gpu
+#PBS -l select=1:ncpus=2:ngpus=8:mem=64gb:scratch_local=0gb:cluster=adan -q gpu
 #PBS -l walltime=08:00:00
 # modify/delete the above given guidelines according to your job's needs
 # Please note that only one select= argument is allowed at a time.
@@ -38,7 +38,7 @@ module add cuda
 activate tf_gpu
 
 # python -m scaffan set --common-spreadsheet-file /storage/plzen1/home/$LOGNAME/projects/scaffan/experiments/metacentrum/SA_experiments.xlsx
-python /storage/plzen1/home/javorek/bodynavigation/bodynavigation/advanced_segmentation/sdf_train_all.py > /storage/plzen1/home/javorek/sdf_output.txt
+python /storage/plzen1/home/javorek/bodynavigation/bodynavigation/advanced_segmentation/sdf_train_all.py > /storage/plzen1/home/javorek/meta_sdf_output.txt
 
 # kopirovani vystupnich dat z vypocetnicho uzlu do domovskeho adresare,
 # pokud by pri kopirovani doslo k chybe, nebude adresar SCRATCH vymazan pro moznost rucniho vyzvednuti dat

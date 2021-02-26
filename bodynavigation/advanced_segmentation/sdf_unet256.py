@@ -133,10 +133,11 @@ def train(
 
     # plt.show()
 
-    # Reshaping data
+    # Reshaping
     X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 256, 256, 1)
     validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256, 256, 1)
 
+    # Reshaping label data
     Y_train = np.asarray(Y_train).reshape(np.asarray(Y_train).shape[0], 256, 256, 1)
     validation_y = np.asarray(validation_y).reshape(np.asarray(validation_y).shape[0], 256, 256, 1)
 
