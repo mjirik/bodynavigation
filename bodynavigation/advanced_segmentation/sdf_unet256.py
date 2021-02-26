@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 from loguru import logger
+from pathlib import Path
 # import random
 # import matplotlib.pyplot as plt
 # import lines
@@ -106,9 +107,11 @@ def train(
     Y_train = []
     validation = []
     validation_y = []
+    
+    pth = Path(__file__).parent
 
     #Data loading
-    with h5py.File(f'{filename_prefix}sdf_{sdf_type}{imshape}.h5', 'r') as h5f:
+    with h5py.File(pth / f'{filename_prefix}sdf_{sdf_type}{imshape}.h5', 'r') as h5f:
         logger.debug(h5f.keys())
         for i in range(n_data):
             if i+1 in validation_ids:
