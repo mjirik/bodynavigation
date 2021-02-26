@@ -9,7 +9,7 @@ sdf_unet256.train(
     skip_h5=False,
     batch_size=16,
     epochs=100,
-    filename_prefix='separate_meta',
+    filename_prefix='',
     validation_ids = [19, 39],
     test_ids = [20, 40],
     n_data = 40,
