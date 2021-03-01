@@ -624,7 +624,10 @@ class BodyNavigation:
         :return:
         """
         if self._cache_diaphragm_axial_i_vxsz and not return_mask:
-            return self._cache_diaphragm_axial_i_vxsz
+            ii = self._cache_diaphragm_axial_i_vxsz
+            if not return_in_working_voxelsize:
+                ii = ii * self.orig_shape[0] / self.data3dr.shape[0]
+            return ii
         if self.spine is None:
             self.get_spine(skip_resize=True)
         if self.angle is None:
@@ -698,10 +701,11 @@ class BodyNavigation:
             output_shape = self.orig_shape
             voxelsize_0 = self.voxelsize_mm[0]
 
-        height_mm =  voxelsize_0 * output_shape[0]
+        height_mm = voxelsize_0 * output_shape[0]
 
         data = np.ones(output_shape)
         mul = np.linspace(0, height_mm, output_shape[0]).reshape([output_shape[0], 1, 1])
+        mul = mul - (ii * voxelsize_0)
         return data * mul
 
 
