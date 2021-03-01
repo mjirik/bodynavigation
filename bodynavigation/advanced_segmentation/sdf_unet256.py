@@ -1,28 +1,29 @@
 import h5py
 import numpy as np
 from loguru import logger
-import random
-import matplotlib.pyplot as plt
+from pathlib import Path
+# import random
+# import matplotlib.pyplot as plt
 # import lines
 # import CT_regression_tools
-import sed3
+# import sed3
 
 import tensorflow as tf
-import os
-from skimage.transform import resize
-from skimage.io import imsave
+# import os
+# from skimage.transform import resize
+# from skimage.io import imsave
 import numpy as np
-from skimage.segmentation import mark_boundaries
+# from skimage.segmentation import mark_boundaries
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, concatenate, Conv2D, MaxPooling2D, Conv2DTranspose
 from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import History
-from skimage.exposure import rescale_intensity
-from skimage import io
+# from skimage.exposure import rescale_intensity
+# from skimage import io
 # from data import load_train_data, load_test_data
-from sklearn.utils import class_weight
+# from sklearn.utils import class_weight
 
 def get_unet(weights=None):
     if weights is None:
@@ -73,12 +74,12 @@ def get_unet(weights=None):
 
 def train(
     imshape=256,
-    sdf_type='diaphragm_axial',
-    # sdf_type='coronal',
+    # sdf_type='diaphragm_axial',
+    sdf_type='coronal',
     # sdf_type='sagittal',
     # sdf_type='surface',
     skip_h5=False,
-    batch_size=16,
+    batch_size=8,
     epochs=50,
     filename_prefix='',
     validation_ids = [19, 39],
@@ -106,9 +107,11 @@ def train(
     Y_train = []
     validation = []
     validation_y = []
+    
+    pth = Path(__file__).parent
 
     #Data loading
-    with h5py.File(f'{filename_prefix}sdf_{sdf_type}{imshape}.h5', 'r') as h5f:
+    with h5py.File(pth / f'{filename_prefix}sdf_{sdf_type}{imshape}.h5', 'r') as h5f:
         logger.debug(h5f.keys())
         for i in range(n_data):
             if i+1 in validation_ids:
@@ -128,12 +131,13 @@ def train(
     # sed3.show_slices(np.asarray(X_train[150:200]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
     # sed3.show_slices(np.asarray(X_train[200:250]), np.asarray(Y_train[0:50]), slice_step=10, axis=0)
 
-    plt.show()
+    # plt.show()
 
-    # Reshaping data
+    # Reshaping
     X_train = np.asarray(X_train).reshape(np.asarray(X_train).shape[0], 256, 256, 1)
     validation = np.asarray(validation).reshape(np.asarray(validation).shape[0], 256, 256, 1)
 
+    # Reshaping label data
     Y_train = np.asarray(Y_train).reshape(np.asarray(Y_train).shape[0], 256, 256, 1)
     validation_y = np.asarray(validation_y).reshape(np.asarray(validation_y).shape[0], 256, 256, 1)
 
@@ -149,7 +153,7 @@ def train(
         model.save(f"{filename_prefix}sdf_unet_{sdf_type}.h5")
         logger.info(f"Model saved as {filename_prefix}sdf_unet_{sdf_type}.h5")
 
-    return model
+    # return model
 
 if __name__ == "__main__":
     # this will be skipped if file is imported but it will work if file is called from commandline
