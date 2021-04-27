@@ -9,3 +9,4 @@ sed3
 pandas
 astropy
 dill
+SimpleItk
