@@ -37,6 +37,7 @@ install:
     - conda config --add channels conda-forge
     - conda config --add channels SimpleITK
     - conda config --add channels mjirik
+    - conda config --add channels bioconda
     - conda update --yes conda
     - conda create --yes -n travis pip python=$CONDA_PYTHON_VERSION pytest-cov
     - source activate travis
