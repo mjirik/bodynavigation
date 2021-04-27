@@ -12,15 +12,15 @@ import skimage.transform
 import random
 import h5py
 import tensorflow as tf
-import keras
-import SimpleITK as sitk
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
-from keras.models import load_model
-from keras.utils import np_utils
-from keras.optimizers import SGD
-from keras import backend as K
+# import keras
+# import SimpleITK as sitk
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
+from tensorflow.keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
+# from keras.models import load_model
+# from keras.utils import np_utils
+# from keras.optimizers import SGD
+from tensorflow.keras import backend as K
 from pathlib import Path
 
 def annotate(number_of_scans): #annotation starting from scan 1
@@ -70,9 +70,7 @@ def annotate2(number_of_scans): #annotation starting from scan 1
         ed.show()
 
         nz = np.nonzero(ed.seeds)
-        az = 
-        
-        
+
         ids = np.unique(nz[0])
         df = df.append({'ID' : i+1,'Mark 1 slice id' : ids[0], 'Mark 2 slice id' : ids[1], 'Mark 3 slice id' : ids[2],'Mark 4 slice id' : ids[3]}, ignore_index = True)
     df.to_excel('tabulka2.xlsx', sheet_name='List1', index = False)

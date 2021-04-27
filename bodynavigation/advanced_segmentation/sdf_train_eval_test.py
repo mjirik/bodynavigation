@@ -1,13 +1,14 @@
 from loguru import logger
 import unittest
 import pytest
-from bodynavigation.advanced_segmentation import sdf_seg_pipeline
-from bodynavigation.advanced_segmentation import sdf_unet256
 from pathlib import Path
 import h5py
 
 
+# TODO SDF training will be moved into other package
+@unittest.skip("not necessary to test on CI")
 def test_0_sdf_prepare_data():
+    from bodynavigation.advanced_segmentation import sdf_seg_pipeline
     sdf_type = 'surface'
     imshape = 256
     filename_prefix = 'testfile_'
@@ -28,7 +29,9 @@ def test_0_sdf_prepare_data():
         assert len(h5f.keys()) == 4
 
 
+@unittest.skip("not necessary to test on CI")
 def test_1_sdf_training():
+    from bodynavigation.advanced_segmentation import sdf_unet256
     sdf_type = 'surface'
     imshape = 256
     filename_prefix = 'testfile_'
