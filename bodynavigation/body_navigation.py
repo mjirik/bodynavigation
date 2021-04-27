@@ -908,6 +908,8 @@ class BodyNavigation:
 
         # metoda 2
         # # flat = flat.reshape([flat.shape[0], flat.shape[1], 1])
+
+        # Proper treatment of NaN values(ignoring them during convolution and replacing NaN pixels with interpolated values)
         import astropy.convolution
 
         flat_out = astropy.convolution.convolve(flat, kernel, boundary="extend")
