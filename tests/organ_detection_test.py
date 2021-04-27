@@ -31,7 +31,7 @@ ROOT_PATH = io3d.datasets.dataset_path()
 DATASET_NAME = "3Dircadb1.1"
 
 
-class OrganDetectionTest(unittest.TestCase):
+class TestOrganDetection(unittest.TestCase):
     """
     Run only this test class:
         nosetests -v -s tests.organ_detection_test
@@ -80,23 +80,23 @@ class OrganDetectionTest(unittest.TestCase):
         print("%s, dice coeff: %s" % (part, str(dice)))
         self.assertGreater(dice, self.DICE[part])
 
-    def getBody_test(self):
+    def test_getBody(self):
         self._genericMaskTest("body")
 
-    def getLungs_test(self):
+    def test_getLungs(self):
         self._genericMaskTest("lungs")
 
-    def getBones_test(self):
+    def test_getBones(self):
         self._genericMaskTest("bones")
 
-    def getVessels_test(self):
+    def test_getVessels(self):
         self._genericMaskTest("vessels")
 
-    def getKidneys_test(self):
+    def test_getKidneys(self):
         self._genericMaskTest("kidneys")
 
-    def getLiver_test(self):
+    def test_getLiver(self):
         self._genericMaskTest("liver")
 
-    def getSpleen_test(self):
+    def test_getSpleen(self):
         self._genericMaskTest("spleen")

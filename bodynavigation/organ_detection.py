@@ -22,6 +22,7 @@ import tempfile, shutil
 import numpy as np
 import scipy
 import scipy.ndimage
+import traceback
 
 
 # run with: "python -m bodynavigation.organ_detection -h"
@@ -206,12 +207,17 @@ class OrganDetection(object):
 
         # imports are set to None or deleted on app exit
         try:
+            import shutil
             shutil.get_archive_formats()
         except:
             import shutil
 
         # remove tempdir
-        shutil.rmtree(self.tempdir)
+        try:
+            shutil.rmtree(self.tempdir)
+        except PermissionError as pe:
+            logger.warning(f"Permission Error: Cannot delete file {self.tempdir}")
+            logger.debug(traceback.format_exc())
 
     @classmethod
     def fromReadyData(
@@ -287,6 +293,7 @@ class OrganDetection(object):
         spacing = list(self.spacing)
 
         data3d_p = os.path.join(path, "data3d.dcm")
+        import io3d
         io3d.datawriter.write(self.data3d, data3d_p, "dcm", {"voxelsize_mm": spacing})
 
         data3d_info_p = os.path.join(path, "data3d.json")
@@ -522,6 +529,7 @@ class OrganDetection(object):
             logger.warning("Not found PAtlas mask path: %s" % fpath)
             data = np.zeros(self.data3d.shape, dtype=np.float)
         else:
+            import io3d
             data, _ = io3d.datareader.read(fpath, dataplus_format=False)
             data = (
                 data.astype(np.float32) / self.patlas_info["data_multiplication"]
@@ -825,6 +833,7 @@ if __name__ == "__main__":
                     print("Detected *.mhd file! Changing datapath to: ", datapath)
                     break
         # lead data3d and init OrganDetection
+        import io3d
         data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
         voxelsize = metadata["voxelsize_mm"]
         obj = OrganDetection(data3d, voxelsize)
