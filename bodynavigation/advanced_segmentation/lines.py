@@ -1,11 +1,11 @@
 from loguru import logger
 import math
 import numpy as np
-# TODO odstranit závislost na sympy
-from sympy import symbols, Eq, solve
 import bodynavigation
 
 def standard_from_slopeintercept(angle, point):
+    # TODO odstranit závislost na sympy
+    from sympy import symbols, Eq, solve
     """Transfer a line's slope-intercept formulation to standard form (ax + by + c = 0).
 
     Args:
