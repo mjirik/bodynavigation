@@ -46,3 +46,10 @@ can be found in [examples directory](https://github.com/mjirik/bodynavigation/tr
     ddia = ss.dist_diaphragm()
     dsur = ss.dist_to_surface()
     dspi = ss.dist_to_spine()
+
+
+# Conda build
+
+```bash
+conda build . -c conda-forge -c simpleitk -c bioconda --python 3.6
+```
