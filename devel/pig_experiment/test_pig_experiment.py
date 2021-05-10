@@ -9,3 +9,16 @@ def test_trenovani():
     # ed = sed3.sed3(dp['data3d'])
     # ed.show()
     sed3.show_slices(dp['data3d'], slice_number=24)
+def test_trainer():
+    ol=kidney_segmentation.train([30, 30])
+    kidney_segmentation.klasification(30, ol)
+def test_train_and_save():
+    ol = kidney_segmentation.train([30], show=True)
+    import joblib
+    joblib.dump(ol, 'ol.joblib')
+
+def test_train_load():
+    import joblib
+    ol=joblib.load('ol.joblib')
+    print(ol)
+    kidney_segmentation.klasification(30, ol)
