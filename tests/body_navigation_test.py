@@ -232,6 +232,11 @@ class BodyNavigationTest(unittest.TestCase):
 
     def test_dist_sagital(self):
         dst_sagittal = self.obj.dist_to_sagittal()
+        axis=0
+        import sed3
+        dst = dst_sagittal
+        # sed3.show_slices(data3d=self.data3d, contour=dst>0, slice_number=6, axis=axis)
+        sed3.show_slices(data3d=dst, contour=self.data3d>0, slice_number=6, axis=axis)
         self.assertGreater(dst_sagittal[60, 10, 10], 10)
         self.assertLess(dst_sagittal[60, 10, 500], -10)
 
@@ -245,8 +250,8 @@ class BodyNavigationTest(unittest.TestCase):
 
     def test_dist_axial(self):
         dst = self.obj.dist_to_axial()
-        # import sed3
-        # ed = sed3.sed3(dst_coronal)
+        import sed3
+        # ed = sed3.sed3(dst)
         # ed.show()
         self.assertLess(dst[0, 250, 250], 10)
         self.assertGreater(dst[100, 250, 250], 30)
@@ -509,6 +514,41 @@ def test_sagittal_on_augmented_data():
     # plt.suptitle(f"set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
     # plt.show()
     assert ss.angle == pytest.approx(translated_angle, 10)
+
+class BodyNavigationTestRotated180(unittest.TestCase):
+    interactiveTest = False
+    verbose = False
+
+    @classmethod
+    def setUpClass(self):
+        # datap = io3d.read(
+        #     io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
+        #     dataplus_format=True,
+        # )
+        # pth = io3d.datasets.get_dataset_path(dataset, 'data3d', 1)
+        # print(f"pth={pth}")
+        datap = io3d.read_dataset(dataset, 'data3d', 1, orientation_axcodes='SPL')
+
+        data3d = datap['data3d']
+        data3d = np.rot90(data3d,k=2, axes=(1,2))
+        self.obj:bodynavigation.BodyNavigation = bodynavigation.BodyNavigation(data3d, datap["voxelsize_mm"])
+        self.data3d = data3d
+        self.shape = data3d.shape
+
+    @classmethod
+    def tearDownClass(self):
+        self.obj = None
+
+
+    def test_dist_sagital(self):
+        dst_sagittal = self.obj.dist_to_sagittal()
+        axis = 0
+        import sed3
+        dst = dst_sagittal
+        # sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
+        self.assertLess(dst_sagittal[60, 10, 10], 10)
+        self.assertGreater(dst_sagittal[60, 10, 500], -10)
+
 
 if __name__ == "__main__":
     unittest.main()

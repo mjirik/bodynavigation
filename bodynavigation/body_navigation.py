@@ -74,6 +74,7 @@ class BodyNavigation:
         self.bones = None
         self.body_width = None
         self.body_height = None
+        self.body_center_wvs = None
         self.diaphragm_mask = None
         self.angle = None
         self.spine_center_wvs = None
@@ -137,6 +138,8 @@ class BodyNavigation:
         # conver to mm
         self.body_width = body_width * float(self.voxelsize_mm[2])
         self.body_height = body_height * float(self.voxelsize_mm[1])
+
+        self.body_center_wvs = np.mean(np.nonzero(body), 1)
 
         if skip_resize:
             return self.body
@@ -588,6 +591,11 @@ class BodyNavigation:
     def dist_to_sagittal(self, return_in_working_voxelsize=False):
         if self.angle is None:
             self.find_symmetry()
+        if self.body is None:
+            self.get_body()
+        if self.spine is None:
+            self.get_spine()
+
         if return_in_working_voxelsize:
             symmetry_point = np.asarray(self.symmetry_point_wvs)
             shape = self.data3dr.shape
@@ -602,16 +610,15 @@ class BodyNavigation:
             shape = self.orig_shape
             vs0 = self.voxelsize_mm[1]
 
-        # rldst = np.ones(shape, dtype=np.int16)
-        z = split_with_line(symmetry_point, self.angle, shape[1:], voxelsize_0=vs0)
-        # print 'z  ', np.max(z), np.min(z)
+        # from body_center to spine
+        vector = self.spine_center_wvs[1:] - self.body_center_wvs[1:]
 
+        right_vector = np.asarray([vector[1], -vector[0]])
+        point_on_right = symmetry_point + right_vector
+
+        z = split_with_line(symmetry_point, self.angle, shape[1:], voxelsize_0=vs0,
+                            point_in_positive_halfplane=point_on_right)
         rldst = zcopy(z, shape, dtype=np.int16)
-        # for i in range(shape[0]):
-        #     rldst[i, :, :] = z
-
-        # rldst = scipy.ndimage.morphology.distance_transform_edt(rldst) - int(spine_mean[2])
-        # return resize_to_shape(rldst, self.orig_shape)
 
         return rldst
 
