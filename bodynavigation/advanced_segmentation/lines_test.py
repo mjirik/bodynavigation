@@ -37,7 +37,7 @@ def test_angle():
         assert pytest.approx(0, 5) == a * point[0] + b * point[1] + c
         assert pytest.approx(0, 5) == a * point1[0] + b * point1[1] + c
 
-@pytest.mark.skip(reason="not implemented")
+# @pytest.mark.skip(reason="not implemented")
 def test_linesplit():
     import bodynavigation.body_navigation
     angle = 30
@@ -45,18 +45,38 @@ def test_linesplit():
     sh = [100, 100]
     alpha, delta = lines.normal_from_slopeintercept(angle, point)
     ls0 = bodynavigation.body_navigation.split_with_line(point, angle, sh)
-    # plt.subplot(121)
-    # plt.imshow(ls0)
-    # plt.contour(ls0 > 0)
+    plt.subplot(221)
+    plt.imshow(ls0)
+    plt.contour(ls0 > 0)
+    # plt.show()
 
     ls1 = lines.linesplit(alpha, delta, sh[0])
     logger.debug(ls1.shape)
     logger.debug(ls1.dtype)
     ls1 = ls1.astype(np.float)
-    # plt.subplot(122)
-    # plt.imshow(ls1)
-    # plt.contour(ls1 > 0)
+    plt.subplot(222)
+    plt.imshow(ls1)
+    plt.contour(ls1 > 0)
+
+
+    # try positive point
+    ls2 = lines.linesplit(alpha, delta, sh[0], point_in_positive_halfplane=[60, 60])
+    ls1 = ls2.astype(np.float)
+    plt.subplot(223)
+    plt.imshow(ls1)
+    plt.contour(ls1 > 0)
+
+
+    ls3 = lines.linesplit(alpha, delta, sh[0], point_in_positive_halfplane=np.asarray([10, 60]))
+    ls1 = ls3.astype(np.float)
+    plt.subplot(224)
+    plt.imshow(ls1)
+    plt.contour(ls1 > 0)
+
     # plt.show()
+
+    assert ls2[0,0] == -ls3[0,0]
+
 
 
 

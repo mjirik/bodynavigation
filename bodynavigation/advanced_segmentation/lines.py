@@ -109,7 +109,7 @@ def normal_from_slopeintercept(angle, point):
     return alpha, delta
 
 
-def linesplit(alpha, delta, imshape):
+def linesplit(alpha, delta, imshape, point_in_positive_halfplane=None):
     """Split image with a line in normal formulation. Use this with the plt.contour() function.
 
     Args:
@@ -126,7 +126,7 @@ def linesplit(alpha, delta, imshape):
     y = math.sin(np.radians(alpha)) * delta
     logger.debug(f"x={x}, y={y}")
     point = [x,y]
-    return bodynavigation.body_navigation.split_with_line(point, orientation, imshape)
+    return bodynavigation.body_navigation.split_with_line(point, orientation, imshape, point_in_positive_halfplane=point_in_positive_halfplane)
 
 
     # -5 -4 -3 -2 -1 0 1 2 3

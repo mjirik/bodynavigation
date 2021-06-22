@@ -1202,7 +1202,7 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3):
 
 
 # Rozděl obraz na půl
-def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1.):
+def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1., point_in_positive_halfplane=None):
     """
     :arg point:
     :arg orientation: angle or oriented vector
@@ -1216,11 +1216,8 @@ def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1.):
 
         # kvadranty
         angle = angle % (2 * np.pi)
-        # kvadranty
-        angle = angle % (2 * np.pi)
         # print np.degrees(angle)
         if (angle > (0.5 * np.pi)) and (angle < (1.5 * np.pi)):
-
             zn = -voxelsize_0
         else:
             zn = voxelsize_0
@@ -1238,6 +1235,11 @@ def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1.):
     b = -vector[0]
 
     c = -a * point[0] - b * point[1]
+
+    if point_in_positive_halfplane is not None:
+        xx, yy = point_in_positive_halfplane
+        zz = (a * xx + b * yy + c) / (a ** 2 + b ** 2) ** 0.5
+        zn = np.sign(zz)
 
     z = zn * (a * x + b * y + c) / (a ** 2 + b ** 2) ** 0.5
     return z
