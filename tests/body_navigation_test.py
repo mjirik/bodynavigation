@@ -1,9 +1,9 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
+# import logging
+#
+# logger = logging.getLogger(__name__)
 
 import unittest
 import sys
@@ -493,9 +493,9 @@ def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
 
 def test_sagittal_on_augmented_data():
     import scipy
-    angle = 30
+    angle = -0
     debug = False
-    i = 1
+    i = 10
     # datap = io3d.datasets.read_dataset("sliver07", 'data3d', i)
     datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
     data3d = datap["data3d"][50:,:,:]
@@ -509,11 +509,11 @@ def test_sagittal_on_augmented_data():
     ss.debug = debug
     dist = ss.dist_to_sagittal()
     translated_angle = 90 - angle
-    # plt.imshow(imr[20, :, :], cmap='gray')
-    # plt.contour((dist>0)[20, :, :])
-    # plt.suptitle(f"set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
-    # plt.show()
-    assert ss.angle == pytest.approx(translated_angle, 10)
+    plt.imshow(imr[20, :, :], cmap='gray')
+    plt.contour((dist>0)[20, :, :])
+    plt.suptitle(f"set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
+    plt.show()
+    assert ss.angle == pytest.approx(translated_angle, abs=10)
 
 class BodyNavigationTestRotated180(unittest.TestCase):
     interactiveTest = False
@@ -527,10 +527,12 @@ class BodyNavigationTestRotated180(unittest.TestCase):
         # )
         # pth = io3d.datasets.get_dataset_path(dataset, 'data3d', 1)
         # print(f"pth={pth}")
-        datap = io3d.read_dataset(dataset, 'data3d', 1, orientation_axcodes='SPL')
+        dataset = "sliver07"
+        dataset = "3Dircadb1"
+        datap = io3d.read_dataset(dataset, 'data3d', 10, orientation_axcodes='SPL')
 
         data3d = datap['data3d']
-        data3d = np.rot90(data3d,k=2, axes=(1,2))
+        data3d = np.rot90(data3d,k=0, axes=(1,2))
         self.obj:bodynavigation.BodyNavigation = bodynavigation.BodyNavigation(data3d, datap["voxelsize_mm"])
         self.data3d = data3d
         self.shape = data3d.shape
@@ -545,7 +547,9 @@ class BodyNavigationTestRotated180(unittest.TestCase):
         axis = 0
         import sed3
         dst = dst_sagittal
-        # sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
+        sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
+        plt.figure()
+        sed3.show_slices(data3d=self.data3d, contour=dst>0, slice_number=6, axis=axis)
         self.assertLess(dst_sagittal[60, 10, 10], 10)
         self.assertGreater(dst_sagittal[60, 10, 500], -10)
 

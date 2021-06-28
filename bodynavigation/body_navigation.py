@@ -1,9 +1,10 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
+# import logging
+#
+# logger = logging.getLogger(__name__)
 
 import argparse
 
@@ -573,6 +574,12 @@ class BodyNavigation:
         return spine_dist_3d
 
     def find_symmetry(self, degrad=5, return_img=False):
+        if self.spine is None:
+            self.get_spine()
+        if self.body is None:
+            self.get_body()
+        vector = self.spine_center_wvs[1:] - self.body_center_wvs[1:]
+
         img = np.sum(self.data3dr > 430, axis=0)
 
         if self.debug:
@@ -580,7 +587,9 @@ class BodyNavigation:
             plt.imshow(img)
             plt.colorbar()
             plt.show()
-        tr0, tr1, angle = find_symmetry(img, degrad, debug=self.debug)
+        init_angle = 90 - np.degrees(np.arctan2(vector[0], vector[1]))
+        # from body_center to spine
+        tr0, tr1, angle = find_symmetry(img, degrad, debug=self.debug, init_angle=init_angle)
         self.angle = angle
         self.symmetry_point_wvs = np.array([tr0, tr1])
         # self.symmetry_point_mm = self.symmetry_point_wvs * self.working_vs[:2]
@@ -1116,7 +1125,7 @@ def prepare_images_for_symmetry_analysis(imin0, pivot):
     return imgP0, imgP1
 
 
-def find_symmetry_parameters(imin0, trax, tray, angles, debug=False):
+def find_symmetry_parameters(imin0, trax, tray, angles, debug=False, return_criterium_min=False):
     """
 
     :param imin0:
@@ -1153,7 +1162,7 @@ def find_symmetry_parameters(imin0, trax, tray, angles, debug=False):
                             minim0 = imgP0
                             minim1 = imr
                             # minimg =
-            except:
+            except Exception as e:
                 vals[i, j, :] = np.inf
     #             angles_vals.append(sm)
 
@@ -1171,10 +1180,13 @@ def find_symmetry_parameters(imin0, trax, tray, angles, debug=False):
         fig.suptitle(f"angle={angles[am[2]]}, point=[{trax[am[0]]}, {tray[am[1]]}]")
         plt.show()
 
-    return trax[am[0]], tray[am[1]], angles[am[2]]
+    if return_criterium_min:
+        return trax[am[0]], tray[am[1]], angles[am[2]], np.min(vals)
+    else:
+        return trax[am[0]], tray[am[1]], angles[am[2]]
 
 
-def find_symmetry(img, degrad=5, debug=False, sigma=3):
+def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0):
     # imin0r = scipy.misc.pilutil.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
     imin0r = skimage.transform.resize(
         img,
@@ -1191,7 +1203,8 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3):
     trax = range(1, imin0r.shape[0], 10)
     tray = range(1, imin0r.shape[1], 10)
 
-    tr0, tr1, ang = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug)
+    tr0, tr1, ang, minval = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug, return_criterium_min=True)
+    logger.warning(f"angle={ang}, init_angle={init_angle}")
 
     # fine measurement
     # the offset is limited to positive values (not really sure why)
@@ -1201,11 +1214,21 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3):
     angles += list(range(ang + 180 - 20, ang + 180 + 20, 3))
     # check also the 90 degrees symmetry plane for sure
 
-    tr0, tr1, ang = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug)
+    tr0, tr1, ang_fine, minval_fine = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug, return_criterium_min=True)
 
-    angle = 90 - ang / 2.0
+    angle = 90 - ang_fine / 2.0
+
+    min_angle_diff = np.min(np.abs([
+        ang_fine - init_angle,
+        ang_fine - init_angle - 180,
+        ang_fine - init_angle + 180
+        ]))
+
+    if min_angle_diff > 25:
+        logger.warning("Two angle estimation methods have different results")
 
     return tr0 * degrad, tr1 * degrad, angle
+
 
 
 # Rozděl obraz na půl

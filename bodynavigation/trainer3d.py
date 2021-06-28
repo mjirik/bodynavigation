@@ -8,10 +8,10 @@ from __future__ import (
     absolute_import,
 )  # 'import submodule2' turns into 'from . import submodule2'
 from builtins import range  # replaces range with xrange
-
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
+# import logging
+#
+# logger = logging.getLogger(__name__)
 import traceback
 
 import sys, os
