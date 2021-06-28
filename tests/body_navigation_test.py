@@ -491,67 +491,81 @@ def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
         assert np.max(sagittal_dists_in_spine) > 0
         assert np.min(sagittal_dists_in_spine) < 0
 
-def test_sagittal_on_augmented_data():
+def test_sagittal_on_data_augmented_by_rotation():
     import scipy
-    angle = -0
+    import itertools
+    angle = 130
+    # angle = 0
     debug = False
     i = 10
-    # datap = io3d.datasets.read_dataset("sliver07", 'data3d', i)
-    datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
-    data3d = datap["data3d"][50:,:,:]
-    voxelsize_mm = datap["voxelsize_mm"]
-    # data3d = datap["data3d"][:110]
-    imr = scipy.ndimage.rotate(data3d, angle, axes=[1,2], cval=-1000, reshape=False)
-    # import sed3
-    # ed = sed3.sed3(imr)
-    # ed.show()
-    ss = bodynavigation.body_navigation.BodyNavigation(imr, voxelsize_mm)
-    ss.debug = debug
-    dist = ss.dist_to_sagittal()
-    translated_angle = 90 - angle
-    plt.imshow(imr[20, :, :], cmap='gray')
-    plt.contour((dist>0)[20, :, :])
-    plt.suptitle(f"set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
-    plt.show()
-    assert ss.angle == pytest.approx(translated_angle, abs=10)
+    for dataset, i in itertools.product([
+        "3Dircadb1",
+        # "sliver07"
+    ], list(range(1,2))):
+        logger.debug(f"{dataset} {i}")
+        datap = io3d.datasets.read_dataset(dataset, 'data3d', i, orientation_axcodes="SPL")
+        data3d = datap["data3d"][50:,:,:]
+        # data3d = datap["data3d"][:,:,:]
+        voxelsize_mm = datap["voxelsize_mm"]
+        # data3d = datap["data3d"][:110]
+        imr = scipy.ndimage.rotate(data3d, angle, axes=[1,2], cval=-1000, reshape=False)
+        # import sed3
+        # ed = sed3.sed3(imr)
+        # ed.show()
+        ss = bodynavigation.body_navigation.BodyNavigation(imr, voxelsize_mm)
+        ss.debug = debug
+        dist = ss.dist_to_sagittal()
+        translated_angle = 90 - angle
+        plt.imshow(imr[20, :, :] + 10* dist[20,:,:], cmap='gray')
+        plt.contour((dist>0)[20, :, :])
+        plt.suptitle(f"{dataset} {i} set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
 
-class BodyNavigationTestRotated180(unittest.TestCase):
-    interactiveTest = False
-    verbose = False
+        plt.show()
+        min_diff = np.min(np.abs([
+            ss.angle - translated_angle,
+            ss.angle - translated_angle + 180,
+            ss.angle - translated_angle - 180,
 
-    @classmethod
-    def setUpClass(self):
-        # datap = io3d.read(
-        #     io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
-        #     dataplus_format=True,
-        # )
-        # pth = io3d.datasets.get_dataset_path(dataset, 'data3d', 1)
-        # print(f"pth={pth}")
-        dataset = "sliver07"
-        dataset = "3Dircadb1"
-        datap = io3d.read_dataset(dataset, 'data3d', 10, orientation_axcodes='SPL')
+        ]))
+        assert min_diff == pytest.approx(0, abs=10)
 
-        data3d = datap['data3d']
-        data3d = np.rot90(data3d,k=0, axes=(1,2))
-        self.obj:bodynavigation.BodyNavigation = bodynavigation.BodyNavigation(data3d, datap["voxelsize_mm"])
-        self.data3d = data3d
-        self.shape = data3d.shape
-
-    @classmethod
-    def tearDownClass(self):
-        self.obj = None
-
-
-    def test_dist_sagital(self):
-        dst_sagittal = self.obj.dist_to_sagittal()
-        axis = 0
-        import sed3
-        dst = dst_sagittal
-        sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
-        plt.figure()
-        sed3.show_slices(data3d=self.data3d, contour=dst>0, slice_number=6, axis=axis)
-        self.assertLess(dst_sagittal[60, 10, 10], 10)
-        self.assertGreater(dst_sagittal[60, 10, 500], -10)
+# class BodyNavigationTestRotated180(unittest.TestCase):
+#     interactiveTest = False
+#     verbose = False
+#
+#     @classmethod
+#     def setUpClass(self):
+#         # datap = io3d.read(
+#         #     io3d.datasets.join_path(TEST_DATA_DIR, "PATIENT_DICOM"),
+#         #     dataplus_format=True,
+#         # )
+#         # pth = io3d.datasets.get_dataset_path(dataset, 'data3d', 1)
+#         # print(f"pth={pth}")
+#         dataset = "sliver07"
+#         dataset = "3Dircadb1"
+#         datap = io3d.read_dataset(dataset, 'data3d', 1, orientation_axcodes='SPL')
+#
+#         data3d = datap['data3d']
+#         data3d = np.rot90(data3d,k=0, axes=(1,2))
+#         self.obj:bodynavigation.BodyNavigation = bodynavigation.BodyNavigation(data3d, datap["voxelsize_mm"])
+#         self.data3d = data3d
+#         self.shape = data3d.shape
+#
+#     @classmethod
+#     def tearDownClass(self):
+#         self.obj = None
+#
+#
+#     def test_dist_sagital(self):
+#         dst_sagittal = self.obj.dist_to_sagittal()
+#         axis = 0
+#         import sed3
+#         dst = dst_sagittal
+#         sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
+#         plt.figure()
+#         sed3.show_slices(data3d=self.data3d, contour=dst>0, slice_number=6, axis=axis)
+#         self.assertLess(dst_sagittal[60, 10, 10], 10)
+#         self.assertGreater(dst_sagittal[60, 10, 500], -10)
 
 
 if __name__ == "__main__":

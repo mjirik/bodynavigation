@@ -588,8 +588,9 @@ class BodyNavigation:
             plt.colorbar()
             plt.show()
         init_angle = 90 - np.degrees(np.arctan2(vector[0], vector[1]))
+        init_point = self.body_center_wvs[1:]
         # from body_center to spine
-        tr0, tr1, angle = find_symmetry(img, degrad, debug=self.debug, init_angle=init_angle)
+        tr0, tr1, angle = find_symmetry(img, degrad, debug=self.debug, init_angle=init_angle, init_point=init_point)
         self.angle = angle
         self.symmetry_point_wvs = np.array([tr0, tr1])
         # self.symmetry_point_mm = self.symmetry_point_wvs * self.working_vs[:2]
@@ -625,9 +626,11 @@ class BodyNavigation:
         right_vector = np.asarray([vector[1], -vector[0]])
         point_on_right = symmetry_point + right_vector
 
-        z = split_with_line(symmetry_point, self.angle, shape[1:], voxelsize_0=vs0,
-                            point_in_positive_halfplane=point_on_right)
+        z, sgn = split_with_line(symmetry_point, self.angle, shape[1:], voxelsize_0=vs0,
+                            point_in_positive_halfplane=point_on_right, return_sgn=True)
         rldst = zcopy(z, shape, dtype=np.int16)
+        if sgn < 0:
+            self.angle = (self.angle + 180) % 360 # maybe 180
 
         return rldst
 
@@ -1186,7 +1189,7 @@ def find_symmetry_parameters(imin0, trax, tray, angles, debug=False, return_crit
         return trax[am[0]], tray[am[1]], angles[am[2]]
 
 
-def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0):
+def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0, init_point=None):
     # imin0r = scipy.misc.pilutil.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
     imin0r = skimage.transform.resize(
         img,
@@ -1203,36 +1206,47 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0):
     trax = range(1, imin0r.shape[0], 10)
     tray = range(1, imin0r.shape[1], 10)
 
-    tr0, tr1, ang, minval = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug, return_criterium_min=True)
-    logger.warning(f"angle={ang}, init_angle={init_angle}")
-
+    # tr0, tr1, ang0, minval = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug,
+    #                                                   return_criterium_min=True)
+    if init_point is None:
+        tr0, tr1, ang0, minval = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug, return_criterium_min=True)
+    else:
+        tr0 = int(init_point[0] / degrad)
+        tr1 = int(init_point[1] / degrad)
+    if init_angle is None:
+        ang = ang0
+    else:
+        ang = int(init_angle) * 2
     # fine measurement
     # the offset is limited to positive values (not really sure why)
     trax = range(np.max([tr0 - 20, 1]), tr0 + 20, 3)
     tray = range(np.max([tr1 - 20, 1]), tr1 + 20, 3)
     angles = list(range(ang - 20, ang + 20, 3))
-    angles += list(range(ang + 180 - 20, ang + 180 + 20, 3))
+    if init_angle is None:
+        angles += list(range(ang + 180 - 20, ang + 180 + 20, 3))
     # check also the 90 degrees symmetry plane for sure
 
     tr0, tr1, ang_fine, minval_fine = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug, return_criterium_min=True)
+    # logger.warning(f"init_angle={init_angle}, angle={ang0}, angle_fine={ang_fine}")
 
     angle = 90 - ang_fine / 2.0
 
-    min_angle_diff = np.min(np.abs([
-        ang_fine - init_angle,
-        ang_fine - init_angle - 180,
-        ang_fine - init_angle + 180
-        ]))
-
-    if min_angle_diff > 25:
-        logger.warning("Two angle estimation methods have different results")
+    # min_angle_diff = np.min(np.abs([
+    #     ang_fine - ang0,
+    #     ang_fine - ang0 - 180,
+    #     ang_fine - ang0 + 180
+    #     ]))
+    #
+    #
+    # if min_angle_diff > 25:
+    #     logger.warning("Two angle estimation methods have different results.")
 
     return tr0 * degrad, tr1 * degrad, angle
 
 
 
 # Rozděl obraz na půl
-def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1., point_in_positive_halfplane=None):
+def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1., point_in_positive_halfplane=None, return_sgn=False):
     """
     :arg point:
     :arg orientation: angle or oriented vector
@@ -1272,7 +1286,10 @@ def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1., p
         zn = np.sign(zz)
 
     z = zn * (a * x + b * y + c) / (a ** 2 + b ** 2) ** 0.5
-    return z
+    if return_sgn:
+        return z, zn
+    else:
+        return z
 
 
 def fill_nan_with_nearest(flat):
