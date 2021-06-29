@@ -258,7 +258,7 @@ class BodyNavigationTest(unittest.TestCase):
 
         dst = dst_sagittal
         # sed3.show_slices(data3d=self.data3d, contour=dst>0, slice_number=6, axis=axis)
-        sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
+        # sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
         self.assertGreater(dst_sagittal[60, 10, 10], 10)
         self.assertLess(dst_sagittal[60, 10, 500], -10)
 
