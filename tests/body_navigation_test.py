@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 from loguru import logger
+
 # import logging
 #
 # logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ import glob
 
 import io3d
 import io3d.datasets
+
 # import sed3
 # import SimpleITK as sitk
 # sys.path.append(Path("~/projects/bodynavigation").expanduser())
@@ -51,9 +53,11 @@ class BodyNavigationTest(unittest.TestCase):
         # )
         # pth = io3d.datasets.get_dataset_path(dataset, 'data3d', 1)
         # print(f"pth={pth}")
-        datap = io3d.read_dataset(dataset, 'data3d', 1, orientation_axcodes='SPL')
+        datap = io3d.read_dataset(dataset, "data3d", 1, orientation_axcodes="SPL")
 
-        self.obj:bodynavigation.BodyNavigation = bodynavigation.BodyNavigation(datap["data3d"], datap["voxelsize_mm"])
+        self.obj: bodynavigation.BodyNavigation = bodynavigation.BodyNavigation(
+            datap["data3d"], datap["voxelsize_mm"]
+        )
         self.data3d = datap["data3d"]
         self.shape = datap["data3d"].shape
 
@@ -94,28 +98,42 @@ class BodyNavigationTest(unittest.TestCase):
 
     def test_get_diapghragm_axial(self):
         max_error_mm = 5
-        i, mask = self.obj.get_diaphragm_axial_position_index(return_in_working_voxelsize=False, return_mask=True)
-        assert self.obj.data3dr.shape[0] == mask.shape[0], "Shape of mask should be always in resized size"
+        i, mask = self.obj.get_diaphragm_axial_position_index(
+            return_in_working_voxelsize=False, return_mask=True
+        )
+        assert (
+            self.obj.data3dr.shape[0] == mask.shape[0]
+        ), "Shape of mask should be always in resized size"
 
         dst = self.obj.dist_to_diaphragm_axial()
         randi = np.random.randint(1, mask.shape[0])
-        assert dst[randi, 0, 0] == dst[randi, -1, -1], "Distances in one slide should be equal"
-        assert dst[0, 0, 0] != dst[randi, -1, -1], "Distances in neighboring slides should be different"
-        datap2 = io3d.datasets.read_dataset(dataset, "liver", 1, orientation_axcodes='SPL')
+        assert (
+            dst[randi, 0, 0] == dst[randi, -1, -1]
+        ), "Distances in one slide should be equal"
+        assert (
+            dst[0, 0, 0] != dst[randi, -1, -1]
+        ), "Distances in neighboring slides should be different"
+        datap2 = io3d.datasets.read_dataset(
+            dataset, "liver", 1, orientation_axcodes="SPL"
+        )
         ii_liver = np.min(np.nonzero(datap2.data3d)[0])
         max_error_px = max_error_mm / datap2.voxelsize_mm[0]
 
-        assert pytest.approx(ii_liver, max_error_px) == i, "Index of end of the liver should be close to the detected diaphragm level index"
+        assert (
+            pytest.approx(ii_liver, max_error_px) == i
+        ), "Index of end of the liver should be close to the detected diaphragm level index"
 
         assert dst.shape[0] == self.obj.orig_shape[0], "shape is in orig shape"
 
-        assert pytest.approx(dst[int(i),0,0], max_error_mm) == 0, "Distance in detected liver slide should be zero"
-        assert pytest.approx(dst[ii_liver,0,0], max_error_mm) == 0, "Distance in annotated liver slide should be close to zero"
-
+        assert (
+            pytest.approx(dst[int(i), 0, 0], max_error_mm) == 0
+        ), "Distance in detected liver slide should be zero"
+        assert (
+            pytest.approx(dst[ii_liver, 0, 0], max_error_mm) == 0
+        ), "Distance in annotated liver slide should be close to zero"
 
         dst_wvs = self.obj.dist_to_diaphragm_axial(return_in_working_voxelsize=True)
         assert dst_wvs.shape[0] == self.obj.data3dr.shape[0]
-
 
     def test_get_dists(self):
         dst_lungs = self.obj.dist_to_lungs()
@@ -158,7 +176,10 @@ class BodyNavigationTest(unittest.TestCase):
         # ed.show()
         import matplotlib.pyplot as plt
 
-        profile_with_nan, gradient = self.obj.get_diaphragm_profile_image_with_empty_areas(
+        (
+            profile_with_nan,
+            gradient,
+        ) = self.obj.get_diaphragm_profile_image_with_empty_areas(
             return_gradient_image=True
         )
         self.assertGreater(
@@ -232,11 +253,12 @@ class BodyNavigationTest(unittest.TestCase):
 
     def test_dist_sagital(self):
         dst_sagittal = self.obj.dist_to_sagittal()
-        axis=0
+        axis = 0
         import sed3
+
         dst = dst_sagittal
         # sed3.show_slices(data3d=self.data3d, contour=dst>0, slice_number=6, axis=axis)
-        sed3.show_slices(data3d=dst, contour=self.data3d>0, slice_number=6, axis=axis)
+        sed3.show_slices(data3d=dst, contour=self.data3d > 0, slice_number=6, axis=axis)
         self.assertGreater(dst_sagittal[60, 10, 10], 10)
         self.assertLess(dst_sagittal[60, 10, 500], -10)
 
@@ -251,6 +273,7 @@ class BodyNavigationTest(unittest.TestCase):
     def test_dist_axial(self):
         dst = self.obj.dist_to_axial()
         import sed3
+
         # ed = sed3.sed3(dst)
         # ed.show()
         self.assertLess(dst[0, 250, 250], 10)
@@ -317,29 +340,30 @@ class BodyNavigationTest(unittest.TestCase):
         self.obj.use_new_get_lungs_setup = False
 
 
-
 def test_sagital():
 
-    datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', 1)
+    datap = io3d.datasets.read_dataset("3Dircadb1", "data3d", 1)
     data3d = datap["data3d"][:110]
     voxelsize_mm = datap["voxelsize_mm"]
 
     def show_dists(dist, i=100, j=200):
         fig, axs = plt.subplots(
-            2, 2,
+            2,
+            2,
             #         sharey=True,
-            figsize=[15, 12])
+            figsize=[15, 12],
+        )
         axs = axs.flatten()
-        axs[0].imshow(data3d[i, :, :], cmap='gray')
+        axs[0].imshow(data3d[i, :, :], cmap="gray")
 
         axs[1].imshow(dist[i, :, :])
         axs[1].contour(dist[i, :, :] > 0)
-        axs[2].imshow(data3d[:, j, :], cmap='gray')
+        axs[2].imshow(data3d[:, j, :], cmap="gray")
         axs[3].imshow(dist[:, j, :])
         axs[3].contour(dist[:, j, :] > 0)
 
         for ax in axs:
-            ax.axis('off')
+            ax.axis("off")
 
     ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
     # dist = ss.dist_sagittal()
@@ -350,13 +374,14 @@ def test_sagital():
     assert dist[0, 255, 255] > 0
     assert dist[0, 400, 400] < 0
 
+
 def test_spine_all_spines_in_dataset():
     one_i = None
     for i in range(1, 2):
-    # for i in range(1, 21):
-    # one_i = 8
-    # for i in range(one_i, one_i + 1):
-        datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
+        # for i in range(1, 21):
+        # one_i = 8
+        # for i in range(one_i, one_i + 1):
+        datap = io3d.datasets.read_dataset("3Dircadb1", "data3d", i)
         # datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
         data3d = datap["data3d"]
         # data3d = datap["data3d"][:110]
@@ -364,20 +389,22 @@ def test_spine_all_spines_in_dataset():
 
         def show_dists(dist, i=63, j=200):
             fig, axs = plt.subplots(
-                2, 2,
+                2,
+                2,
                 #         sharey=True,
-                figsize=[15, 12])
+                figsize=[15, 12],
+            )
             axs = axs.flatten()
-            axs[0].imshow(data3d[i, :, :], cmap='gray')
+            axs[0].imshow(data3d[i, :, :], cmap="gray")
 
             axs[1].imshow(dist[i, :, :])
             axs[1].contour(dist[i, :, :] > 0)
-            axs[2].imshow(data3d[:, j, :], cmap='gray')
+            axs[2].imshow(data3d[:, j, :], cmap="gray")
             axs[3].imshow(dist[:, j, :])
             axs[3].contour(dist[:, j, :] > 0)
 
             for ax in axs:
-                ax.axis('off')
+                ax.axis("off")
 
         ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
         if one_i:
@@ -398,6 +425,7 @@ def test_spine_all_spines_in_dataset():
         assert spine_coords_std[2] < 15
         # assert dist[0, 255, 255] > 0
         # assert dist[0, 400, 400] < 0
+
 
 # def test_bone():
 #
@@ -439,15 +467,16 @@ def test_spine_all_spines_in_dataset():
 #         # assert dist[0, 255, 255] > 0
 #         # assert dist[0, 400, 400] < 0
 
+
 def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
     r_spine_mm = 10
     one_i = None
     debug = False
     for i in range(1, 2):
-    # for i in range(1, 21):
-    # one_i = 1
-    # for i in range(one_i, one_i + 1):
-        datap = io3d.datasets.read_dataset("3Dircadb1", 'data3d', i)
+        # for i in range(1, 21):
+        # one_i = 1
+        # for i in range(one_i, one_i + 1):
+        datap = io3d.datasets.read_dataset("3Dircadb1", "data3d", i)
         # datap = io3d.datasets.read_dataset("sliver07",'data3d', i)
         data3d = datap["data3d"]
         # data3d = datap["data3d"][:110]
@@ -457,20 +486,22 @@ def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
             if contour is None:
                 contour = dist > 0
             fig, axs = plt.subplots(
-                2, 2,
+                2,
+                2,
                 #         sharey=True,
-                figsize=[15, 12])
+                figsize=[15, 12],
+            )
             axs = axs.flatten()
-            axs[0].imshow(data3d[i, :, :], cmap='gray')
+            axs[0].imshow(data3d[i, :, :], cmap="gray")
 
             axs[1].imshow(dist[i, :, :])
             axs[1].contour(contour[i, :, :])
-            axs[2].imshow(data3d[:, j, :], cmap='gray')
+            axs[2].imshow(data3d[:, j, :], cmap="gray")
             axs[3].imshow(dist[:, j, :])
             axs[3].contour(contour[:, j, :])
 
             for ax in axs:
-                ax.axis('off')
+                ax.axis("off")
 
         ss = bodynavigation.body_navigation.BodyNavigation(data3d, voxelsize_mm)
         ss.debug = debug
@@ -480,9 +511,11 @@ def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
         if debug:
             print(ss.spine.dtype)
             r_spine_mm = 10
-            show_dists(distsp - 10,
-                       contour=(dist > 0).astype(np.uint8) + (distsp > r_spine_mm).astype(np.uint8)
-                       )
+            show_dists(
+                distsp - 10,
+                contour=(dist > 0).astype(np.uint8)
+                + (distsp > r_spine_mm).astype(np.uint8),
+            )
             plt.suptitle(f"i={i}")
             plt.show()
 
@@ -491,24 +524,33 @@ def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
         assert np.max(sagittal_dists_in_spine) > 0
         assert np.min(sagittal_dists_in_spine) < 0
 
+
 def test_sagittal_on_data_augmented_by_rotation():
     import scipy
     import itertools
+
     angle = 0
     # angle = 0
     debug = False
     # i = 10
-    for dataset, i in itertools.product([
-        # "3Dircadb1",
-        "sliver07"
-    ], list(range(1,2))):
+    for dataset, i in itertools.product(
+        [
+            # "3Dircadb1",
+            "sliver07"
+        ],
+        list(range(1, 2)),
+    ):
         logger.debug(f"{dataset} {i}")
-        datap = io3d.datasets.read_dataset(dataset, 'data3d', i, orientation_axcodes="SPL")
+        datap = io3d.datasets.read_dataset(
+            dataset, "data3d", i, orientation_axcodes="SPL"
+        )
         # data3d = datap["data3d"][50:,:,:]
-        data3d = datap["data3d"][:,:,:]
+        data3d = datap["data3d"][:, :, :]
         voxelsize_mm = datap["voxelsize_mm"]
         # data3d = datap["data3d"][:110]
-        imr = scipy.ndimage.rotate(data3d, angle, axes=[1,2], cval=-1000, reshape=False)
+        imr = scipy.ndimage.rotate(
+            data3d, angle, axes=[1, 2], cval=-1000, reshape=False
+        )
         # import sed3
         # ed = sed3.sed3(imr)
         # ed.show()
@@ -521,13 +563,17 @@ def test_sagittal_on_data_augmented_by_rotation():
         # plt.suptitle(f"{dataset} {i} set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
         # plt.show()
 
-        min_diff = np.min(np.abs([
-            ss.angle - translated_angle,
-            ss.angle - translated_angle + 180,
-            ss.angle - translated_angle - 180,
-
-        ]))
+        min_diff = np.min(
+            np.abs(
+                [
+                    ss.angle - translated_angle,
+                    ss.angle - translated_angle + 180,
+                    ss.angle - translated_angle - 180,
+                ]
+            )
+        )
         assert min_diff == pytest.approx(0, abs=10)
+
 
 # class BodyNavigationTestRotated180(unittest.TestCase):
 #     interactiveTest = False

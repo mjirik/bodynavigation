@@ -9,9 +9,10 @@ import h5py
 @unittest.skip("not necessary to test on CI")
 def test_0_sdf_prepare_data():
     from bodynavigation.advanced_segmentation import sdf_seg_pipeline
-    sdf_type = 'surface'
+
+    sdf_type = "surface"
     imshape = 256
-    filename_prefix = 'testfile_'
+    filename_prefix = "testfile_"
     expected_fn = Path(f"testfile_sdf_{sdf_type}{imshape}.h5")
     if expected_fn.exists():
         expected_fn.unlink()
@@ -21,7 +22,7 @@ def test_0_sdf_prepare_data():
         # skip_h5=True,
         imshape=imshape,
         sdf_type=sdf_type,
-        filename_prefix=filename_prefix, # prevent rewriting the files during test
+        filename_prefix=filename_prefix,  # prevent rewriting the files during test
     )
     assert expected_fn.exists()
     with h5py.File(expected_fn) as h5f:
@@ -32,13 +33,16 @@ def test_0_sdf_prepare_data():
 @unittest.skip("not necessary to test on CI")
 def test_1_sdf_training():
     from bodynavigation.advanced_segmentation import sdf_unet256
-    sdf_type = 'surface'
+
+    sdf_type = "surface"
     imshape = 256
-    filename_prefix = 'testfile_'
+    filename_prefix = "testfile_"
     model = sdf_unet256.train(
-        sdf_type=sdf_type, epochs=3, filename_prefix=filename_prefix,
-        n_data=2, validation_ids=[2]
+        sdf_type=sdf_type,
+        epochs=3,
+        filename_prefix=filename_prefix,
+        n_data=2,
+        validation_ids=[2],
     )
     # model.fit()
     assert Path(f"{filename_prefix}sdf_unet_{sdf_type}.h5").exists()
-

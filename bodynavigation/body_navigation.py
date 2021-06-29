@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from loguru import logger
+
 # import logging
 #
 # logger = logging.getLogger(__name__)
@@ -28,20 +29,29 @@ import copy
 
 from .organ_detection_algo import OrganDetectionAlgo
 
+
 def resize_to_mm(*args, **kwargs):
     import imma.image
+
     return imma.image.resize_to_mm(*args, **kwargs)
+
 
 def resize_to_shape(*args, **kwargs):
     import imma.image
+
     return imma.image.resize_to_shape(*args, **kwargs)
+
 
 class BodyNavigation:
     """ Range of values in input data must be <-1024;intmax> """
 
-
     def __init__(
-        self, data3d, voxelsize_mm, use_new_get_lungs_setup=False, head_first=True, orientation_axcodes=None
+        self,
+        data3d,
+        voxelsize_mm,
+        use_new_get_lungs_setup=False,
+        head_first=True,
+        orientation_axcodes=None,
     ):
         # temporary fix for io3d <-512;511> value range bug
         if np.min(data3d) >= -512:
@@ -56,10 +66,12 @@ class BodyNavigation:
         self._spine_filter_size_mm = np.array([100, 15, 15])
         self._spine_min_bone_voxels_ratio = 0.15
         self._spine_2nd_iter_dist_threshold_mm = 50
-        self._cache_diaphragm_axial_i_vxsz = None # this will be caluclated if necessary
+        self._cache_diaphragm_axial_i_vxsz = (
+            None  # this will be caluclated if necessary
+        )
         self.axcodes = orientation_axcodes if orientation_axcodes else "SPL"
 
-        self._diaphragm_level_flat_area_proportion = 0.9 # check also local maxima
+        self._diaphragm_level_flat_area_proportion = 0.9  # check also local maxima
         self._lungs_max_density = -200
         self._diaphragm_level_min_dist_to_surface_mm = 1
         self._diaphragm_level_min_dist_to_sagittal_mm = 30
@@ -190,7 +202,6 @@ class BodyNavigation:
             self.get_bones(skip_resize=True)
         # dist_sag = self.dist_to_sagittal(return_in_working_voxelsize=True)
 
-
         # filter out noise in data
         spine_filter_size_px = self._spine_filter_size_mm / self.working_vs
         bones = self.bones.astype(float)
@@ -207,14 +218,12 @@ class BodyNavigation:
         # compute temporary center
         spine_center_wvs = np.mean(np.nonzero(spine), 1)
         xx, yy = np.meshgrid(
-            np.arange(0, data3dr.shape[1]),
-            np.arange(0, data3dr.shape[2]),
-            sparse=True
+            np.arange(0, data3dr.shape[1]), np.arange(0, data3dr.shape[2]), sparse=True
         )
 
         spine_mask_2d = np.sqrt(
-            ((xx - spine_center_wvs[2]) * self.working_vs[2]) ** 2 +
-            ((yy - spine_center_wvs[1]) * self.working_vs[1]) ** 2
+            ((xx - spine_center_wvs[2]) * self.working_vs[2]) ** 2
+            + ((yy - spine_center_wvs[1]) * self.working_vs[1]) ** 2
         )
         no_spine_mask_2d = spine_mask_2d > self._spine_2nd_iter_dist_threshold_mm
         # spine_mask_2d = np.zeros(data3dr.shape[1:])
@@ -223,14 +232,18 @@ class BodyNavigation:
 
         if self.debug:
             import matplotlib.pyplot as plt
-            fig, axsss = plt.subplots(2,2)
+
+            fig, axsss = plt.subplots(2, 2)
             axs = axsss.flatten()
             axs[0].imshow(np.max(data3dr, 0))
-            axs[0].contour(np.max(
-                bones +
-                # (dist_sag > 0).astype(np.uint8) +
-                spine.astype(np.uint8) + no_spine_mask.astype(np.uint8)
-                , 0))
+            axs[0].contour(
+                np.max(
+                    bones +
+                    # (dist_sag > 0).astype(np.uint8) +
+                    spine.astype(np.uint8) + no_spine_mask.astype(np.uint8),
+                    0,
+                )
+            )
             axs[1].imshow(np.mean(data3dr, 0))
             axs[2].imshow(np.max(data3dr, 1))
             axs[3].imshow(np.mean(data3dr, 1))
@@ -248,16 +261,15 @@ class BodyNavigation:
         #     bones, structure=np.ones((3, 3, 3))
         # )  # TODO - fix removal of data on edge slices
 
-
         self.spine_center_mm = (
             self.spine_center_wvs
             * self.working_vs
             # / self.voxelsize_mm.astype(np.double)
         )
         self.spine_center_orig_px = (
-                self.spine_center_wvs
-                * self.working_vs
-                / self.voxelsize_mm.astype(np.double)
+            self.spine_center_wvs
+            * self.working_vs
+            / self.voxelsize_mm.astype(np.double)
         )
 
         # self.center2 = np.mean(np.nonzero(bones), 2)
@@ -561,15 +573,10 @@ class BodyNavigation:
         center = self.spine_center_mm
         # spine_center_wvs = np.mean(np.nonzero(spine), 1)
         xx, yy = np.meshgrid(
-            np.arange(0, shape[1]) * vs[1],
-            np.arange(0, shape[2]) * vs[2],
-            sparse=True
+            np.arange(0, shape[1]) * vs[1], np.arange(0, shape[2]) * vs[2], sparse=True
         )
 
-        spine_dist_2d = np.sqrt(
-            ((xx - center[2])) ** 2 +
-            ((yy - center[1])) ** 2
-        )
+        spine_dist_2d = np.sqrt(((xx - center[2])) ** 2 + ((yy - center[1])) ** 2)
         # spine_mask_2d = np.zeros(data3dr.shape[1:])
         spine_dist_3d = zcopy(spine_dist_2d, shape)
         # return resize_to_shape(ld, self.orig_shape)
@@ -586,13 +593,16 @@ class BodyNavigation:
 
         if self.debug:
             import matplotlib.pyplot as plt
+
             plt.imshow(img)
             plt.colorbar()
             plt.show()
         init_angle = 90 - np.degrees(np.arctan2(vector[0], vector[1]))
         init_point = self.body_center_wvs[1:]
         # from body_center to spine
-        tr0, tr1, angle = find_symmetry(img, degrad, debug=self.debug, init_angle=init_angle, init_point=init_point)
+        tr0, tr1, angle = find_symmetry(
+            img, degrad, debug=self.debug, init_angle=init_angle, init_point=init_point
+        )
         self.angle = angle
         self.symmetry_point_wvs = np.array([tr0, tr1])
         # self.symmetry_point_mm = self.symmetry_point_wvs * self.working_vs[:2]
@@ -614,9 +624,9 @@ class BodyNavigation:
             vs0 = self.working_vs[1]
         else:
             symmetry_point_orig_res = (
-                    self.symmetry_point_wvs
-                    * self.working_vs[1:]
-                    / self.voxelsize_mm[1:].astype(np.double)
+                self.symmetry_point_wvs
+                * self.working_vs[1:]
+                / self.voxelsize_mm[1:].astype(np.double)
             )
             symmetry_point = symmetry_point_orig_res
             shape = self.orig_shape
@@ -628,15 +638,23 @@ class BodyNavigation:
         right_vector = np.asarray([vector[1], -vector[0]])
         point_on_right = symmetry_point + right_vector
 
-        z, sgn = split_with_line(symmetry_point, self.angle, shape[1:], voxelsize_0=vs0,
-                            point_in_positive_halfplane=point_on_right, return_sgn=True)
+        z, sgn = split_with_line(
+            symmetry_point,
+            self.angle,
+            shape[1:],
+            voxelsize_0=vs0,
+            point_in_positive_halfplane=point_on_right,
+            return_sgn=True,
+        )
         rldst = zcopy(z, shape, dtype=np.int16)
         if sgn < 0:
-            self.angle = (self.angle + 180) % 360 # maybe 180
+            self.angle = (self.angle + 180) % 360  # maybe 180
 
         return rldst
 
-    def get_diaphragm_axial_position_index(self, return_in_working_voxelsize=False, return_mask=False, return_areas=False):
+    def get_diaphragm_axial_position_index(
+        self, return_in_working_voxelsize=False, return_mask=False, return_areas=False
+    ):
         """
 
         :param return_in_working_voxelsize: return position index in working voxelsize
@@ -690,7 +708,9 @@ class BodyNavigation:
         mnsa = np.asarray(mns)
 
         # take just indexes with value above some intensity level
-        ids2 = ids[mnsa[ids] > (self._diaphragm_level_flat_area_proportion * mns[ii_max])]
+        ids2 = ids[
+            mnsa[ids] > (self._diaphragm_level_flat_area_proportion * mns[ii_max])
+        ]
         if self.axcodes[0] == "S":
             ii = np.max(ids2)  # if axcode is "SPL"
         elif self.axcodes[0] == "I":
@@ -725,12 +745,11 @@ class BodyNavigation:
         height_mm = voxelsize_0 * output_shape[0]
 
         data = np.ones(output_shape)
-        mul = np.linspace(0, height_mm, output_shape[0]).reshape([output_shape[0], 1, 1])
+        mul = np.linspace(0, height_mm, output_shape[0]).reshape(
+            [output_shape[0], 1, 1]
+        )
         mul = mul - (ii * voxelsize_0)
         return data * mul
-
-
-
 
     def dist_to_coronal(self, return_in_working_voxelsize=False):
         if self.spine is None:
@@ -747,8 +766,13 @@ class BodyNavigation:
         rldst = np.ones(shape, dtype=np.int16)
 
         point_in_positive_halfplane = self.body_center_wvs[1:]
-        z = split_with_line(spine_center[1:], self.angle + 90, shape[1:], voxelsize_0=self.working_vs[1],
-                            point_in_positive_halfplane=point_in_positive_halfplane)
+        z = split_with_line(
+            spine_center[1:],
+            self.angle + 90,
+            shape[1:],
+            voxelsize_0=self.working_vs[1],
+            point_in_positive_halfplane=point_in_positive_halfplane,
+        )
         z = z * self.working_vs[1]
         for i in range(self.orig_shape[0]):
             rldst[i, :, :] = z
@@ -1132,7 +1156,9 @@ def prepare_images_for_symmetry_analysis(imin0, pivot):
     return imgP0, imgP1
 
 
-def find_symmetry_parameters(imin0, trax, tray, angles, debug=False, return_criterium_min=False):
+def find_symmetry_parameters(
+    imin0, trax, tray, angles, debug=False, return_criterium_min=False
+):
     """
 
     :param imin0:
@@ -1179,7 +1205,8 @@ def find_symmetry_parameters(imin0, trax, tray, angles, debug=False, return_crit
     if debug:
 
         from matplotlib import pyplot as plt
-        fig, axs = plt.subplots(1,3, sharey=True)
+
+        fig, axs = plt.subplots(1, 3, sharey=True)
         axs = axs.flatten()
         axs[0].imshow(mindif)
         axs[1].imshow(minim0)
@@ -1204,6 +1231,7 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0, init_point=
     )
     if sigma is not None:
         from scipy.ndimage.filters import gaussian_filter
+
         imin0r = gaussian_filter(imin0r, sigma)
 
     angles = range(-180, 180, 15)
@@ -1213,7 +1241,9 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0, init_point=
     # tr0, tr1, ang0, minval = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug,
     #                                                   return_criterium_min=True)
     if init_point is None:
-        tr0, tr1, ang0, minval = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug, return_criterium_min=True)
+        tr0, tr1, ang0, minval = find_symmetry_parameters(
+            imin0r, trax, tray, angles, debug=debug, return_criterium_min=True
+        )
     else:
         tr0 = int(init_point[0] / degrad)
         tr1 = int(init_point[1] / degrad)
@@ -1230,7 +1260,9 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0, init_point=
         angles += list(range(ang + 180 - 20, ang + 180 + 20, 3))
     # check also the 90 degrees symmetry plane for sure
 
-    tr0, tr1, ang_fine, minval_fine = find_symmetry_parameters(imin0r, trax, tray, angles, debug=debug, return_criterium_min=True)
+    tr0, tr1, ang_fine, minval_fine = find_symmetry_parameters(
+        imin0r, trax, tray, angles, debug=debug, return_criterium_min=True
+    )
     # logger.warning(f"init_angle={init_angle}, angle={ang0}, angle_fine={ang_fine}")
 
     angle = 90 - ang_fine / 2.0
@@ -1248,9 +1280,16 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0, init_point=
     return tr0 * degrad, tr1 * degrad, angle
 
 
-
 # Rozděl obraz na půl
-def split_with_line(point, orientation, imshape, degrees=True, voxelsize_0=1., point_in_positive_halfplane=None, return_sgn=False):
+def split_with_line(
+    point,
+    orientation,
+    imshape,
+    degrees=True,
+    voxelsize_0=1.0,
+    point_in_positive_halfplane=None,
+    return_sgn=False,
+):
     """
     :arg point:
     :arg orientation: angle or oriented vector
@@ -1391,13 +1430,15 @@ def main():
 
     # output = segmentation.vesselSegmentation(oseg.data3d, oseg.orig_segmentation)
 
+
 def zcopy(slice, shape, dtype=None):
     if dtype is None:
         dtype = slice.dtype
     im3d = np.empty(shape, dtype=dtype)
-    for i in range(shape[0]): 
+    for i in range(shape[0]):
         im3d[i, :, :] = slice
     return im3d
+
 
 if __name__ == "__main__":
     main()

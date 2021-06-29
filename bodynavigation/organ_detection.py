@@ -208,6 +208,7 @@ class OrganDetection(object):
         # imports are set to None or deleted on app exit
         try:
             import shutil
+
             shutil.get_archive_formats()
         except:
             import shutil
@@ -250,6 +251,7 @@ class OrganDetection(object):
     @classmethod
     def fromDirectory(cls, path):
         import io3d
+
         logger.info("Loading already processed data from directory: %s" % path)
 
         data3d_p = os.path.join(path, "data3d.dcm")
@@ -294,6 +296,7 @@ class OrganDetection(object):
 
         data3d_p = os.path.join(path, "data3d.dcm")
         import io3d
+
         io3d.datawriter.write(self.data3d, data3d_p, "dcm", {"voxelsize_mm": spacing})
 
         data3d_info_p = os.path.join(path, "data3d.json")
@@ -530,6 +533,7 @@ class OrganDetection(object):
             data = np.zeros(self.data3d.shape, dtype=np.float)
         else:
             import io3d
+
             data, _ = io3d.datareader.read(fpath, dataplus_format=False)
             data = (
                 data.astype(np.float32) / self.patlas_info["data_multiplication"]
@@ -834,6 +838,7 @@ if __name__ == "__main__":
                     break
         # lead data3d and init OrganDetection
         import io3d
+
         data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
         voxelsize = metadata["voxelsize_mm"]
         obj = OrganDetection(data3d, voxelsize)

@@ -1,5 +1,6 @@
 import os.path as op
 import sys
+
 sys.path.append(op.expanduser("~/projects/bodynavigation"))
 
 import matplotlib.pyplot as plt
@@ -24,6 +25,7 @@ import sklearn.mixture
 try:
     import bodynavigation.body_navigation
     from importlib import reload
+
     reload(bodynavigation.body_navigation)
 
 except:
@@ -31,6 +33,7 @@ except:
 import imtools
 import sed3
 from imtools import qmisc, misc, ml
+
 
 def read_scan(dataset, scannum):
     """Load selected scan from selected dataset.
@@ -44,7 +47,9 @@ def read_scan(dataset, scannum):
         data3d_orig: orig data
     """
     data3d_orig = io3d.read_dataset(dataset, "data3d", scannum)
-    ss = bodynavigation.body_navigation.BodyNavigation(data3d_orig["data3d"], data3d_orig["voxelsize_mm"])
+    ss = bodynavigation.body_navigation.BodyNavigation(
+        data3d_orig["data3d"], data3d_orig["voxelsize_mm"]
+    )
     voxelsize = data3d_orig["voxelsize_mm"]
     return ss, data3d_orig["data3d"], voxelsize
 
@@ -56,8 +61,5 @@ def visualize(seg, data3d_orig):
         seg: data after segmentation
         data3d_orig: orig data
     """
-    sed3.show_slices(
-    data3d_orig["data3d"], 
-    seg, slice_step=10, axis=0
-    )
+    sed3.show_slices(data3d_orig["data3d"], seg, slice_step=10, axis=0)
     plt.show()

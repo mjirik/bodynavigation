@@ -403,12 +403,10 @@ class OrganDetectionAlgo(object):
     BONES_THRESHOLD_LOW = 200
     BONES_THRESHOLD_HIGH = 300
     BONES_RIBS_MAX_DEPTH = 15  # mm; max depth of ribs from surface of fatless body
-    BONES_SHALLOW_BONES_MAX_DEPTH = (
-        20
-    )  # mm; bones that are in shallow depth (of fatless body), used for detection of end of ribs and start of hips
+    BONES_SHALLOW_BONES_MAX_DEPTH = 20  # mm; bones that are in shallow depth (of fatless body), used for detection of end of ribs and start of hips
     BONES_LOW_MAX_DST = (
-        15
-    )  # mm; max distance of low thresholded bones from high thresholded parts
+        15  # mm; max distance of low thresholded bones from high thresholded parts
+    )
 
     @classmethod
     def getBones(
@@ -572,8 +570,8 @@ class OrganDetectionAlgo(object):
 
     DIAPHRAGM_SOBEL_THRESHOLD = -10
     DIAPHRAGM_MAX_LUNGS_END_DIST = (
-        100
-    )  # mm # TODO - maybe 150? (some data is cut too early)
+        100  # mm # TODO - maybe 150? (some data is cut too early)
+    )
 
     @classmethod
     def getDiaphragm(cls, data3d, spacing, lungs, body):  # TODO - improve
