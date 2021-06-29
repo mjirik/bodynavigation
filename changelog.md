@@ -1,6 +1,6 @@
 # Changelog
 
-Latest version: 0.6.0
+Latest version: 0.6.1
 ## 0.6
 * [Changed] More robust sagittal plan. The vector from body center to spine is used for initialization.
 
