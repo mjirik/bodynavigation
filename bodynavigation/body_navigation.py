@@ -268,13 +268,13 @@ class BodyNavigation:
         else:
             return resize_to_shape(spine, self.orig_shape)
 
-    def get_coronal(self):
-        if self.spine is None:
-            self.get_spine(skip_resize=True)
-        if self.angle is None:
-            self.find_symmetry()
-        spine_mean = np.mean(np.nonzero(self.spine), 1)
-        rldst = np.ones(self.orig_shape, dtype=np.int16)
+    # def get_coronal(self):
+    #     if self.spine is None:
+    #         self.get_spine(skip_resize=True)
+    #     if self.angle is None:
+    #         self.find_symmetry()
+    #     spine_mean = np.mean(np.nonzero(self.spine), 1)
+    #     rldst = np.ones(self.orig_shape, dtype=np.int16)
 
     def get_lungs(self, skip_resize=False):
         self.diaphragm_mask = None
@@ -744,7 +744,9 @@ class BodyNavigation:
             spine_center = self.spine_center_orig_px
         rldst = np.ones(shape, dtype=np.int16)
 
-        z = split_with_line(spine_center[1:], self.angle + 90, shape[1:], voxelsize_0=self.working_vs[1])
+        point_in_positive_halfplane = self.body_center_wvs[1:]
+        z = split_with_line(spine_center[1:], self.angle + 90, shape[1:], voxelsize_0=self.working_vs[1],
+                            point_in_positive_halfplane=point_in_positive_halfplane)
         z = z * self.working_vs[1]
         for i in range(self.orig_shape[0]):
             rldst[i, :, :] = z

@@ -494,18 +494,18 @@ def test_sagit_by_spine_on_both_sides_of_sagitt_in_whole_dataset():
 def test_sagittal_on_data_augmented_by_rotation():
     import scipy
     import itertools
-    angle = 130
+    angle = 0
     # angle = 0
     debug = False
-    i = 10
+    # i = 10
     for dataset, i in itertools.product([
-        "3Dircadb1",
-        # "sliver07"
+        # "3Dircadb1",
+        "sliver07"
     ], list(range(1,2))):
         logger.debug(f"{dataset} {i}")
         datap = io3d.datasets.read_dataset(dataset, 'data3d', i, orientation_axcodes="SPL")
-        data3d = datap["data3d"][50:,:,:]
-        # data3d = datap["data3d"][:,:,:]
+        # data3d = datap["data3d"][50:,:,:]
+        data3d = datap["data3d"][:,:,:]
         voxelsize_mm = datap["voxelsize_mm"]
         # data3d = datap["data3d"][:110]
         imr = scipy.ndimage.rotate(data3d, angle, axes=[1,2], cval=-1000, reshape=False)
@@ -516,11 +516,11 @@ def test_sagittal_on_data_augmented_by_rotation():
         ss.debug = debug
         dist = ss.dist_to_sagittal()
         translated_angle = 90 - angle
-        plt.imshow(imr[20, :, :] + 10* dist[20,:,:], cmap='gray')
-        plt.contour((dist>0)[20, :, :])
-        plt.suptitle(f"{dataset} {i} set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
+        # plt.imshow(imr[20, :, :] + 10* dist[20,:,:], cmap='gray')
+        # plt.contour((dist>0)[20, :, :])
+        # plt.suptitle(f"{dataset} {i} set_angle={angle}, translated_angle={translated_angle}, angle_estimation={ss.angle}")
+        # plt.show()
 
-        plt.show()
         min_diff = np.min(np.abs([
             ss.angle - translated_angle,
             ss.angle - translated_angle + 180,
