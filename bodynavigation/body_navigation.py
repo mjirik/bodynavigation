@@ -275,6 +275,8 @@ class BodyNavigation:
     #         self.find_symmetry()
     #     spine_mean = np.mean(np.nonzero(self.spine), 1)
     #     rldst = np.ones(self.orig_shape, dtype=np.int16)
+    def get_coronal(self, *args, **kwargs):
+        return self.dist_to_coronal(*args, **kwargs)
 
     def get_lungs(self, skip_resize=False):
         self.diaphragm_mask = None
