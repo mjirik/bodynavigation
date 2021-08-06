@@ -66,6 +66,7 @@ class BodyNavigation:
         self._spine_filter_size_mm = np.array([100, 15, 15])
         self._spine_min_bone_voxels_ratio = 0.15
         self._spine_2nd_iter_dist_threshold_mm = 50
+        self._bones_threshold_hu = 320
         self._cache_diaphragm_axial_i_vxsz = (
             None  # this will be caluclated if necessary
         )
@@ -75,6 +76,11 @@ class BodyNavigation:
         self._lungs_max_density = -200
         self._diaphragm_level_min_dist_to_surface_mm = 1
         self._diaphragm_level_min_dist_to_sagittal_mm = 30
+        self._symmetry_bones_threshold_hu = 430
+        self._symmetry_gaussian_sigma_mm = 22.5
+        self._symmetry_degrad_px = 5
+        self._body_threshold = -300
+        self._body_gaussian_sigma_mm = 3.
 
         if voxelsize_mm is None:
             self.data3dr = data3d
@@ -99,6 +105,8 @@ class BodyNavigation:
         self.dist_sagittal = self.dist_to_sagittal
         self.dist_coronal = self.dist_to_coronal
         self.dist_axial = self.dist_to_axial
+        self.body_center_wvs = None
+        self.body_center_mm = None
         self.debug = False
 
     def set_parameters(self, version=1):
@@ -110,9 +118,10 @@ class BodyNavigation:
 
     def get_body(self, skip_resize=False):
         # create segmented 3d data
+        sigma_px = self._body_gaussian_sigma_mm / np.mean(self.voxelsize_mm[1:])
         body = OrganDetectionAlgo.getBody(
-            scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=2),
-            self.working_vs,
+            scipy.ndimage.filters.gaussian_filter(self.data3dr, sigma=sigma_px),
+            self.working_vs, body_threshold=self._body_threshold
         )
         self.body = body
 
@@ -153,6 +162,7 @@ class BodyNavigation:
         self.body_height = body_height * float(self.voxelsize_mm[1])
 
         self.body_center_wvs = np.mean(np.nonzero(body), 1)
+        self.body_center_mm = self.body_center_wvs * self.working_vs
 
         if skip_resize:
             return self.body
@@ -172,7 +182,7 @@ class BodyNavigation:
         # > 240 - still includes kidneys and small part of heart
         # > 280 - still a small bit of kidneys
         # > 350 - only edges of bones
-        bones = data3dr > 320
+        bones = data3dr > self._bones_threshold_hu
         del data3dr
         bones[self.body == 0] = 0  # cut out anything not inside body
 
@@ -214,6 +224,10 @@ class BodyNavigation:
         # tresholding
         thr = min(0.9 * np.max(data3dr), self._spine_min_bone_voxels_ratio)
         spine = data3dr > thr
+        import sed3
+        logger.debug(f'thr={thr}')
+        sed3.show_slices(data3dr, contour=spine)
+
 
         # compute temporary center
         spine_center_wvs = np.mean(np.nonzero(spine), 1)
@@ -424,18 +438,28 @@ class BodyNavigation:
         self.lungs = precav_erosion
         return resize_to_shape(precav_erosion, self.orig_shape)
 
-    def get_center(self):
-        self.get_diaphragm_mask(skip_resize=True)
+    def get_center_mm(self):
+        ii = self.get_diaphragm_axial_position_index(return_in_working_voxelsize=True)
+        # self.get_diaphragm_mask(skip_resize=True)
         self.get_spine(skip_resize=True)
 
         self.center = np.array(
             [
-                self.diaphragm_mask_level,
+                # self.diaphragm_mask_level,
+                ii,
                 self.spine_center_wvs[0],
                 self.spine_center_wvs[1],
             ]
         )
         self.center_mm = self.center * self.working_vs
+        return self.center_mm
+
+    def get_center(self):
+        """
+        Return center in orig pixels coordinates.
+        :return:
+        """
+        self.get_center_mm()
         self.center_orig = (
             self.center * self.voxelsize_mm / self.working_vs.astype(np.double)
         )
@@ -582,14 +606,16 @@ class BodyNavigation:
         # return resize_to_shape(ld, self.orig_shape)
         return spine_dist_3d
 
-    def find_symmetry(self, degrad=5, return_img=False):
+    def find_symmetry(self, return_img=False):
         if self.spine is None:
             self.get_spine()
         if self.body is None:
             self.get_body()
+
+        degrad = self._symmetry_degrad_px
         vector = self.spine_center_wvs[1:] - self.body_center_wvs[1:]
 
-        img = np.sum(self.data3dr > 430, axis=0)
+        img = np.sum(self.data3dr > self._symmetry_bones_threshold_hu, axis=0)
 
         if self.debug:
             import matplotlib.pyplot as plt
@@ -599,9 +625,10 @@ class BodyNavigation:
             plt.show()
         init_angle = 90 - np.degrees(np.arctan2(vector[0], vector[1]))
         init_point = self.body_center_wvs[1:]
+        sigma_px = self._symmetry_gaussian_sigma_mm / np.mean(self.working_vs[1:])
         # from body_center to spine
         tr0, tr1, angle = find_symmetry(
-            img, degrad, debug=self.debug, init_angle=init_angle, init_point=init_point
+            img, degrad, debug=self.debug, init_angle=init_angle, init_point=init_point, sigma=sigma_px
         )
         self.angle = angle
         self.symmetry_point_wvs = np.array([tr0, tr1])
@@ -1220,7 +1247,17 @@ def find_symmetry_parameters(
         return trax[am[0]], tray[am[1]], angles[am[2]]
 
 
-def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0, init_point=None):
+def find_symmetry(img, degrad=5, debug=False, sigma=15, init_angle=0, init_point=None):
+    """
+
+    :param img:
+    :param degrad: resample to lower resolution by degrad
+    :param debug:
+    :param sigma: gaussian filter in pixels of input image. The degrad parameter is conciderd internally.
+    :param init_angle:
+    :param init_point:
+    :return:
+    """
     # imin0r = scipy.misc.pilutil.imresize(img, (np.asarray(img.shape)/degrad).astype(np.int))
     imin0r = skimage.transform.resize(
         img,
@@ -1231,8 +1268,9 @@ def find_symmetry(img, degrad=5, debug=False, sigma=3, init_angle=0, init_point=
     )
     if sigma is not None:
         from scipy.ndimage.filters import gaussian_filter
+        # logger.debug(f"sigma_px={sigma/degrad} ... should be 3")
 
-        imin0r = gaussian_filter(imin0r, sigma)
+        imin0r = gaussian_filter(imin0r, sigma / degrad)
 
     angles = range(-180, 180, 15)
     trax = range(1, imin0r.shape[0], 10)

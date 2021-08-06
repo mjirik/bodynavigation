@@ -206,7 +206,7 @@ class OrganDetectionAlgo(object):
     BODY_THRESHOLD = -300
 
     @classmethod
-    def getBody(cls, data3d, spacing):
+    def getBody(cls, data3d, spacing, body_threshold=None):
         """
         Input: noiseless data3d
         Returns binary mask representing body volume (including most cavities)
@@ -214,8 +214,10 @@ class OrganDetectionAlgo(object):
         Needs to work on raw cleaned data!
         """
         logger.info("getBody()")
+        if body_threshold is None:
+            body_threshold = cls.BODY_THRESHOLD
         # segmentation of body volume
-        body = (data3d > cls.BODY_THRESHOLD).astype(np.bool)
+        body = (data3d > body_threshold).astype(np.bool)
 
         # fill holes
         body = binaryFillHoles(body, z_axis=True)
