@@ -10,10 +10,11 @@ from __future__ import (
 from builtins import range  # replaces range with xrange
 
 import logging
+import sys
 
 logger = logging.getLogger(__name__)
 
-import sys, os
+import os
 from operator import itemgetter
 from itertools import groupby
 
@@ -25,6 +26,12 @@ import skimage.transform
 import skimage.morphology
 import skimage.segmentation
 import skimage.feature
+
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    def tqdm(iterable, **kwargs):
+        return iterable
 
 # run with: "python -m bodynavigation.organ_detection -h"
 from .tools import (
@@ -81,7 +88,12 @@ class OrganDetectionAlgo(object):
         # Filter is not used along z axis because the slices are so thick that any filter will
         # create ghosts of pervous and next slices on them.
         logger.debug("Removing noise with filter")
-        for z in range(data3d.shape[0]):
+        for z in tqdm(
+            range(data3d.shape[0]),
+            desc="Denoising axial slices",
+            unit="slice",
+            disable=not sys.stderr.isatty(),
+        ):
             data3d[z, :, :] = scipy.ndimage.filters.median_filter(data3d[z, :, :], 3)
         # ed = sed3.sed3(data3d); ed.show()
 
@@ -96,7 +108,12 @@ class OrganDetectionAlgo(object):
             unique = unique[1:]
             counts = counts[1:]  # remove background label (is 0)
             valid_mask = valid_mask == unique[list(counts).index(max(counts))]
-            for z in range(valid_mask.shape[0]):
+            for z in tqdm(
+                range(valid_mask.shape[0]),
+                desc="Cleaning axial slices",
+                unit="slice",
+                disable=not sys.stderr.isatty(),
+            ):
                 tmp = valid_mask[z, :, :]
                 if np.sum(tmp) == 0:
                     continue
@@ -111,7 +128,13 @@ class OrganDetectionAlgo(object):
                 dst = scipy.ndimage.morphology.distance_transform_edt(tmp).astype(
                     np.float
                 )
-                dst = dst / np.max(dst)
+                dst_max = np.max(dst)
+                if dst_max == 0:
+                    # A slice without a contour has no border-distance field.
+                    # Leave its intensities unchanged instead of producing NaNs.
+                    dst.fill(1.0)
+                else:
+                    dst = dst / dst_max
                 dst[dst != 0] = 0.01 ** dst[dst != 0]
                 dst[dst == 0] = 1.0
 
@@ -436,8 +459,9 @@ class OrganDetectionAlgo(object):
         logger.debug("Basic high threshold segmentation")
         bones = data3d > cls.BONES_THRESHOLD_HIGH
         bones = binaryFillHoles(bones, z_axis=True)
+        min_bone_size = int((10 ** 3) / spacing_vol)
         bones = skimage.morphology.remove_small_objects(
-            bones.astype(np.bool), min_size=int((10 ** 3) / spacing_vol)
+            bones.astype(np.bool), max_size=max(0, min_bone_size - 1)
         )
         # readd segmented points that are in expected ribs volume
         bones[

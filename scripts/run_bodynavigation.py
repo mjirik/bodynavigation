@@ -2,9 +2,20 @@
 """Run BodyNavigation for one CT image or one directory containing it."""
 
 import argparse
+import logging
 from pathlib import Path
 
 from batch_organ_detection import processData
+
+
+DEFAULT_STRUCTURES = (
+    "body,fatlessbody,lungs,bones,vessels,kidneys,liver,spleen,diaphragm"
+)
+DEFAULT_LANDMARKS = "bones,vessels"
+SUPPORTED_STRUCTURES = {
+    "body", "fatlessbody", "lungs", "bones", "vessels", "kidneys", "liver",
+    "spleen", "diaphragm",
+}
 
 
 def _default_name(input_path):
@@ -20,17 +31,28 @@ def main():
         description="Run BodyNavigation for one CT image or case directory."
     )
     parser.add_argument("-i", "--input", required=True, help="CT image or case directory")
-    parser.add_argument("-o", "--output", required=True, help="directory for PNG and traceback outputs")
     parser.add_argument(
-        "-p",
-        "--parts",
-        default="bones_stats,vessels,vessels_stats",
-        help="comma-separated parts to process; use None to disable all parts",
+        "-o",
+        "--output",
+        default="bodynavigation_output",
+        help="output directory (default: ./bodynavigation_output)",
+    )
+    parser.add_argument(
+        "--structures",
+        default=DEFAULT_STRUCTURES,
+        help="comma-separated anatomical structures (default: all supported structures)",
+    )
+    parser.add_argument(
+        "--landmarks",
+        default=DEFAULT_LANDMARKS,
+        help="comma-separated landmark sets: bones and/or vessels (default: both)",
     )
     parser.add_argument("--name", help="output basename; defaults to the input name")
     parser.add_argument("--dump", help="directory for preprocessed data")
     parser.add_argument("--draw-depth", action="store_true", help="use solid depth rendering")
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     input_path = Path(args.input)
     if not input_path.exists():
@@ -38,9 +60,24 @@ def main():
 
     output_path = Path(args.output)
     output_path.mkdir(parents=True, exist_ok=True)
-    parts = [] if args.parts.strip().lower() == "none" else [
-        part.strip().lower() for part in args.parts.split(",")
+    print("Writing outputs to:", output_path.resolve())
+    structures = [] if args.structures.strip().lower() == "none" else [
+        structure.strip().lower() for structure in args.structures.split(",")
     ]
+    landmarks = [] if args.landmarks.strip().lower() == "none" else [
+        landmark.strip().lower() for landmark in args.landmarks.split(",")
+    ]
+    unknown_structures = set(structures) - SUPPORTED_STRUCTURES
+    if unknown_structures:
+        parser.error("unsupported structures: %s" % ", ".join(sorted(unknown_structures)))
+    unknown_landmarks = set(landmarks) - {"bones", "vessels"}
+    if unknown_landmarks:
+        parser.error("unsupported landmark sets: %s" % ", ".join(sorted(unknown_landmarks)))
+    if not structures and not landmarks:
+        parser.error("select at least one structure or landmark set")
+    parts = structures + ["%s_stats" % landmark for landmark in landmarks]
+    print("Structures:", ", ".join(structures) or "none")
+    print("Landmark sets:", ", ".join(landmarks) or "none")
     processData(
         str(input_path),
         args.name or _default_name(input_path),
@@ -48,6 +85,7 @@ def main():
         parts=parts,
         dumpdir=args.dump,
         draw_depth=args.draw_depth,
+        separate_outputs=True,
     )
 
 

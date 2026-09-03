@@ -17,6 +17,7 @@ from multiprocessing import Pool
 import resource
 
 import numpy as np
+import nibabel as nib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import bodynavigation.organ_detection
@@ -25,6 +26,56 @@ from bodynavigation.organ_detection import OrganDetection
 from bodynavigation.results_drawer import ResultsDrawer
 
 import io3d
+
+COLOR_IDX = {
+    "body": 7, "fatlessbody": 8, "lungs": 9, "bones": 2, "vessels": 0,
+    "kidneys": 6, "liver": 4, "spleen": 7, "diaphragm": 10,
+}
+
+
+def readData3D(datapath):
+    """Read a volume and convert NIfTI axes to BodyNavigation's SPL order."""
+    data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
+    path_lower = datapath.lower()
+    if not path_lower.endswith((".nii", ".nii.gz")):
+        return data3d, metadata
+
+    nifti = nib.load(datapath)
+    if len(nifti.shape) != 3:
+        raise ValueError("Only 3D NIfTI images are supported: %s" % datapath)
+    if tuple(data3d.shape) != tuple(nifti.shape):
+        raise ValueError(
+            "Unexpected io3d NIfTI shape %s (header shape %s); cannot safely "
+            "determine the axis order." % (data3d.shape, nifti.shape)
+        )
+
+    axis_codes = nib.aff2axcodes(nifti.affine)
+    if any(code is None for code in axis_codes):
+        raise ValueError(
+            "NIfTI affine must define superior/inferior, anterior/posterior, and "
+            "right/left axes; got %s for %s" % (axis_codes, datapath)
+        )
+
+    target_axcodes = ("S", "P", "L")
+    source_orientation = nib.orientations.io_orientation(nifti.affine)
+    target_orientation = nib.orientations.axcodes2ornt(target_axcodes)
+    transform = nib.orientations.ornt_transform(source_orientation, target_orientation)
+    data3d = nib.orientations.apply_orientation(data3d, transform)
+    metadata = metadata.copy()
+    spacing_order = transform[:, 0].astype(int)
+    metadata["voxelsize_mm"] = tuple(
+        np.asarray(metadata["voxelsize_mm"])[spacing_order]
+    )
+    print(
+        "NIfTI axes %s converted to internal %s; shape %s, spacing %s"
+        % (axis_codes, "".join(target_axcodes), data3d.shape, metadata["voxelsize_mm"])
+    )
+    if data3d.shape[1] != data3d.shape[2]:
+        logger.warning(
+            "Axial slices are not square after NIfTI reorientation: Y,X shape %s"
+            % (data3d.shape[1:],)
+        )
+    return data3d, metadata
 
 """
 /usr/bin/time -v python batch_organ_detection.py -d -o ./batch_output/ -i ../test_data_3Dircadb1/ --dump ../READY_DIR_NEW/ -p "lungs,bones,bones_stats,kidneys" -t 3
@@ -47,8 +98,22 @@ def interpolatePointsZ(points, step=0.1):
     points = [ tuple([z_new[i], y_new[i], x_new[i]]) for i in range(len(z_new)) ]
     return points
 
-def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=None, memorylimit=-1, draw_depth=False):
+def processData(
+        datapath,
+        name,
+        outputdir,
+        parts=[],
+        dumpdir=None,
+        readypath=None,
+        memorylimit=-1,
+        draw_depth=False,
+        separate_outputs=False,
+):
     try:
+
+
+        if parts == [] or parts is None:
+            parts = list(COLOR_IDX.keys())
         print("Processing: ", datapath)
 
         # set memory limit
@@ -81,7 +146,7 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
 
         data3d = None
         if readypath is None:
-            data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
+            data3d, metadata = readData3D(datapath)
             voxelsize = metadata["voxelsize_mm"]
             obj = OrganDetection(data3d, voxelsize)
         else:
@@ -92,12 +157,13 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         # always use original data3d if availible
         if data3d is None:
             try:
-                data3d, metadata = io3d.datareader.read(datapath, dataplus_format=False)
+                data3d, metadata = readData3D(datapath)
             except:
                 print("Failed to load data3d from datapath! Using obj.getData3D().")
                 data3d = obj.getData3D()
 
         point_sets = []; volume_sets = []
+        landmark_sets = {}
         if draw_depth:
             rd = ResultsDrawer(mask_depth = True, default_volume_alpha = 255)
         else:
@@ -106,10 +172,7 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         parts_stats = [x for x in parts if x.endswith("_stats")]
         parts_masks = [x for x in parts if (x not in parts_stats)]
 
-        COLOR_IDX = {
-            "body":7, "fatlessbody":8, "lungs":9, "bones":2, "vessels":0,
-            "kidneys":6, "liver":4, "spleen":7, "diaphragm":10,
-            }
+
         # for k in COLOR_IDX: # TODO - remove
         #     COLOR_IDX[k] = COLOR_IDX["bones"]
         i = 0
@@ -124,19 +187,33 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
         for ps in parts_stats:
             part = ps.replace("_stats", "")
             stats = obj.analyzePart(part)
+            landmark_sets[part] = []
 
             if ps == "bones_stats":
-                point_sets.append([interpolatePointsZ(stats["spine"], step=0.1), {"color":rd.getRGBA(2), "border":(0,0,0), "size":1}])
-                point_sets.append([stats["hips_joints"], {"color":(0,255,0), "border":(0,0,0), "size":7}])
-                point_sets.append([stats["hips_start"], {"color":(0,0,255), "border":(0,0,0), "size":7}])
+                landmark_sets[part].append([interpolatePointsZ(stats["spine"], step=0.1), {"color":rd.getRGBA(2), "border":(0,0,0), "size":1}])
+                landmark_sets[part].append([stats["hips_joints"], {"color":(0,255,0), "border":(0,0,0), "size":7}])
+                landmark_sets[part].append([stats["hips_start"], {"color":(0,0,255), "border":(0,0,0), "size":7}])
 
             elif ps == "vessels_stats":
-                point_sets.append([interpolatePointsZ(stats["aorta"], step=0.1), {"color":rd.getRGBA(6), "border":(0,0,0), "size":1}])
-                point_sets.append([interpolatePointsZ(stats["vena_cava"], step=0.1), {"color":rd.getRGBA(7), "border":(0,0,0), "size":1}])
-                point_sets.append([stats["liver"], {"color":rd.getRGBA(2), "border":(0,0,0), "size":7}])
+                landmark_sets[part].append([interpolatePointsZ(stats["aorta"], step=0.1), {"color":rd.getRGBA(6), "border":(0,0,0), "size":1}])
+                landmark_sets[part].append([interpolatePointsZ(stats["vena_cava"], step=0.1), {"color":rd.getRGBA(7), "border":(0,0,0), "size":1}])
+                landmark_sets[part].append([stats["liver"], {"color":rd.getRGBA(2), "border":(0,0,0), "size":7}])
+            point_sets.extend(landmark_sets[part])
 
+        print("Rendering overview image...")
         img = rd.drawImage(data3d, voxelsize, point_sets=point_sets, volume_sets=volume_sets)
-        img.save(os.path.join(outputdir, "%s.png" % name))
+        overview_name = "%s__overview" % name if separate_outputs else name
+        img.save(os.path.join(outputdir, "%s.png" % overview_name))
+
+        if separate_outputs:
+            for part, volume_set in zip(parts_masks, volume_sets):
+                print("Rendering structure:", part)
+                img = rd.drawImage(data3d, voxelsize, volume_sets=[volume_set])
+                img.save(os.path.join(outputdir, "%s__structure-%s.png" % (name, part)))
+            for part, part_point_sets in landmark_sets.items():
+                print("Rendering landmark set:", part)
+                img = rd.drawImage(data3d, voxelsize, point_sets=part_point_sets)
+                img.save(os.path.join(outputdir, "%s__landmarks-%s.png" % (name, part)))
         #img.show()
 
         if dumpdir is not None:
@@ -145,7 +222,8 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
 
     except:
         print("EXCEPTION! SAVING TRACEBACK!")
-        with open(os.path.join(outputdir, "%s.txt" % name), 'w') as f:
+        error_name = "%s__error" % name if separate_outputs else name
+        with open(os.path.join(outputdir, "%s.txt" % error_name), 'w') as f:
             f.write(traceback.format_exc())
 
 def processThread(args):
