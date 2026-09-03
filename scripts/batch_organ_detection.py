@@ -18,7 +18,7 @@ import resource
 
 import numpy as np
 
-sys.path.append("..")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import bodynavigation.organ_detection
 print("bodynavigation.organ_detection path:", os.path.abspath(bodynavigation.organ_detection.__file__))
 from bodynavigation.organ_detection import OrganDetection
@@ -58,16 +58,26 @@ def processData(datapath, name, outputdir, parts=[], dumpdir=None, readypath=Non
             soft, hard = resource.getrlimit(resource.RLIMIT_AS)
             resource.setrlimit(resource.RLIMIT_AS, (memorylimit_b, min(memorylimit_b,hard)))
 
-        onlyfiles = sorted([f for f in os.listdir(datapath) if os.path.isfile(os.path.join(datapath, f))])
-        if len(onlyfiles) == 1:
-            datapath = os.path.join(datapath, onlyfiles[0])
-            print("Only one file datapath! Changing datapath to: ", datapath)
+        if os.path.isfile(datapath):
+            print("Using image file: ", datapath)
         else:
-            for f in onlyfiles:
-                if f.strip().lower().endswith(".mhd"):
-                    datapath = os.path.join(datapath, f)
-                    print("Detected *.mhd file! Changing datapath to: ", datapath)
-                    break
+            onlyfiles = sorted([f for f in os.listdir(datapath) if os.path.isfile(os.path.join(datapath, f))])
+            if len(onlyfiles) == 1:
+                datapath = os.path.join(datapath, onlyfiles[0])
+                print("Only one file datapath! Changing datapath to: ", datapath)
+            else:
+                candidates = [
+                    f for f in onlyfiles
+                    if f.strip().lower().endswith((".mhd", ".nii", ".nii.gz"))
+                    and ".arteries." not in f.lower()
+                ]
+                if len(candidates) == 1:
+                    datapath = os.path.join(datapath, candidates[0])
+                    print("Detected image file! Changing datapath to: ", datapath)
+                elif candidates:
+                    raise ValueError(
+                        "Multiple image files found in %s: %s" % (datapath, candidates)
+                    )
 
         data3d = None
         if readypath is None:

@@ -25,6 +25,7 @@ import scipy
 import scipy.ndimage
 import skimage.transform
 import skimage.morphology
+import skimage.segmentation
 
 import io3d
 
@@ -165,7 +166,7 @@ def resizeScipy(data, toshape, order=1, mode="reflect", cval=0):
     https://github.com/scipy/scipy/issues/7324
     https://github.com/scipy/scipy/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3Ascipy.ndimage%20zoom
     """
-    order = 0 if (data.dtype == np.bool) else order  # for masks
+    order = 0 if np.issubdtype(data.dtype, np.bool_) else order  # for masks
     zoom = np.asarray(toshape, dtype=np.float) / np.asarray(data.shape, dtype=np.float)
     data = scipy.ndimage.zoom(data, zoom=zoom, order=order, mode=mode, cval=cval)
     if np.any(data.shape != toshape):
@@ -181,6 +182,7 @@ def resizeSkimage(data, toshape, order=1, mode="reflect", cval=0):
     Eats memory like crazy (many times size of input array), but very good results.
     """
     dtype = data.dtype  # remember correct dtype
+    order = 0 if np.issubdtype(dtype, np.bool_) else order
 
     data = skimage.transform.resize(
         data, toshape, order=order, mode=mode, cval=cval, clip=True, preserve_range=True
@@ -394,7 +396,7 @@ def regionGrowing(data3d, seeds, mask, spacing=None, max_dist=-1, mode="watershe
                 seeds[resize(tmp == s, shape_cube, order=0, mode="reflect")] = s
             del tmp
 
-        seeds = skimage.morphology.watershed(data3d, seeds, mask=mask)
+        seeds = skimage.segmentation.watershed(data3d, seeds, mask=mask)
 
         # resize back to original spacing/shape
         if spacing is not None:

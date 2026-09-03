@@ -10,20 +10,24 @@ from __future__ import (
 from builtins import range  # replaces range with xrange
 
 import os
-import pkg_resources
 import json
 import zipfile
+from importlib import resources
 
 # Datasets
 
 DATASETS_FILENAMES = ["3Dircadb1.json", "3Dircadb2.json", "sliver07.json"]
 
 
+def _resource(filename):
+    return resources.files(__package__).joinpath(filename)
+
+
 def loadDatasetsInfo():
     datasets = {}
     for fn in DATASETS_FILENAMES:
-        with pkg_resources.resource_stream("bodynavigation.files", fn) as fp:
-            datasets.update(json.load(fp, encoding="utf-8"))
+        with _resource(fn).open("r", encoding="utf-8") as fp:
+            datasets.update(json.load(fp))
     return datasets
 
 
@@ -78,9 +82,7 @@ def addDatasetRegPoints(
 
 def getDefaultPAtlas(path):
     """ Extracts default PAtlas to path """
-    with pkg_resources.resource_stream(
-        "bodynavigation.files", "default_patlas.zip"
-    ) as fp:
+    with _resource("default_patlas.zip").open("rb") as fp:
         zip_ref = zipfile.ZipFile(fp)
         zip_ref.extractall(path)
         zip_ref.close()
@@ -91,9 +93,7 @@ def getDefaultPAtlas(path):
 
 def getDefaultClassifier(path):
     """ Extracts default Classifier to path """
-    with pkg_resources.resource_stream(
-        "bodynavigation.files", "default_classifier.zip"
-    ) as fp:
+    with _resource("default_classifier.zip").open("rb") as fp:
         zip_ref = zipfile.ZipFile(fp)
         zip_ref.extractall(path)
         zip_ref.close()
